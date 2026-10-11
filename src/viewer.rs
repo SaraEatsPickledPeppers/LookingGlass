@@ -577,7 +577,8 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
     escape_menu.backdrop();
     ui.toast("Opening Wonderland...", screen_height() - 70.);
     next_frame().await;
-    let level_choices = crate::campaign::level_choices(&maps);
+    let mut level_choices = crate::campaign::level_choices(&maps);
+    escape_menu.localize_choices(&mut level_choices, &maps);
     let mut current = maps
         .iter()
         .position(|m| m == &options.map)
@@ -3178,6 +3179,7 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
                 options.difficulty,
                 focused && !console_input,
                 input.using_pad,
+                &escape_menu.chapter_labels,
             );
         }
         if (!show_details || inventory_menu) && !interactions.scripted() {
