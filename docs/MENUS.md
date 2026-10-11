@@ -46,9 +46,11 @@ Main, Settings, New Game, Load/Save, Quit and Credits use the selected language'
 
 Chapter choosers and save titles use localized chapter names while keeping story order and return visits. Added controls, hints and confirmation text remain English where the original data provides no translation.
 
+Subtitles preserve supported accented characters and use readable replacements for missing glyphs. Larger text and tighter line spacing keep dialogue legible within its box; original dialogue text and voice timing are retained.
+
 ## Checks
 
-Automated checks cover localized labels and artwork, button layout, and independent mouse hover and keyboard selection. An optional settings render check uses local game data without changing preferences or saves.
+Automated checks cover localized labels and artwork, button and subtitle layout, and independent mouse hover and keyboard selection. An optional settings render check uses local game data without changing preferences or saves.
 
 Native Anode checks use `private/menu-native` saves and `private/menu-test-settings` preferences, separate from the player's files. They cover opening/resuming with Escape, keyboard navigation, mouse slider input, Apply/Cancel, binding capture, fullscreen, save confirmation, repeated saves while paused, menu loading and New Game at the village entrance. The repeated-save check compares the complete gameplay payload, including resources, actor state, quests and clocks; it is unchanged while the menu is open. Unit checks cover layout bounds, widescreen hit testing, Escape hierarchy, preference validation and binding conflicts. Additional restart and final visual checks are recorded in `VALIDATION.md`.
 
