@@ -12,7 +12,7 @@ import time
 import unittest
 import uuid
 
-from test_setup import ROOT, make_data
+from test_setup import ROOT, make_data, make_language, setup_environment
 
 TEST_ROOT = ROOT / 'private' / ('guided-setup-tests-' + uuid.uuid4().hex)
 
@@ -62,24 +62,54 @@ class GuidedSetupTests(unittest.TestCase):
         self.save.parent.mkdir()
         self.save.write_text('keep my progress')
 
-    def start(self, source='', download=False, script=None):
+    def start(self, source='', download=False, script=None, language=None, action='setup'):
         # Only the test copy can use loopback HTTP and synthetic download hashes.
         path = self.root / 'tools/windows_setup.ps1'
         path.write_text(script or self.script, encoding='utf-8')
         jobfile = self.job / 'job.json'
-        jobfile.write_text(json.dumps(dict(directory=str(self.job), source=str(source), download=download)))
+        jobfile.write_text(json.dumps(dict(directory=str(self.job), source=str(source),
+                                         download=download, language=language, action=action)))
         return subprocess.Popen(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(path),
                                  '-Mode', 'Worker', '-JobFile', str(jobfile)], cwd=self.root,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                 env=setup_environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    def diagnostics(self, output=''):
+        parts = [output]
+        for name in ('status.json', 'setup.log'):
+            path = self.job / name
+            if path.exists():
+                parts.append(f'{name}:\n{path.read_text(encoding="utf-8-sig", errors="replace")}')
+        return '\n'.join(parts)
 
     def finish(self, proc, expected):
         stdout, stderr = proc.communicate(timeout=30)
-        self.assertEqual(proc.returncode, expected, (stdout + stderr).decode(errors='replace'))
+        self.assertEqual(proc.returncode, expected,
+                         self.diagnostics((stdout + stderr).decode(errors='replace')))
         self.assertEqual(self.save.read_text(), 'keep my progress')
 
     def test_folder_worker_handles_literal_paths(self):
         self.finish(self.start(self.data), 0)
-        self.assertEqual(Path(self.config.read_text(encoding='utf-8').strip()), self.data / 'Alice1/bin/base')
+        imported = self.root / self.config.read_text(encoding='utf-8').strip()
+        self.assertTrue(imported.is_relative_to(self.root / 'private/game-data'))
+        self.assertEqual((imported / 'pak0.pk3').read_bytes(), (self.data / 'Alice1/bin/base/pak0.pk3').read_bytes())
+
+    def test_worker_switches_language_using_saved_packs(self):
+        german = self.data / 'Alice1/bin/base/pak4_german.pk3'
+        make_language(german, 'Schritt')
+        self.finish(self.start(self.data, language='de'), 0)
+        active = self.root / self.config.read_text().strip()
+        pointer = self.config.read_bytes()
+        core = {p.name: p.read_bytes() for p in active.glob('*.pk3') if not p.name.startswith('pak4_')}
+        self.assertEqual((active / 'pak4_german.pk3').read_bytes(), german.read_bytes())
+        self.finish(self.start(language='en', action='language'), 0)
+        self.assertFalse((active / 'pak4_german.pk3').exists())
+        cache = self.root / 'private/game-data/languages'
+        self.assertEqual((cache / 'pak4_german.pk3').read_bytes(), german.read_bytes())
+        self.finish(self.start(language='de', action='language'), 0)
+        self.assertEqual((active / 'pak4_german.pk3').read_bytes(), german.read_bytes())
+        self.assertFalse((active / 'pak4_english.pk3').exists())
+        self.assertEqual(self.config.read_bytes(), pointer)
+        self.assertEqual({p.name: p.read_bytes() for p in active.glob('*.pk3') if not p.name.startswith('pak4_')}, core)
 
     def test_invalid_input_keeps_previous_config(self):
         self.finish(self.start(self.root / 'missing.7z'), 1)
@@ -102,7 +132,7 @@ class GuidedSetupTests(unittest.TestCase):
         with server(payload) as url:
             self.finish(self.start(download=True, script=self.download_script(url, payload, wrong_hash=True)), 1)
         state = json.loads((self.job / 'status.json').read_text())
-        self.assertIn('integrity', state['message'])
+        self.assertIn('integrity', state['message'], self.diagnostics())
         self.assertEqual(self.config.read_text(), 'old-data-path\n')
         self.assertFalse(list((self.root / 'private/downloads').iterdir()))
 
@@ -113,7 +143,10 @@ class GuidedSetupTests(unittest.TestCase):
             deadline = time.monotonic() + 10
             while not list((self.root / 'private/downloads').glob('*.partial')):
                 if proc.poll() is not None or time.monotonic() > deadline:
-                    self.fail('Worker did not begin the synthetic download')
+                    proc.kill()
+                    stdout, stderr = proc.communicate(timeout=30)
+                    self.fail(self.diagnostics('Worker did not begin the synthetic download\n'
+                                              + (stdout + stderr).decode(errors='replace')))
                 time.sleep(0.05)
             (self.job / 'cancel').write_text('cancel')
             self.finish(proc, 1)
