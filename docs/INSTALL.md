@@ -12,11 +12,12 @@ are optional developer, verification or video files; you do not need them to pla
 1. Right-click the Windows ZIP and choose **Extract All**. Keep the entire folder
    somewhere writable, such as `Documents\LookingGlass`. Do not run it inside the ZIP.
 2. Open the extracted folder and double-click **Launch.cmd**.
-3. On first launch, select **Set up** in the guided window. It looks for game
+3. On first launch, the guided window looks for game
    files beside the game, in Downloads, and at a previously saved location.
    Choose **Download compatible game files** if you want setup to fetch them.
-4. Choose your **Language**. Setup checks and imports the files, then opens the
-   game. Choose **New Game**.
+4. Choose your **Language**.
+5. Select **Set up**. Setup checks and imports
+   the files, then opens the game. Choose **New Game**.
    Next time, double-click **Launch.cmd** or the optional desktop shortcut.
 
 You do not need to type commands, install Rust or Python, install 7-Zip separately,
