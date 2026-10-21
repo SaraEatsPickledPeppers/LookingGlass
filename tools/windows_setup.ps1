@@ -73,6 +73,11 @@ if ($Mode -eq 'Worker') {
         $action = if ($job.action) { [string]$job.action } else { 'setup' }
         if ($action -notin @('setup', 'language')) { throw "Unknown setup action: $action" }
         $source = $job.source
+        if ($job.download -isnot [bool]) { throw 'Choose local files or explicitly opt in to downloading.' }
+        if ($job.download -and ($job.downloadConfirmed -isnot [bool] -or -not $job.downloadConfirmed)) {
+            # A selected radio button (or a stale job from an older setup) is not consent.
+            throw 'Download not confirmed. Only download game files you are entitled to use; confirm in Setup first.'
+        }
         $languageAvailability = $null
         if ($action -eq 'language') {
             $installed = Read-ConfiguredBase
@@ -191,9 +196,9 @@ try {
     $archiveButton = Button 'Choose archive...' 44 193 170
     $folderButton = Button 'Choose folder...' 224 193 170
     $download = New-Object Windows.Forms.RadioButton
-    $download.Text = 'Download compatible game files (933 MB)'; $download.SetBounds(26, 244, 605, 28)
+    $download.Text = 'Download from Internet Archive (optional, 933 MB)'; $download.SetBounds(26, 244, 605, 28)
     $form.Controls.Add($download)
-    $sourceNote = Label 'From Internet Archive. Use files you are entitled to use. Allow 3 GB of free space for the download and unpacked game.' 44 276 570 46
+    $sourceNote = Label 'Only if you are entitled to download and use these files. Confirmation is required. Allow 3 GB of free space.' 44 276 570 46
 
     $languageLabel = Label 'Language' 26 330 120 25
     $languages = New-Object Windows.Forms.ComboBox
@@ -269,9 +274,11 @@ try {
     Add-Choice (Join-Path $root ('alice_202106\' + $archiveName))
     Add-Choice (Join-Path $root ('private\downloads\' + $archiveName))
     Add-Choice (Read-ConfiguredData)
-    $local.Checked = $choices.Items.Count -gt 0
-    $download.Checked = -not $local.Checked
-    if ($local.Checked) { $statusLabel.Text = 'Found game files on this computer. Select Set up to connect them.' }
+    # Missing local data must never select or initiate a third-party download.
+    $local.Checked = $true
+    $download.Checked = $false
+    if ($choices.Items.Count -gt 0) { $statusLabel.Text = 'Found game files on this computer. Select Set up to connect them.' }
+    else { $statusLabel.Text = 'Choose an archive or folder containing game files you are entitled to use.' }
 
     function Refresh-Inputs {
         $busy = $null -ne $script:worker
@@ -280,7 +287,8 @@ try {
         $archiveButton.Enabled = -not $busy; $folderButton.Enabled = -not $busy
         $languages.Enabled = -not $busy
         $applyLanguage.Enabled = -not $busy -and $script:canApply
-        $go.Enabled = -not $busy; $desktop.Enabled = -not $busy; $playAfter.Enabled = -not $busy
+        $go.Enabled = -not $busy -and ($script:ready -or $download.Checked -or ($local.Checked -and $choices.SelectedIndex -ge 0))
+        $desktop.Enabled = -not $busy; $playAfter.Enabled = -not $busy
     }
     $script:sourceLanguages = @{}
     $script:sourceError = $null
@@ -413,10 +421,22 @@ try {
     function Start-SetupWorker([string]$action) {
         if ($script:worker) { return }
         if ($action -eq 'setup' -and $local.Checked -and $choices.SelectedIndex -lt 0) { throw 'Choose an archive or folder first.' }
+        $downloadRequested = $download.Checked
         if ($action -eq 'language') {
             $script:configured = Read-ConfiguredData
             Refresh-Language
             if (-not $script:canApply) { throw 'Select an available language different from the active language in a managed installation.' }
+            $availability = Get-LanguageAvailability $languageCodes[$languages.SelectedIndex] $script:configured $script:sourceLanguages $download.Checked
+            $downloadRequested = $download.Checked -and -not $availability.AllLocal
+        }
+        $downloadConfirmed = $false
+        if ($downloadRequested) {
+            $answer = [Windows.Forms.MessageBox]::Show($form,
+                "This downloads EA's original game data (933 MB) from Internet Archive, a third-party service. Availability and integrity checks do not establish permission to use it.`n`nOnly continue if you are entitled to download and use these files. Do you confirm that you are entitled and want to download them?",
+                'Confirm game-data download', [Windows.Forms.MessageBoxButtons]::YesNo,
+                [Windows.Forms.MessageBoxIcon]::Warning, [Windows.Forms.MessageBoxDefaultButton]::Button2)
+            if ($answer -ne [Windows.Forms.DialogResult]::Yes) { return }
+            $downloadConfirmed = $true
         }
         $script:currentAction = $action
         $script:currentJob = Join-Path $root ('private\setup-jobs\' + [Guid]::NewGuid().ToString('N'))
@@ -426,7 +446,8 @@ try {
             directory = $script:currentJob
             action = $action
             source = [string]$choices.SelectedItem
-            download = $download.Checked
+            download = $downloadRequested
+            downloadConfirmed = $downloadConfirmed
             language = $languageCodes[$languages.SelectedIndex]
         }
         $start = New-Object Diagnostics.ProcessStartInfo
@@ -516,6 +537,7 @@ try {
                 }
                 $progress.Value = 0
             }
+            Refresh-Inputs
             if ($script:closeWhenDone) { $form.Close() }
         }
     })

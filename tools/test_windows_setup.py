@@ -62,13 +62,16 @@ class GuidedSetupTests(unittest.TestCase):
         self.save.parent.mkdir()
         self.save.write_text('keep my progress')
 
-    def start(self, source='', download=False, script=None, language=None, action='setup'):
+    def start(self, source='', download=False, script=None, language=None, action='setup', confirmed=None):
         # Only the test copy can use loopback HTTP and synthetic download hashes.
         path = self.root / 'tools/windows_setup.ps1'
         path.write_text(script or self.script, encoding='utf-8')
         jobfile = self.job / 'job.json'
-        jobfile.write_text(json.dumps(dict(directory=str(self.job), source=str(source),
-                                         download=download, language=language, action=action)))
+        job = dict(directory=str(self.job), source=str(source), download=download,
+                   language=language, action=action)
+        if confirmed is not None:
+            job['downloadConfirmed'] = confirmed
+        jobfile.write_text(json.dumps(job))
         return subprocess.Popen(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(path),
                                  '-Mode', 'Worker', '-JobFile', str(jobfile)], cwd=self.root,
                                  env=setup_environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -151,6 +154,74 @@ class GuidedSetupTests(unittest.TestCase):
         self.finish(self.start(self.data), 1)
         self.assertEqual(self.config.read_text(), 'old-data-path\n')
 
+    def test_download_requires_explicit_confirmation_before_any_work(self):
+        # Old jobs, declined consent, and truthy JSON strings must all fail closed.
+        for consent in (None, False, 'true', 'false', 1):
+            with self.subTest(consent=consent):
+                self.finish(self.start(download=True, confirmed=consent), 1)
+                state = json.loads((self.job / 'status.json').read_text())
+                self.assertIn('Download not confirmed', state['message'])
+                self.assertFalse((self.root / 'private/downloads').exists())
+                self.assertEqual(self.config.read_text(), 'old-data-path\n')
+
+    def test_empty_local_choice_does_not_fall_back_to_download(self):
+        self.finish(self.start(), 1)
+        self.assertFalse((self.root / 'private/downloads').exists())
+        self.assertEqual(self.config.read_text(), 'old-data-path\n')
+
+    def test_language_download_requires_confirmation_without_changing_installation(self):
+        self.finish(self.start(self.data, language='en'), 0)
+        pointer = self.config.read_bytes()
+        active = self.root / self.config.read_text().strip()
+        packs = {p.name: p.read_bytes() for p in active.glob('*.pk3')}
+        for consent in (None, False, 'true'):
+            with self.subTest(consent=consent):
+                self.finish(self.start(download=True, language='de', action='language', confirmed=consent), 1)
+                state = json.loads((self.job / 'status.json').read_text())
+                self.assertIn('Download not confirmed', state['message'])
+                self.assertFalse((self.root / 'private/downloads').exists())
+                self.assertEqual(self.config.read_bytes(), pointer)
+                self.assertEqual({p.name: p.read_bytes() for p in active.glob('*.pk3')}, packs)
+
+    def test_non_boolean_download_choice_is_rejected(self):
+        self.finish(self.start(download='false', confirmed=True), 1)
+        self.assertFalse((self.root / 'private/downloads').exists())
+        self.assertEqual(self.config.read_text(), 'old-data-path\n')
+
+    def test_setup_defaults_to_local_files_even_when_none_are_found(self):
+        self.check_ui_defaults(False)
+
+    def test_setup_detects_local_files_without_selecting_download(self):
+        self.check_ui_defaults(True)
+
+    def check_ui_defaults(self, with_data):
+        if with_data:
+            make_data(self.root)
+        # Construct the real WinForms controls without displaying a window. Limit
+        # discovery to the fixture's empty user profile, never the user's Downloads.
+        checks = r"""
+    if (-not $local.Checked -or $download.Checked) { throw 'Download selected by default' }
+    if ($go.Enabled -ne ($choices.Items.Count -gt 0)) { throw 'Incorrect initial Set up state' }
+    $download.Checked = $true
+    if (-not $go.Enabled) { throw 'Explicit download selection disabled' }
+    $local.Checked = $true
+    if ($go.Enabled -ne ($choices.Items.Count -gt 0)) { throw 'Incorrect local Set up state' }
+    Write-Output 'UI defaults passed'
+"""
+        script = self.script.replace('[void]$form.ShowDialog()', checks)
+        # Surface failures instead of showing a modal error in an unattended test.
+        script = script.replace("[void][Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Looking Glass - Setup')",
+                                'Write-Error $_.Exception.Message')
+        path = self.root / 'tools/windows_setup.ps1'
+        path.write_text(script, encoding='utf-8')
+        env = dict(os.environ, USERPROFILE=str(self.root / 'empty-profile'))
+        result = subprocess.run(['powershell.exe', '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass',
+                                 '-File', str(path)], env=env, capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 0, (result.stdout + result.stderr).decode(errors='replace'))
+        self.assertIn(b'UI defaults passed', result.stdout)
+        self.assertFalse((self.root / 'private/setup-jobs').exists())
+        self.assertFalse((self.root / 'private/downloads').exists())
+
     def download_script(self, url, payload, wrong_hash=False):
         s = self.script.replace('https://archive.org/download/alice_202106/Alice1_2011_vanilla.7z', url)
         s = s.replace('977811158L', str(len(payload)) + 'L')
@@ -161,7 +232,7 @@ class GuidedSetupTests(unittest.TestCase):
     def test_failed_integrity_check_does_not_publish_download(self):
         payload = b'synthetic bad archive' * 1024
         with server(payload) as url:
-            self.finish(self.start(download=True, script=self.download_script(url, payload, wrong_hash=True)), 1)
+            self.finish(self.start(download=True, confirmed=True, script=self.download_script(url, payload, wrong_hash=True)), 1)
         state = json.loads((self.job / 'status.json').read_text())
         self.assertIn('integrity', state['message'], self.diagnostics())
         self.assertEqual(self.config.read_text(), 'old-data-path\n')
@@ -170,7 +241,7 @@ class GuidedSetupTests(unittest.TestCase):
     def test_download_cancellation_keeps_previous_install(self):
         payload = b'x' * (1024 * 1024)
         with server(payload, slow=True) as url:
-            proc = self.start(download=True, script=self.download_script(url, payload))
+            proc = self.start(download=True, confirmed=True, script=self.download_script(url, payload))
             deadline = time.monotonic() + 10
             while not list((self.root / 'private/downloads').glob('*.partial')):
                 if proc.poll() is not None or time.monotonic() > deadline:
@@ -192,9 +263,30 @@ class GuidedSetupTests(unittest.TestCase):
         subprocess.run([extractor, 'a', '-t7z', str(archive), 'Alice1'], cwd=self.data, capture_output=True, check=True)
         payload = archive.read_bytes()
         with server(payload) as url:
-            self.finish(self.start(download=True, script=self.download_script(url, payload)), 0)
+            self.finish(self.start(download=True, confirmed=True, script=self.download_script(url, payload)), 0)
         self.assertTrue((self.root / self.config.read_text().strip() / 'pak0.pk3').is_file())
         self.assertEqual((self.root / 'private/downloads/Alice1_2011_vanilla.7z').read_bytes(), payload)
+
+    def test_confirmed_download_imports_only_the_missing_language(self):
+        self.finish(self.start(self.data, language='en'), 0)
+        pointer = self.config.read_bytes()
+        active = self.root / self.config.read_text().strip()
+        core = {p.name: p.read_bytes() for p in active.glob('*.pk3') if not p.name.startswith('pak4_')}
+        german = self.data / 'Alice1/bin/base/pak4_german.pk3'
+        make_language(german, 'Schritt')
+        extractor = shutil.which('7z') or str(Path(os.environ.get('ProgramFiles', 'C:/Program Files')) / '7-Zip/7z.exe')
+        if not Path(extractor).is_file():
+            self.skipTest('7-Zip needed to create the synthetic fixture')
+        archive = self.root.parent / 'language-fixture.7z'
+        subprocess.run([extractor, 'a', '-t7z', str(archive), 'Alice1'], cwd=self.data, capture_output=True, check=True)
+        payload = archive.read_bytes()
+        with server(payload) as url:
+            self.finish(self.start(download=True, language='de', action='language', confirmed=True,
+                                   script=self.download_script(url, payload)), 0)
+        self.assertEqual(self.config.read_bytes(), pointer)
+        self.assertEqual({p.name: p.read_bytes() for p in active.glob('*.pk3') if not p.name.startswith('pak4_')}, core)
+        self.assertEqual((active / 'pak4_german.pk3').read_bytes(), german.read_bytes())
+        self.assertFalse((active / 'pak4_english.pk3').exists())
 
 
 if __name__ == '__main__':
