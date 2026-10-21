@@ -93,6 +93,37 @@ class GuidedSetupTests(unittest.TestCase):
         self.assertTrue(imported.is_relative_to(self.root / 'private/game-data'))
         self.assertEqual((imported / 'pak0.pk3').read_bytes(), (self.data / 'Alice1/bin/base/pak0.pk3').read_bytes())
 
+    def test_setup_actions_remain_visible_on_short_displays(self):
+        # Construct the actual form without showing a window or starting setup.
+        # A 620-pixel client area fits a 720p desktop with its taskbar/title bar.
+        probe = r'''
+    foreach ($height in @(620, 760)) {
+        $form.ClientSize = New-Object Drawing.Size(660, $height)
+        $form.PerformLayout()
+        foreach ($button in @($go, $applyLanguage, $cancel)) {
+            $top = $button.Top
+            $parent = $button.Parent
+            while ($parent -ne $form) { $top += $parent.Top; $parent = $parent.Parent }
+            if ($top -lt 0 -or ($top + $button.Height) -gt $form.ClientSize.Height) {
+                throw "Action '$($button.Text)' is outside the $height-pixel client area."
+            }
+        }
+    }
+'''
+        marker = '    [void]$form.ShowDialog()'
+        self.assertEqual(self.script.count(marker), 1)
+        script = self.script.replace(marker, probe)
+        # Make errors observable instead of opening a modal error dialog.
+        script = script.replace(
+            "[void][Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Looking Glass - Setup')",
+            'Write-Error $_.Exception.Message')
+        path = self.root / 'tools/windows_setup.ps1'
+        path.write_text(script, encoding='utf-8')
+        result = subprocess.run(
+            ['powershell.exe', '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', str(path)],
+            cwd=self.root, env=setup_environment(), capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 0, (result.stdout + result.stderr).decode(errors='replace'))
+
     def test_worker_switches_language_using_saved_packs(self):
         german = self.data / 'Alice1/bin/base/pak4_german.pk3'
         make_language(german, 'Schritt')

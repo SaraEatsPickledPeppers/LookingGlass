@@ -225,6 +225,28 @@ try {
     $cancel = Button 'Close' 536 704 95
     $form.AcceptButton = $go
     $form.CancelButton = $cancel
+
+    # Keep actions visible on short desktops; only the setup details scroll.
+    $form.SuspendLayout()
+    $footer = New-Object Windows.Forms.Panel
+    $footer.Dock = 'Bottom'; $footer.Height = 64
+    $content = New-Object Windows.Forms.Panel
+    $content.Dock = 'Fill'; $content.AutoScroll = $true
+    $content.AutoScrollMinSize = New-Object Drawing.Size(0, 696)
+    foreach ($control in @($form.Controls)) {
+        if (@($go, $applyLanguage, $cancel) -contains $control) {
+            $control.Top = 14
+            $footer.Controls.Add($control)
+        } else {
+            $content.Controls.Add($control)
+        }
+    }
+    $form.Controls.Add($content)
+    $form.Controls.Add($footer)
+    $workArea = [Windows.Forms.Screen]::FromControl($form).WorkingArea
+    $form.Height = [Math]::Min($form.Height, $workArea.Height - 16)
+    $form.ResumeLayout($true)
+
     $timer = New-Object Windows.Forms.Timer
     $timer.Interval = 250
     $script:worker = $null
