@@ -1,6 +1,6 @@
 # Rights, ownership and distribution notice
 
-Updated 2 October 2026.
+Updated 21 October 2026.
 
 Looking Glass is an independent, unofficial compatibility engine for American
 McGee's Alice. **This project is not endorsed by or affiliated with EA or its
@@ -32,8 +32,11 @@ game or a licence to its content. Compatible game data is required separately.
 
 There are two important distinctions:
 
-- **External downloads:** the published v0.32.0-preview.1 setup offers an
-  optional download from Internet Archive, a third-party service. This transfers
+- **External downloads:** setup offers an optional download from Internet
+  Archive, a third-party service. Setup defaults to local files; downloading
+  requires an explicit selection and a separate entitlement confirmation that
+  defaults to No. Earlier preview packages may still preselect the download
+  when no local files are found. This transfers
   files from that service to the user's computer, not from a project-hosted
   game-data mirror. Neither that option nor a link, compatibility check or
   checksum establishes the uploader's permission or the user's entitlement.

@@ -11,7 +11,7 @@ options. It uses your own compatible game files and runs independently of the
 original game executable, gameplay DLL and Alice: Madness Returns.
 
 [Visit the Looking Glass website](https://skulitom.github.io/LookingGlass/) ·
-**[Download for Windows — play the full campaign](https://github.com/skulitom/LookingGlass/releases/download/v0.32.0-preview.2/LookingGlass-Windows-x64-v0.32.0-preview.2.zip)** ·
+**[Download for Windows — play the full campaign](https://github.com/skulitom/LookingGlass/releases/download/v0.32.0-preview.2-setup.1/LookingGlass-Windows-x64-v0.32.0-preview.2-setup.1.zip)** ·
 [Watch the 78-second story showcase](#gameplay-showcase) ·
 [Report a bug](https://github.com/skulitom/LookingGlass/issues/new/choose)
 
@@ -114,11 +114,13 @@ Full videos are 720p. [Recording details](docs/media/gameplay/README.md).
 
 ## Install and play
 
-1. **[Download for Windows](https://github.com/skulitom/LookingGlass/releases/download/v0.32.0-preview.2/LookingGlass-Windows-x64-v0.32.0-preview.2.zip)**. This downloads the one ZIP you need.
+1. **[Download for Windows](https://github.com/skulitom/LookingGlass/releases/download/v0.32.0-preview.2-setup.1/LookingGlass-Windows-x64-v0.32.0-preview.2-setup.1.zip)**. This downloads the one ZIP you need.
 2. Right-click the ZIP, choose **Extract All**, and open the extracted folder.
    Keep it somewhere writable, such as `Documents\LookingGlass`.
-3. Double-click **Launch.cmd**. On the first launch, a setup window finds existing
-   game files or offers to download the compatible files from Internet Archive.
+3. Double-click **Launch.cmd**. Setup defaults to game files already on your
+   computer. If none are found, use **Choose archive** or **Choose folder**.
+   The optional Internet Archive download must be selected explicitly, then
+   confirmed only if you are entitled to download and use those files.
 4. Select **Set up**. Setup checks and unpacks the files, then opens the game.
    Next time, just open **Launch.cmd** or your optional desktop shortcut.
 
@@ -132,8 +134,10 @@ download is about **933 MB**. Setup needs internet access only if you choose Dow
 **Where do the game files come from?** The supported file is
 **Alice1_2011_vanilla.7z** from
 [American McGee's Alice (2011) on Internet Archive](https://archive.org/details/alice_202106).
-Setup can download it for you, or you can use **Choose archive** / **Choose folder**
-for files you already have. Use game files you are entitled to use. Original game
+Use **Choose archive** / **Choose folder** for files you already have. To download
+instead, select **Download from Internet Archive**, select **Set up**, and confirm
+your entitlement. The confirmation defaults to **No**; setup never switches to a
+download because local files are missing. Use game files you are entitled to use. Original game
 data is not included in the Looking Glass release.
 
 That download is hosted by a third party, not this project. Its availability
@@ -141,7 +145,7 @@ and setup's integrity checks do not establish permission to download or use it.
 See the [game-data and media notice](LEGAL.md#what-the-project-distributes).
 
 See [installation and troubleshooting](docs/INSTALL.md), including updates and
-building from source. [Release notes and checksums](https://github.com/skulitom/LookingGlass/releases/tag/v0.32.0-preview.2)
+building from source. [Release notes and checksums](https://github.com/skulitom/LookingGlass/releases/tag/v0.32.0-preview.2-setup.1)
 describe the exact package and its verification limits.
 
 Use the in-game settings to view or change controls. **Esc** opens the menu,

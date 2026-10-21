@@ -4,7 +4,7 @@ Looking Glass is an unfinished, independently written Rust recreation using your
 
 ## Install the Windows preview
 
-**[Download for Windows — ZIP](https://github.com/skulitom/LookingGlass/releases/download/v0.32.0-preview.2/LookingGlass-Windows-x64-v0.32.0-preview.2.zip)**
+**[Download for Windows — ZIP](https://github.com/skulitom/LookingGlass/releases/download/v0.32.0-preview.2-setup.1/LookingGlass-Windows-x64-v0.32.0-preview.2-setup.1.zip)**
 
 This link downloads the one package you need. The other GitHub release files
 are optional developer, verification or video files; you do not need them to play.
@@ -12,10 +12,11 @@ are optional developer, verification or video files; you do not need them to pla
 1. Right-click the Windows ZIP and choose **Extract All**. Keep the entire folder
    somewhere writable, such as `Documents\LookingGlass`. Do not run it inside the ZIP.
 2. Open the extracted folder and double-click **Launch.cmd**.
-3. On first launch, select **Set up** in the guided window. It looks for game
+3. On first launch, the guided window defaults to local game files. It looks for game
    files beside the game, in Downloads, and at a previously saved location.
-   Choose **Download compatible game files** if you want setup to fetch them.
-4. Setup checks and unpacks the files, then opens the game. Choose **New Game**.
+   If none are found, use **Choose archive** or **Choose folder**. Setup does not
+   automatically select or start a download.
+4. Select **Set up**. Setup checks and unpacks the files, then opens the game. Choose **New Game**.
    Next time, double-click **Launch.cmd** or the optional desktop shortcut.
 
 You do not need to type commands, install Rust or Python, install 7-Zip separately,
@@ -30,12 +31,20 @@ existing file; partial downloads are discarded rather than treated as complete.
 
 ## Where to get the game files
 
-The supported data is the **English 2011 vanilla** package. Setup's Download option
+Use an existing compatible folder or archive that you are entitled to use.
+The supported data is the **English 2011 vanilla** package. Setup's optional download
 fetches **Alice1_2011_vanilla.7z** from
 [American McGee's Alice (2011) on Internet Archive](https://archive.org/details/alice_202106).
 The [file listing](https://archive.org/download/alice_202106) and its archive
 metadata were checked on **1 October 2026**. Use files you are entitled to use.
 Original game data is downloaded separately and is never bundled in the engine ZIP.
+
+To opt in, select **Download from Internet Archive**, then **Set up**. A separate
+confirmation asks whether you are entitled to download and use the files and
+want to continue. It defaults to **No**. Declining leaves setup open without
+starting a download or changing your existing configuration. Confirmation is
+required each time you start setup's download option, including a retry or reuse
+of its cached download. Selecting local files does not require this confirmation.
 
 The optional download is hosted by that third-party service, not by Looking Glass.
 Its availability and setup's checks do not establish redistribution permission
@@ -87,7 +96,7 @@ an external data folder is unaffected.
 | Problem | What to do |
 | --- | --- |
 | Nothing starts from the ZIP | Choose **Extract All** first, then open **Launch.cmd** in the extracted folder. |
-| No game files found | Use **Download compatible game files**, **Choose archive**, or **Choose folder**. |
+| No game files found / Set up is disabled | Use **Choose archive** or **Choose folder**. The optional **Download from Internet Archive** requires a separate entitlement confirmation. |
 | Download fails or is unavailable | Retry, or download the named archive yourself and choose it in setup. No previous game setting is replaced. |
 | Integrity check fails | The download is incomplete or different. Obtain the compatible archive again, or select an existing compatible folder. |
 | Missing pack / unsupported map format | Select the English 2011 vanilla archive or its Alice1 folder. |
