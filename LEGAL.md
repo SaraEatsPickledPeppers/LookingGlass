@@ -71,7 +71,7 @@ law or the terms governing the original game.
 
 Do not upload original game files, extracted assets, proprietary code,
 decompiler dumps or personal saves to this repository or its issue tracker.
-The [contribution guidance](https://github.com/skulitom/LookingGlass/blob/main/CONTRIBUTING.md)
+The [contribution guidance](https://github.com/looking-glass-project/LookingGlass/blob/main/CONTRIBUTING.md)
 describes the source boundary.
 
 ## Warranty and scope of this notice
@@ -89,7 +89,7 @@ by themselves establish that every use or distribution is lawful.
 ## Rights-holder concerns
 
 Rights holders or their authorised representatives can report a concern through
-the [project issue tracker](https://github.com/skulitom/LookingGlass/issues).
+the [project issue tracker](https://github.com/looking-glass-project/LookingGlass/issues).
 Please identify the material, its project URL, the rights concerned and the
 requested action. Do not attach confidential information or original game data
 to a public report. Reports will be reviewed, and material may be restricted or

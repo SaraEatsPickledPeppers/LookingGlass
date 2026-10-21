@@ -10,10 +10,10 @@ engine with guided setup, configurable controller support and modern display
 options. It uses your own compatible game files and runs independently of the
 original game executable, gameplay DLL and Alice: Madness Returns.
 
-[Visit the Looking Glass website](https://skulitom.github.io/LookingGlass/) ·
-**[Download for Windows — play the full campaign](https://github.com/skulitom/LookingGlass/releases/download/v0.32.0-preview.2-setup.1/LookingGlass-Windows-x64-v0.32.0-preview.2-setup.1.zip)** ·
+[Visit the Looking Glass website](https://looking-glass-project.github.io/LookingGlass/) ·
+**[Download for Windows — play the full campaign](https://github.com/looking-glass-project/LookingGlass/releases/download/v0.32.0-preview.2-setup.1/LookingGlass-Windows-x64-v0.32.0-preview.2-setup.1.zip)** ·
 [Watch the 78-second story showcase](#gameplay-showcase) ·
-[Report a bug](https://github.com/skulitom/LookingGlass/issues/new/choose)
+[Report a bug](https://github.com/looking-glass-project/LookingGlass/issues/new/choose)
 
 **One download, three steps:** save the ZIP, choose **Extract All**,
 then open **Launch.cmd** in the extracted LookingGlass folder. Guided setup
@@ -28,10 +28,10 @@ no ownership of that content. [Rights and distribution notice](LEGAL.md).
 
 ## Gameplay showcase
 
-[![Watch the story and gameplay showcase: Cheshire, the Rabbit and Pandemonium's minecart](docs/media/gameplay/story-preview.gif)](https://skulitom.github.io/LookingGlass/#showcase)
+[![Watch the story and gameplay showcase: Cheshire, the Rabbit and Pandemonium's minecart](docs/media/gameplay/story-preview.gif)](https://looking-glass-project.github.io/LookingGlass/#showcase)
 
-**[Watch the new 78-second showcase in your browser](https://skulitom.github.io/LookingGlass/#showcase)** ·
-[Download the video](https://github.com/skulitom/LookingGlass/releases/download/v0.32.0-preview.1/LookingGlass-Story-Showcase.mp4)
+**[Watch the new 78-second showcase in your browser](https://looking-glass-project.github.io/LookingGlass/#showcase)** ·
+[Download the video](https://github.com/looking-glass-project/LookingGlass/releases/download/v0.32.0-preview.1/LookingGlass-Story-Showcase.mp4)
 
 Cutscenes from the **first two chapters — Dementia and Pandemonium** lead into
 combat and exploration. Meet the Rabbit and Cheshire Cat, collect the Vorpal
@@ -41,8 +41,8 @@ Actual in-engine footage at normal speed, edited with titles and transitions;
 
 Want more of the opening story? Two separate one-minute edits:
 
-- **[Chapter 1: Dementia](https://github.com/skulitom/LookingGlass/releases/download/v0.32.0-preview.1/LookingGlass-Chapter-1-Dementia.mp4)** — Alice's arrival, Cheshire, the Blade and the little door.
-- **[Chapter 2: Pandemonium](https://github.com/skulitom/LookingGlass/releases/download/v0.32.0-preview.1/LookingGlass-Chapter-2-Pandemonium.mp4)** — the Gnome's warning and the minecart sequence.
+- **[Chapter 1: Dementia](https://github.com/looking-glass-project/LookingGlass/releases/download/v0.32.0-preview.1/LookingGlass-Chapter-1-Dementia.mp4)** — Alice's arrival, Cheshire, the Blade and the little door.
+- **[Chapter 2: Pandemonium](https://github.com/looking-glass-project/LookingGlass/releases/download/v0.32.0-preview.1/LookingGlass-Chapter-2-Pandemonium.mp4)** — the Gnome's warning and the minecart sequence.
 
 [Recording and editing details](docs/media/gameplay/README.md#story-and-opening-chapter-videos).
 
@@ -114,7 +114,7 @@ Full videos are 720p. [Recording details](docs/media/gameplay/README.md).
 
 ## Install and play
 
-1. **[Download for Windows](https://github.com/skulitom/LookingGlass/releases/download/v0.32.0-preview.2-setup.1/LookingGlass-Windows-x64-v0.32.0-preview.2-setup.1.zip)**. This downloads the one ZIP you need.
+1. **[Download for Windows](https://github.com/looking-glass-project/LookingGlass/releases/download/v0.32.0-preview.2-setup.1/LookingGlass-Windows-x64-v0.32.0-preview.2-setup.1.zip)**. This downloads the one ZIP you need.
 2. Right-click the ZIP, choose **Extract All**, and open the extracted folder.
    Keep it somewhere writable, such as `Documents\LookingGlass`.
 3. Double-click **Launch.cmd**. Setup defaults to game files already on your
@@ -145,7 +145,7 @@ and setup's integrity checks do not establish permission to download or use it.
 See the [game-data and media notice](LEGAL.md#what-the-project-distributes).
 
 See [installation and troubleshooting](docs/INSTALL.md), including updates and
-building from source. [Release notes and checksums](https://github.com/skulitom/LookingGlass/releases/tag/v0.32.0-preview.2-setup.1)
+building from source. [Release notes and checksums](https://github.com/looking-glass-project/LookingGlass/releases/tag/v0.32.0-preview.2-setup.1)
 describe the exact package and its verification limits.
 
 Use the in-game settings to view or change controls. **Esc** opens the menu,
