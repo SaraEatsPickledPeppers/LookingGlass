@@ -16,7 +16,9 @@ are optional developer, verification or video files; you do not need them to pla
    files beside the game, in Downloads, and at a previously saved location.
    If none are found, use **Choose archive** or **Choose folder**. Setup does not
    automatically select or start a download.
-4. Select **Set up**. Setup checks and unpacks the files, then opens the game. Choose **New Game**.
+4. Choose your **Language**.
+5. Select **Set up**. Setup checks and imports
+   the files, then opens the game. Choose **New Game**.
    Next time, double-click **Launch.cmd** or the optional desktop shortcut.
 
 You do not need to type commands, install Rust or Python, install 7-Zip separately,
@@ -61,35 +63,48 @@ Already have extracted files? Select **Choose folder**, then choose any of:
 
 - `Alice1`, containing `bin\base`;
 - its parent folder, containing `Alice1\bin\base`;
-- `bin\base` itself, containing the six PK3 files.
+- `bin\base` itself, containing the five base PK3 files and a supported language pack.
 
-Your existing folder stays in place. Keep it there after setup. Compatibility with
-2000 retail data, other languages and third-party texture mods is not established.
+Setup copies an external folder's PK3 files into `private/game-data`; the source
+folder stays unchanged. ZIP archives with the same base-folder layout are also
+supported. Compatibility with 2000 retail data and third-party texture mods is
+not established.
 Looking Glass runs independently; you do not need to edit Steam configuration,
 change Alice: Madness Returns settings, or run the original executable.
 
 ## Changing files, updates and saves
 
 Open **Setup.cmd** to choose a different archive or folder. Setup validates the
-six required packs and the 36-map layout before changing the remembered path.
+required game and language packs and the map layout before changing the
+remembered path.
 Downloaded files must also match the expected size and SHA-256 checksum. Local
 folders are checked for archive structure and map format, not every asset's bytes.
 
-For an archive, setup imports only the six required PK3 files to
+For an archive, setup imports the required game and language packs to
 `private/game-data`. It does not extract or run the original executables. Imports
 are isolated, and a validated import can be reused. An interrupted extraction may
 leave an unused import folder; the previously configured game and saves are kept.
 
 All local settings, imported files, downloads and saves are under `private/`.
-A selected external data folder is read in place. Moving the whole Looking Glass
-folder keeps imported data working; desktop shortcuts must be recreated after a
-move. If an external folder moves, open Setup and choose its new location.
+External folders are copied; setup does not modify them. Moving the whole Looking
+Glass folder keeps imported data working; desktop shortcuts must be recreated
+after a move.
 
 For updates, extract the new release into a **new folder** and keep the old one.
 Follow that release's save-compatibility notes before copying your `private/`
 folder. Setup never resets your saves. Original-game saves are not compatible.
 Removing the Looking Glass folder removes its local saves/imports, so keep a backup;
 an external data folder is unaffected.
+
+## Choosing or changing the language
+
+English, German, French, Spanish and Dutch are supported. Dutch uses English
+spoken dialogue. Choose **Language** during setup.
+
+To change it later, open **Setup.cmd**, select another language and click
+**Apply language**. If its files are unavailable, choose a compatible folder,
+archive or **Download**. Your game files, mods and saved progress are kept.
+Use **Launch.cmd** to return to the game.
 
 ## Troubleshooting
 
@@ -104,7 +119,7 @@ an external data folder is unaffected.
 | Access denied | Move the whole folder outside Program Files to a writable location such as Documents. |
 | Extractor missing | Extract the complete Windows ZIP again. Source users can install [7-Zip](https://www.7-zip.org/) or select already extracted files. |
 | Source folder needs Rust | Use the Windows binary package, or follow the developer steps below. |
-| A save fails after changing game data | Return to the previous data set. Saves identify the packs used to create them. |
+| A save fails after changing game data | Return to the previous base data and mods. |
 
 This is an **unsigned preview**. Windows may identify it as an unknown publisher.
 Check the release source and checksum; do not disable antivirus or system security.

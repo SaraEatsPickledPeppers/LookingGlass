@@ -91,9 +91,10 @@ complete visual, audio or original-game fidelity. See the
 [campaign audit](docs/CAMPAIGN_RUN_AUDIT.md) and
 [known issues](docs/KNOWN_ISSUES.md) for exact coverage and remaining work.
 
-The current development build supports Windows x64, the English 2011 vanilla
-data set, persistent campaign saves, keyboard/mouse and configurable controller
-input. Other data editions and platforms have not been certified.
+The current development build supports Windows x64, the 2011 vanilla data set
+in English, German, French, Spanish and Dutch, persistent campaign saves,
+keyboard/mouse and configurable controller input. Dutch uses English spoken
+dialogue. Other data editions and platforms have not been certified.
 
 Expect remaining differences in cutscene staging, effects, materials and enemy
 behavior, plus a reported waterside rope-grab issue. Broader PC and audible
@@ -121,8 +122,12 @@ Full videos are 720p. [Recording details](docs/media/gameplay/README.md).
    computer. If none are found, use **Choose archive** or **Choose folder**.
    The optional Internet Archive download must be selected explicitly, then
    confirmed only if you are entitled to download and use those files.
-4. Select **Set up**. Setup checks and unpacks the files, then opens the game.
+4. Choose your **Language**, then select **Set up**. Setup checks and unpacks
+   the files, then opens the game.
    Next time, just open **Launch.cmd** or your optional desktop shortcut.
+
+To change the language later, open **Setup.cmd**, select another language and
+click **Apply language**.
 
 Choose **New Game** to play the full campaign in story order, or use the chapter
 chooser to jump into a particular visit.

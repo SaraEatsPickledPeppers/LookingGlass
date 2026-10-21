@@ -12,7 +12,7 @@ import time
 import unittest
 import uuid
 
-from test_setup import ROOT, make_data
+from test_setup import ROOT, make_data, make_language, setup_environment
 
 TEST_ROOT = ROOT / 'private' / ('guided-setup-tests-' + uuid.uuid4().hex)
 
@@ -62,27 +62,88 @@ class GuidedSetupTests(unittest.TestCase):
         self.save.parent.mkdir()
         self.save.write_text('keep my progress')
 
-    def start(self, source='', download=False, script=None, confirmed=None):
+    def start(self, source='', download=False, script=None, language=None, action='setup', confirmed=None):
         # Only the test copy can use loopback HTTP and synthetic download hashes.
         path = self.root / 'tools/windows_setup.ps1'
         path.write_text(script or self.script, encoding='utf-8')
         jobfile = self.job / 'job.json'
-        job = dict(directory=str(self.job), source=str(source), download=download)
+        job = dict(directory=str(self.job), source=str(source), download=download,
+                   language=language, action=action)
         if confirmed is not None:
             job['downloadConfirmed'] = confirmed
         jobfile.write_text(json.dumps(job))
         return subprocess.Popen(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(path),
                                  '-Mode', 'Worker', '-JobFile', str(jobfile)], cwd=self.root,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                 env=setup_environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    def diagnostics(self, output=''):
+        parts = [output]
+        for name in ('status.json', 'setup.log'):
+            path = self.job / name
+            if path.exists():
+                parts.append(f'{name}:\n{path.read_text(encoding="utf-8-sig", errors="replace")}')
+        return '\n'.join(parts)
 
     def finish(self, proc, expected):
         stdout, stderr = proc.communicate(timeout=30)
-        self.assertEqual(proc.returncode, expected, (stdout + stderr).decode(errors='replace'))
+        self.assertEqual(proc.returncode, expected,
+                         self.diagnostics((stdout + stderr).decode(errors='replace')))
         self.assertEqual(self.save.read_text(), 'keep my progress')
 
     def test_folder_worker_handles_literal_paths(self):
         self.finish(self.start(self.data), 0)
-        self.assertEqual(Path(self.config.read_text(encoding='utf-8').strip()), self.data / 'Alice1/bin/base')
+        imported = self.root / self.config.read_text(encoding='utf-8').strip()
+        self.assertTrue(imported.is_relative_to(self.root / 'private/game-data'))
+        self.assertEqual((imported / 'pak0.pk3').read_bytes(), (self.data / 'Alice1/bin/base/pak0.pk3').read_bytes())
+
+    def test_setup_actions_remain_visible_on_short_displays(self):
+        # Construct the actual form without showing a window or starting setup.
+        # A 620-pixel client area fits a 720p desktop with its taskbar/title bar.
+        probe = r'''
+    foreach ($height in @(620, 760)) {
+        $form.ClientSize = New-Object Drawing.Size(660, $height)
+        $form.PerformLayout()
+        foreach ($button in @($go, $applyLanguage, $cancel)) {
+            $top = $button.Top
+            $parent = $button.Parent
+            while ($parent -ne $form) { $top += $parent.Top; $parent = $parent.Parent }
+            if ($top -lt 0 -or ($top + $button.Height) -gt $form.ClientSize.Height) {
+                throw "Action '$($button.Text)' is outside the $height-pixel client area."
+            }
+        }
+    }
+'''
+        marker = '    [void]$form.ShowDialog()'
+        self.assertEqual(self.script.count(marker), 1)
+        script = self.script.replace(marker, probe)
+        # Make errors observable instead of opening a modal error dialog.
+        script = script.replace(
+            "[void][Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Looking Glass - Setup')",
+            'Write-Error $_.Exception.Message')
+        path = self.root / 'tools/windows_setup.ps1'
+        path.write_text(script, encoding='utf-8')
+        result = subprocess.run(
+            ['powershell.exe', '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', str(path)],
+            cwd=self.root, env=setup_environment(), capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 0, (result.stdout + result.stderr).decode(errors='replace'))
+
+    def test_worker_switches_language_using_saved_packs(self):
+        german = self.data / 'Alice1/bin/base/pak4_german.pk3'
+        make_language(german, 'Schritt')
+        self.finish(self.start(self.data, language='de'), 0)
+        active = self.root / self.config.read_text().strip()
+        pointer = self.config.read_bytes()
+        core = {p.name: p.read_bytes() for p in active.glob('*.pk3') if not p.name.startswith('pak4_')}
+        self.assertEqual((active / 'pak4_german.pk3').read_bytes(), german.read_bytes())
+        self.finish(self.start(language='en', action='language'), 0)
+        self.assertFalse((active / 'pak4_german.pk3').exists())
+        cache = self.root / 'private/game-data/languages'
+        self.assertEqual((cache / 'pak4_german.pk3').read_bytes(), german.read_bytes())
+        self.finish(self.start(language='de', action='language'), 0)
+        self.assertEqual((active / 'pak4_german.pk3').read_bytes(), german.read_bytes())
+        self.assertFalse((active / 'pak4_english.pk3').exists())
+        self.assertEqual(self.config.read_bytes(), pointer)
+        self.assertEqual({p.name: p.read_bytes() for p in active.glob('*.pk3') if not p.name.startswith('pak4_')}, core)
 
     def test_invalid_input_keeps_previous_config(self):
         self.finish(self.start(self.root / 'missing.7z'), 1)
@@ -107,6 +168,20 @@ class GuidedSetupTests(unittest.TestCase):
         self.finish(self.start(), 1)
         self.assertFalse((self.root / 'private/downloads').exists())
         self.assertEqual(self.config.read_text(), 'old-data-path\n')
+
+    def test_language_download_requires_confirmation_without_changing_installation(self):
+        self.finish(self.start(self.data, language='en'), 0)
+        pointer = self.config.read_bytes()
+        active = self.root / self.config.read_text().strip()
+        packs = {p.name: p.read_bytes() for p in active.glob('*.pk3')}
+        for consent in (None, False, 'true'):
+            with self.subTest(consent=consent):
+                self.finish(self.start(download=True, language='de', action='language', confirmed=consent), 1)
+                state = json.loads((self.job / 'status.json').read_text())
+                self.assertIn('Download not confirmed', state['message'])
+                self.assertFalse((self.root / 'private/downloads').exists())
+                self.assertEqual(self.config.read_bytes(), pointer)
+                self.assertEqual({p.name: p.read_bytes() for p in active.glob('*.pk3')}, packs)
 
     def test_non_boolean_download_choice_is_rejected(self):
         self.finish(self.start(download='false', confirmed=True), 1)
@@ -159,7 +234,7 @@ class GuidedSetupTests(unittest.TestCase):
         with server(payload) as url:
             self.finish(self.start(download=True, confirmed=True, script=self.download_script(url, payload, wrong_hash=True)), 1)
         state = json.loads((self.job / 'status.json').read_text())
-        self.assertIn('integrity', state['message'])
+        self.assertIn('integrity', state['message'], self.diagnostics())
         self.assertEqual(self.config.read_text(), 'old-data-path\n')
         self.assertFalse(list((self.root / 'private/downloads').iterdir()))
 
@@ -170,7 +245,10 @@ class GuidedSetupTests(unittest.TestCase):
             deadline = time.monotonic() + 10
             while not list((self.root / 'private/downloads').glob('*.partial')):
                 if proc.poll() is not None or time.monotonic() > deadline:
-                    self.fail('Worker did not begin the synthetic download')
+                    proc.kill()
+                    stdout, stderr = proc.communicate(timeout=30)
+                    self.fail(self.diagnostics('Worker did not begin the synthetic download\n'
+                                              + (stdout + stderr).decode(errors='replace')))
                 time.sleep(0.05)
             (self.job / 'cancel').write_text('cancel')
             self.finish(proc, 1)
@@ -188,6 +266,27 @@ class GuidedSetupTests(unittest.TestCase):
             self.finish(self.start(download=True, confirmed=True, script=self.download_script(url, payload)), 0)
         self.assertTrue((self.root / self.config.read_text().strip() / 'pak0.pk3').is_file())
         self.assertEqual((self.root / 'private/downloads/Alice1_2011_vanilla.7z').read_bytes(), payload)
+
+    def test_confirmed_download_imports_only_the_missing_language(self):
+        self.finish(self.start(self.data, language='en'), 0)
+        pointer = self.config.read_bytes()
+        active = self.root / self.config.read_text().strip()
+        core = {p.name: p.read_bytes() for p in active.glob('*.pk3') if not p.name.startswith('pak4_')}
+        german = self.data / 'Alice1/bin/base/pak4_german.pk3'
+        make_language(german, 'Schritt')
+        extractor = shutil.which('7z') or str(Path(os.environ.get('ProgramFiles', 'C:/Program Files')) / '7-Zip/7z.exe')
+        if not Path(extractor).is_file():
+            self.skipTest('7-Zip needed to create the synthetic fixture')
+        archive = self.root.parent / 'language-fixture.7z'
+        subprocess.run([extractor, 'a', '-t7z', str(archive), 'Alice1'], cwd=self.data, capture_output=True, check=True)
+        payload = archive.read_bytes()
+        with server(payload) as url:
+            self.finish(self.start(download=True, language='de', action='language', confirmed=True,
+                                   script=self.download_script(url, payload)), 0)
+        self.assertEqual(self.config.read_bytes(), pointer)
+        self.assertEqual({p.name: p.read_bytes() for p in active.glob('*.pk3') if not p.name.startswith('pak4_')}, core)
+        self.assertEqual((active / 'pak4_german.pk3').read_bytes(), german.read_bytes())
+        self.assertFalse((active / 'pak4_english.pk3').exists())
 
 
 if __name__ == '__main__':
