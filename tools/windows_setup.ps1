@@ -80,7 +80,12 @@ if ($Mode -eq 'Worker') {
     try {
         Check-Cancel
         $source = $job.source
+        if ($job.download -isnot [bool]) { throw 'Choose local files or explicitly opt in to downloading.' }
         if ($job.download) {
+            # A selected radio button (or a stale job from an older setup) is not consent.
+            if ($job.downloadConfirmed -isnot [bool] -or -not $job.downloadConfirmed) {
+                throw 'Download not confirmed. Only download game files you are entitled to use; confirm in Setup first.'
+            }
             $downloads = Join-Path $root 'private\downloads'
             [void][IO.Directory]::CreateDirectory($downloads)
             $source = Join-Path $downloads $archiveName
@@ -189,9 +194,9 @@ try {
     $archiveButton = Button 'Choose archive...' 44 193 170
     $folderButton = Button 'Choose folder...' 224 193 170
     $download = New-Object Windows.Forms.RadioButton
-    $download.Text = 'Download compatible game files (933 MB)'; $download.SetBounds(26, 244, 605, 28)
+    $download.Text = 'Download from Internet Archive (optional, 933 MB)'; $download.SetBounds(26, 244, 605, 28)
     $form.Controls.Add($download)
-    $sourceNote = Label 'From Internet Archive. Use files you are entitled to use. Allow 3 GB of free space for the download and unpacked game.' 44 276 570 46
+    $sourceNote = Label 'Only if you are entitled to download and use these files. Confirmation is required. Allow 3 GB of free space.' 44 276 570 46
 
     $desktop = New-Object Windows.Forms.CheckBox
     $desktop.Text = 'Create a desktop shortcut'; $desktop.SetBounds(26, 328, 290, 28)
@@ -229,20 +234,23 @@ try {
     Add-Choice (Join-Path $root ('alice_202106\' + $archiveName))
     Add-Choice (Join-Path $root ('private\downloads\' + $archiveName))
     Add-Choice (Read-ConfiguredData)
-    $local.Checked = $choices.Items.Count -gt 0
-    $download.Checked = -not $local.Checked
-    if ($local.Checked) { $statusLabel.Text = 'Found game files on this computer. Select Set up to connect them.' }
+    # Missing local data must never select or initiate a third-party download.
+    $local.Checked = $true
+    $download.Checked = $false
+    if ($choices.Items.Count -gt 0) { $statusLabel.Text = 'Found game files on this computer. Select Set up to connect them.' }
+    else { $statusLabel.Text = 'Choose an archive or folder containing game files you are entitled to use.' }
 
     function Refresh-Inputs {
         $busy = $null -ne $script:worker
         $local.Enabled = -not $busy; $download.Enabled = -not $busy
         $choices.Enabled = -not $busy -and $local.Checked
         $archiveButton.Enabled = -not $busy; $folderButton.Enabled = -not $busy
-        $go.Enabled = -not $busy; $desktop.Enabled = -not $busy; $playAfter.Enabled = -not $busy
+        $go.Enabled = -not $busy -and ($script:ready -or $download.Checked -or ($local.Checked -and $choices.SelectedIndex -ge 0))
+        $desktop.Enabled = -not $busy; $playAfter.Enabled = -not $busy
     }
     $local.Add_CheckedChanged({ Refresh-Inputs })
-    $download.Add_CheckedChanged({ $script:ready = $false; $go.Text = 'Set up' })
-    $choices.Add_SelectedIndexChanged({ $script:ready = $false; $go.Text = 'Set up' })
+    $download.Add_CheckedChanged({ $script:ready = $false; $go.Text = 'Set up'; Refresh-Inputs })
+    $choices.Add_SelectedIndexChanged({ $script:ready = $false; $go.Text = 'Set up'; Refresh-Inputs })
     $archiveButton.Add_Click({
         $dialog = New-Object Windows.Forms.OpenFileDialog
         $dialog.Title = 'Choose the downloaded game archive'
@@ -261,10 +269,19 @@ try {
         try {
             if ($script:ready) { Start-Game; $form.Close(); return }
             if ($local.Checked -and $choices.SelectedIndex -lt 0) { throw 'Choose an archive or folder first.' }
+            $downloadConfirmed = $false
+            if ($download.Checked) {
+                $answer = [Windows.Forms.MessageBox]::Show($form,
+                    "This downloads EA's original game data (933 MB) from Internet Archive, a third-party service. Availability and integrity checks do not establish permission to use it.`n`nOnly continue if you are entitled to download and use these files. Do you confirm that you are entitled and want to download them?",
+                    'Confirm game-data download', [Windows.Forms.MessageBoxButtons]::YesNo,
+                    [Windows.Forms.MessageBoxIcon]::Warning, [Windows.Forms.MessageBoxDefaultButton]::Button2)
+                if ($answer -ne [Windows.Forms.DialogResult]::Yes) { return }
+                $downloadConfirmed = $true
+            }
             $script:currentJob = Join-Path $root ('private\setup-jobs\' + [Guid]::NewGuid().ToString('N'))
             [void][IO.Directory]::CreateDirectory($script:currentJob)
             $jobPath = Join-Path $script:currentJob 'job.json'
-            Save-State $jobPath @{ directory = $script:currentJob; source = [string]$choices.SelectedItem; download = $download.Checked }
+            Save-State $jobPath @{ directory = $script:currentJob; source = [string]$choices.SelectedItem; download = $download.Checked; downloadConfirmed = $downloadConfirmed }
             $start = New-Object Diagnostics.ProcessStartInfo
             $start.FileName = Join-Path $PSHOME 'powershell.exe'
             $start.Arguments = '-NoLogo -NoProfile -ExecutionPolicy Bypass -Command "& $env:LG_UI_SCRIPT -Mode Worker -JobFile $env:LG_UI_JOB"'
@@ -334,6 +351,7 @@ try {
                 }
                 $progress.Value = 0
             }
+            Refresh-Inputs
             if ($script:closeWhenDone) { $form.Close() }
         }
     })
