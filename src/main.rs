@@ -26,6 +26,7 @@ mod clockwork;
 mod collision;
 mod combat;
 mod console;
+mod coop;
 mod decorations;
 mod dice;
 mod dismember;
