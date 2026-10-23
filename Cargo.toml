@@ -26,6 +26,9 @@ sha2 = "=0.10.9"
 tungstenite = { version = "=0.30.0", features = ["native-tls"] }
 getrandom = "=0.3.4"
 
+[build-dependencies]
+sha2 = "=0.10.9"
+
 [profile.dev]
 opt-level = 1
 

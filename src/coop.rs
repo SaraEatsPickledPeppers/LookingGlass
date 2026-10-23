@@ -3,8 +3,11 @@
 //! This module is being integrated on the coop branch. Its policy tests are not
 //! evidence that the single-player viewer or the campaign already supports co-op.
 pub mod check;
+pub mod hosting;
 pub mod invite;
+pub mod protocol;
 pub mod rules;
+pub mod session;
 pub mod transport;
 pub mod tunnel;
 

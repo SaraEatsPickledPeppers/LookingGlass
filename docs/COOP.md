@@ -70,7 +70,7 @@ time or a count of files. Credit requires working behavior and relevant evidence
 | Scenes, transport and progression | 20% | First arrival, single-Alice scenes, safe reunion, boarding barriers, shared saves and level changes |
 | Full-campaign verification | 20% | Every visit exercised by both roles, leaves/swimming regression, latency/disconnect tests, single-player regressions |
 
-The final campaign matrix must include all 39 visits, both trigger orders, a player
+The [campaign matrix](COOP_CAMPAIGN.md) includes all 39 visits. Each requires both trigger orders, a player
 dying during traversal, both dying, checkpoint reload, a guest falling behind, and a
 disconnect around a transition. The network test harness should inject delay/jitter
 and exercise slow readers rather than assuming loopback performance represents the internet.
@@ -97,7 +97,49 @@ and exercise slow readers rather than assuming loopback performance represents t
   Hosting now waits for tunnel registration and a 12-second propagation grace.
   This passed repeated public tests; it is not a universal DNS availability guarantee.
 - Main/ESC Host/Join, shared gameplay and full-campaign integration remain unfinished.
-  Current probes verify networking, not two playable Alices. Overall estimate: 10%.
+  Current probes verify networking, not two playable Alices.
+
+The next session layer (`protocol.rs`, `session.rs`, `hosting.rs`) checks exact source
+and dependency identity plus the mounted game-data fingerprint. Both roles must
+acknowledge loading a visit before guest controls become active. Every reload or
+transition has a new epoch: old controls cannot leak into the next visit. Held
+movement/attacks become neutral after 500 ms without fresh input, while cumulative
+jump/use counts preserve short presses across a busy send queue. An incompatible
+guest releases the slot so the same host can accept a correct build. Host setup,
+helper download and cancellation run off the UI thread.
+
+These APIs still need viewer/menu integration; their tests do not establish that
+gameplay already uses them. The source identity is a compatibility check, not an
+attestation that a peer is trustworthy. Guest messages cannot upload world state.
+
+The session changes passed 689 Rust tests (one unrelated ignored test), including
+real-socket scenarios for readiness, a transition with input still in flight,
+incompatible data followed by a successful rejoin, disconnection and loading timeout.
+The shared background Host setup also passed separate-process loopback and public
+internet probes with the delay/jitter above. The public probe waits for helper
+shutdown before exiting. The game quit path still needs this integration.
+After tightening cancellation and the forged-message regression, all 21 focused
+co-op tests passed again. This final focused run includes the latest source changes.
+
+Overall estimate at this milestone: **12%**. Credited points are 8/10 for foundation
+and diagnostics and 4/15 for internet session infrastructure. The other four areas
+remain 0 credited points until their behavior is integrated and verified. This
+deliberately gives no campaign or gameplay credit to standalone policy tests.
+
+### Integration constraints found in the existing engine
+
+- `viewer.rs` owns one player, inventory, character, camera and save record. Add
+  explicit per-player state while keeping world time and progression on the host.
+- `Menu::run` currently waits in a modal loop. Co-op needs a per-frame menu update
+  so one player's settings/menu and window focus cannot freeze the other's world.
+- Level controllers advance shared machinery and enemies through single-player
+  hooks. Do not call a shared controller twice per tick to process two players;
+  split world advancement from per-player contacts and rider displacement.
+- Enemy selection must be per enemy, not one globally selected player for the
+  whole level. Route damage/impulses to the player that actually received the hit.
+- Alice's blouse/leg/inner-mouth regions share a texture. Runtime red clothing
+  needs a blue-fabric mask on known clothing textures, preserving skin, apron,
+  mouth, hair, and power-up appearances. Never distribute altered original assets.
 
 ## Reproducing transport checks
 

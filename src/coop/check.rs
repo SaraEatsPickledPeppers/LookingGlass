@@ -1,16 +1,15 @@
 //! Real two-process transport diagnostics. No original game data is required.
 //! This verifies connectivity/isolation, not shared gameplay or campaign support.
 use super::{
+    hosting::{Hosting, Status as HostingStatus},
     invite::Invite,
     transport::{self, Conditions, Peer, State},
-    tunnel::{self, Tunnel},
 };
 use anyhow::{ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
     path::PathBuf,
-    sync::atomic::AtomicBool,
     thread,
     time::{Duration, Instant},
 };
@@ -117,25 +116,23 @@ fn run(args: &[String]) -> Result<()> {
 }
 
 fn host(o: &Options) -> Result<()> {
-    let (peer, local) = transport::host(o.conditions)?;
-    let mut tunnel = None;
-    let invite = if o.internet {
-        println!("Preparing authenticated internet hosting...");
-        let helper = tunnel::ensure_helper(
-            &PathBuf::from("private/coop/helpers"),
-            &AtomicBool::new(false),
-        )?;
-        let mut opening = Tunnel::start(&helper, local.origin(), &o.profile.join("tunnel"))?;
-        let origin = loop {
-            if let Some(origin) = opening.poll()? {
-                break origin.to_owned();
-            }
-            thread::sleep(Duration::from_millis(50));
-        };
-        tunnel = Some(opening);
-        local.with_origin(&origin)?
-    } else {
-        local
+    println!("Preparing authenticated hosting...");
+    let hosting = Hosting::start(
+        o.profile.clone(),
+        PathBuf::from("private/coop/helpers"),
+        o.internet,
+        o.conditions,
+    )?;
+    let started = Instant::now();
+    let (peer, invite) = loop {
+        ensure!(
+            started.elapsed() < Duration::from_secs(150),
+            "Host setup timed out."
+        );
+        if let Some(ready) = hosting.take_ready()? {
+            break ready;
+        }
+        thread::sleep(Duration::from_millis(50));
     };
     // A private file passes the secret between the two test processes. It is
     // deliberately never printed, embedded in a command line or sent to CI logs.
@@ -153,8 +150,8 @@ fn host(o: &Options) -> Result<()> {
             started.elapsed() < Duration::from_secs(o.seconds),
             "Host probe timed out after {received}/{ROUNDS} exchanges."
         );
-        if let Some(tunnel) = &mut tunnel {
-            tunnel.poll()?;
+        if let HostingStatus::Failed(reason) = hosting.status() {
+            anyhow::bail!("{reason}");
         }
         if let Some(data) = peer.receive() {
             let mut probe: Probe = serde_json::from_slice(&data)?;
@@ -199,6 +196,15 @@ fn host(o: &Options) -> Result<()> {
     println!(
         "PASS host: {ROUNDS} ordered exchanges with a separate process; guest disconnect observed."
     );
+    hosting.cancel();
+    let stopping = Instant::now();
+    while hosting.status() != HostingStatus::Stopped {
+        ensure!(
+            stopping.elapsed() < Duration::from_secs(5),
+            "Internet hosting did not stop cleanly."
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
     Ok(())
 }
 

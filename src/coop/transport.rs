@@ -47,6 +47,7 @@ struct Shared {
     stop: AtomicBool,
     state: Mutex<State>,
     generation: AtomicU64,
+    disconnect_generation: AtomicU64,
     incoming: Mutex<Receiver<(u64, Vec<u8>)>>,
 }
 impl Shared {
@@ -100,6 +101,14 @@ impl Peer {
     pub fn stop(&self) {
         self.shared.stop.store(true, Ordering::Relaxed);
     }
+
+    /// Reject only the current guest, keeping a host's invite/listener usable.
+    /// A generation tag prevents a late rejection from closing a new guest.
+    pub fn disconnect(&self) {
+        self.shared
+            .disconnect_generation
+            .store(self.generation(), Ordering::Release);
+    }
 }
 impl Drop for Peer {
     fn drop(&mut self) {
@@ -122,6 +131,7 @@ fn channels(
         stop: AtomicBool::new(false),
         state: Mutex::new(state),
         generation: AtomicU64::new(0),
+        disconnect_generation: AtomicU64::new(0),
         incoming: Mutex::new(incoming),
     });
     (
@@ -410,6 +420,9 @@ fn exchange<S: Read + Write>(
     let mut random = 0x41872_u32;
     let generation = shared.generation.load(Ordering::Acquire);
     while !shared.stopped() {
+        if shared.disconnect_generation.load(Ordering::Acquire) == generation {
+            break;
+        }
         // A third connection gets an immediate failure instead of waiting forever.
         if let Some(listener) = listener {
             if let Ok((mut extra, _)) = listener.accept() {
