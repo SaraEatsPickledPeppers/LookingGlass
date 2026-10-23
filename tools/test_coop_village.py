@@ -22,6 +22,8 @@ class Pair:
         self.folder.mkdir(parents=True)
         self.invite = self.folder / 'invite.txt'
         self.processes, self.logs, self.commands, self.reports = {}, {}, {}, {}
+        self.starts = {'host': 0, 'guest': 0}
+        self.log_paths = {}
         self.history = {'host': [], 'guest': []}
         self.captures = set()
         self.capture_commands = {}
@@ -41,8 +43,14 @@ class Pair:
                                   capture=capture, finish=finish)
 
     def start(self, role):
+        assert role not in self.processes or self.processes[role].poll() is not None
         profile = self.folder / role
-        log = (self.folder / (role + '.log')).open('w')
+        if role in self.logs:
+            self.logs[role].close()
+        suffix = f'-rejoin{self.starts[role]}' if self.starts[role] else ''
+        self.starts[role] += 1
+        self.log_paths[role] = self.folder / (role + suffix + '.log')
+        log = self.log_paths[role].open('w')
         self.logs[role] = log
         args = [str(self.args.exe.resolve()), '--data', str(self.args.data.resolve()), '--map', 'gvillage',
                 '--no-audio', '--profile', str(profile), '--coop-host' if role == 'host' else '--coop-join',
@@ -66,7 +74,7 @@ class Pair:
             except PermissionError:
                 pass  # Next heartbeat retries; the client neutralises stale input.
         for role, process in self.processes.items():
-            assert process.poll() in (None, 0), f'{role} exited: {self.folder / (role + ".log")}'
+            assert process.poll() in (None, 0), f'{role} exited: {self.log_paths[role]}'
             report = read(self.folder / role / 'coop-live.json')
             if not report or report['pid'] != process.pid or not report['playing']:
                 continue
@@ -78,13 +86,16 @@ class Pair:
             if self.build is None:
                 self.build = report['build']
             assert self.build == report['build'], 'Client build identities differ'
-            assert all(b['stats']['sanity'] > 0 for b in frame['players']), f'{role}: player died'
-            assert frame['checkpoint_generation'] == 0, 'Unexpected team wipe during clean traversal'
+            self.validate_report(role, report)
             if stage['owner'] is None:
                 assert all(driver['clear']), f'{role}: obstructed body'
             row = {'tick': frame['tick'], 'epoch': frame['epoch'], 'map': report['visit']['map'],
+                   'checkpoint_generation': frame['checkpoint_generation'], 'lives': frame['lives'],
+                   'camera_player': report['camera_player'], 'camera_target': report['camera_target'],
+                   'camera_subject_feet': report['camera_subject_feet'],
                    'owner': stage['owner'], 'scene': driver['scene'], 'driver': driver,
                    'players': [{'feet': b['player']['feet'], 'health': b['stats']['sanity'],
+                       'stats': b['stats'],
                        'velocity': b['player']['velocity'], 'grounded': b['player']['grounded'],
                        'swimming': b['player']['swimming'], 'jumps': b['player']['jumps'],
                        'collected': b['stats']['collected'], 'warped_at': b['warped_at'],
@@ -110,6 +121,10 @@ class Pair:
                        for role in self.commands):
                     self.captures.add(scene)
         time.sleep(.05)
+
+    def validate_report(self, role, report):
+        assert all(b['stats']['sanity'] > 0 for b in report['frame']['players']), f'{role}: player died'
+        assert report['frame']['checkpoint_generation'] == 0, 'Unexpected team wipe during clean traversal'
 
     def until(self, predicate, seconds=240):
         end = time.monotonic() + seconds
@@ -151,13 +166,15 @@ class Pair:
         tick = self.reports['host']['frame']['tick']
         self.until(lambda: self.arrived() or self.reports['host']['frame']['tick'] >= tick + seconds * 120)
 
-    def run(self):
+    def start_pair(self):
         print('Evidence:', self.folder, flush=True)
         self.pump()
         self.start('host')
         self.until(self.invite.exists, 150)
         self.start('guest')
         self.until(lambda: len(self.reports) == 2, 120)
+
+    def route_to_cliff(self):
         self.wait(6)
         for goal in [(-4180,5900,16),(-4192,5416,-52),(-4412,5328,-52),(-4780,5392,-120),(-4968,5424,-120)]: self.go(goal)
         self.wait(6)
@@ -178,25 +195,76 @@ class Pair:
         self.go((-2680,3028,68), True)
         self.go((-2936,3024,128))
         self.wait(8)
+
+    def route_to_exit(self):
         # Walk the supported approach before committing to the final drop. These
         # points follow the planner's recorded ground path; a long running plan
         # magnifies a late first turn into a missed landing several steps later.
-        for goal in [(-2960,2998,138),(-2976,2940,164),(-2976,2876,184),(-2996,2840,184)]: self.go(goal)
+        for goal in [(-2960,2998,138),(-2976,2940,164),(-2976,2876,184),
+                     (-2976,2780,184),(-2976,2720,184),(-2976,2660,184)]: self.go(goal)
+        # Continue along the supported ledge before crossing to the lower one.
+        # A long diagonal drop from y=2840 clips the lower landing's north edge
+        # when network timing shifts an airborne turn by a few input samples.
         self.go((-3112,2584,40), True)
         self.go((-3312,2440,48))
         self.until(self.arrived, 120)
-        self.verify()
+
+    def rejoin_guest(self):
+        self.wait(.5)
+        before = self.reports['host']
+        (self.folder / 'before-rejoin.json').write_text(json.dumps(before))
+        assert before['combat']['stage']['owner'] is None
+        checkpoint = before['frame']['checkpoint_generation']
+        previous_pid = self.processes['guest'].pid
+        self.set('guest', finish=True)
+        self.until(lambda: self.processes['guest'].poll() is not None, 30)
+        assert self.processes['guest'].returncode == 0
+        self.set('guest')
+        self.reports.pop('guest')
+        self.pump()
+        self.start('guest')
+        self.until(lambda: 'guest' in self.reports and self.reports['guest']['pid'] != previous_pid, 120)
+        self.wait(.5)
+        for report in self.reports.values():
+            frame = report['frame']
+            assert report['visit'] == before['visit'] and frame['checkpoint_generation'] == checkpoint
+            assert frame['tick'] >= before['frame']['tick']
+            assert report['combat']['stage']['world']['village']['cinema']['done'] == before['combat']['stage']['world']['village']['cinema']['done']
+            for body, old in zip(frame['players'], before['frame']['players']):
+                for field in ('sanity', 'will', 'owned', 'collected', 'selected',
+                              'school_items', 'staff_component', 'difficulty'):
+                    assert body['stats'][field] == old['stats'][field], f'Rejoin changed personal {field}'
+                assert body['spawned_at'] == old['spawned_at'] and body['warped_at'] == old['warped_at']
+                assert distance(body['player']['feet'], old['player']['feet']) < 2, 'Rejoin relocated a player'
+        self.evidence['rejoin'] = {'guest_processes': self.starts['guest'], 'epoch': before['visit']['epoch'],
+            'before_tick': before['frame']['tick'], 'after_tick': self.reports['guest']['frame']['tick'],
+            'resources_and_completed_scenes_preserved': True}
+        (self.folder / 'after-rejoin.json').write_text(json.dumps(self.reports))
+        print('PASS village guest left and rejoined near the exit with personal resources and scene progress intact.', flush=True)
+
+    def finish_pair(self, epoch):
         for role in self.commands:
-            self.set(role, capture=True, epoch=2)
+            self.set(role, capture=True, epoch=epoch)
         self.until(lambda: all(self.reports[r]['route_driver']['captured'] == self.commands[r]['id'] for r in self.commands), 30)
         for role in ('guest', 'host'):
-            self.set(role, finish=True, epoch=2)
+            self.set(role, finish=True, epoch=epoch)
             self.until(lambda: self.processes[role].poll() is not None, 30)
             assert self.processes[role].returncode == 0
+
+    def run(self):
+        self.start_pair()
+        self.route_to_cliff()
+        if self.args.rejoin:
+            self.rejoin_guest()
+        self.route_to_exit()
+        self.verify()
+        self.finish_pair(2)
         (self.folder / 'result.json').write_text(json.dumps({'passed': True, 'internet': not self.args.local,
             'build': self.build, 'evidence': self.evidence,
             'first': self.args.first, 'delay_ms': self.args.delay_ms, 'jitter_ms': self.args.jitter_ms,
-            'scope': 'full village traversal in separate clients; death/rejoin matrix remains separate'}, indent=2))
+            'scope': 'full village traversal in separate clients' +
+                (' with guest leave/rejoin near the exit; death matrix remains separate' if self.args.rejoin
+                 else '; death/rejoin matrix remains separate')}, indent=2))
         print('PASS two-process village: six scenes, personal Blade pickups, clean traversal and authored network transition.', flush=True)
 
     def verify(self):
@@ -261,6 +329,7 @@ if __name__ == '__main__':
     parser.add_argument('--data', type=Path, required=True)
     parser.add_argument('--first', choices=('blue','red'), default='blue')
     parser.add_argument('--local', action='store_true')
+    parser.add_argument('--rejoin', action='store_true', help='Leave/rejoin the guest near the authored village exit')
     parser.add_argument('--delay-ms', type=int, default=40)
     parser.add_argument('--jitter-ms', type=int, default=20)
     args = parser.parse_args()

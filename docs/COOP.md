@@ -123,7 +123,7 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after public two-process village traversal verification: **37%** (previously 36%). Credited
+Overall estimate after public two-process village traversal and recovery verification: **37%** (previously 36%). Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
 7/15 for two-player movement/presentation, paired school supports, dry/swimming arrival placement and a complete delayed village traversal in separate clients, and 7/20 for native targeting, host-owned
 weapons/damage, personal resources, timed respawns and full saved-state team wipes,
@@ -865,6 +865,69 @@ own processes. It rejects a death, checkpoint rollback, blocked body, missed sce
 wrong scene owner, missing personal Blade, divergent matching network frame or
 missing authored transition. A clean traversal alone still does not complete the
 village death/disconnect/checkpoint matrix.
+
+`--rejoin` on the village harness closes the guest near the exit, starts a fresh
+guest process using the retained invite, checks both players' health/inventories,
+placements and completed scenes, then continues through the authored exit. Its
+before/after reports and separate guest logs stay in the private fixture directory.
+
+`tools/test_coop_village_recovery.py` exercises actual falls after both players
+collect the Blade. It checks each dead player's camera while the survivor walks,
+the exact 1,200-tick countdown, nearby 25-health revival and retained personal
+pickups. It then sends both players over the drop and checks shared restoration
+against the game's earlier saved checkpoint. This fixture ends at that restored
+checkpoint; outgoing traversal and rejoining are checked separately.
+Route-driver profiles now use the same automatic checkpoint conditions as ordinary
+play. The older staged movement/combat fixtures still opt out of automatic saves.
+
+```text
+python tools/test_coop_village.py --data <base-folder> --first blue --rejoin --delay-ms 40 --jitter-ms 20
+python tools/test_coop_village_recovery.py --data <base-folder> --first red --delay-ms 40 --jitter-ms 20
+```
+
+The first recovery attempt reached the late scene but its direct diagonal movement
+hit a barrier before the drop. It timed out without a death and supplies no recovery
+evidence (`private/coop/village-test-fc87e73fd03b436caa14dc5ece1de800/`). The revised
+test follows the supported approach before walking off the unrailed edge.
+The second attempt observed Red's exact 1,200-tick recovery, but the survivor's
+8.55-unit walk was shorter than the camera-motion assertion required. The survivor
+now walks farther along the supported ramp. The third attempt passed both individual
+recoveries and observed a team wipe; its final resource assertion incorrectly
+treated the empty current-visit loot ledger, created by the first resumed ordinary
+tick, as a changed inventory. The comparison now models only that empty ledger
+creation and still compares every resource, award and drop. These failed fixtures
+are retained as `village-test-f6163c27d91f45fbb9b41f7b21436584` and
+`village-test-3e4d85e9f83643cd99cf26bb6cd4585e` under `private/coop/`.
+
+The fourth recovery run passes over the public invite path with 40 ms delay and
+20 ms jitter per sender. Red dies at tick 30,757 and revives at 31,957; Blue dies
+at 34,524 and revives at 35,724. Both clients agree on those exact ten-second
+intervals, both moving spectator cameras, each 25-Sanity revival within 50 units
+of the survivor, retained personal Blades and the survivor's unchanged health.
+The later team wipe at tick 37,338 restores the actual automatic checkpoint saved
+at tick 2,916: both original resources/placements and the earlier scene/hatch state.
+Both restored-checkpoint views were inspected and both clients exit normally.
+Evidence: `private/coop/village-test-db59178229354bdbb2011361cf51ca9d/`, build
+`f6304f3344c2f6d0340da41879fb00c4c7d37ada0076df301d49ae75a49f331d`.
+
+The first fresh-process village rejoin run preserves both players and completed
+scenes, but its guest misses the final descent afterward. It is not a complete
+traversal pass (`private/coop/village-test-08f40261814744a28eac815202f0d736/`).
+The test now follows the supported upper ledge farther south before crossing
+to the lower landing, avoiding a long diagonal drop that grazed its north edge.
+The repeat passes the complete Blue-leading traversal, fresh guest rejoin and
+authored transition into Pandemonium with the same public delay/jitter settings.
+It retains both Blades and completed scenes, all six scene owners/reunions, and
+matches both players' authoritative state at 63 sampled ticks. Blue finishes at
+100 Sanity and Red at 92; there are no deaths, respawns or checkpoint rollbacks.
+Both final views were inspected; both clients and the tunnel helper exit cleanly.
+The retained before/after rejoin reports also agree on Will, equipped weapon,
+school items, staff components and difficulty for both players in both clients.
+Evidence: `private/coop/village-test-49531ea8bd3f460da591f2be6a8c4465/`, on the
+same `f6304f3344c2f6d0340da41879fb00c4c7d37ada0076df301d49ae75a49f331d` build.
+The source change and harnesses also pass 734 Rust tests (one pre-existing ignored),
+19 packaging/setup checks and Python compilation. Village consumable/enemy coverage
+and the remaining 38 visits still prevent claiming full campaign support.
 
 ## Reproducing transport checks
 

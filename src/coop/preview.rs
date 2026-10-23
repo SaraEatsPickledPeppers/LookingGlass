@@ -170,7 +170,10 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         let mut restored_at = None;
         let mut pending_visit = None;
         let mut campaign = resumed.as_ref().map(|s| s.checkpoint.campaign.clone()).unwrap_or_default();
-        let mut checkpoint_pending = resumed.is_none() && launch.host && !launch.drive && !visit.combat_preview;
+        // Route tests use isolated profiles and exercise production checkpoint
+        // behavior. The older staged movement/combat fixtures still opt out.
+        let automatic_checkpoints = !launch.drive || launch.route_driver.is_some();
+        let mut checkpoint_pending = resumed.is_none() && launch.host && automatic_checkpoints && !visit.combat_preview;
         let mut checkpoint_message = resumed.as_ref().map(|s| (Instant::now(), if s.recovered_backup {
             "Recovered the previous co-op checkpoint from its backup.".to_owned()
         } else { "Co-op checkpoint restored for both players.".to_owned() }));
@@ -238,7 +241,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 arena = next_arena;
                 level_art = next_art;
                 visit = next;
-                checkpoint_pending = launch.host && !launch.drive && !visit.combat_preview;
+                checkpoint_pending = launch.host && automatic_checkpoints && !visit.combat_preview;
                 if let Some(host) = &mut host { host.loaded(visit.epoch)?; }
                 if let Some(guest) = &mut guest { guest.loaded(visit.epoch)?; }
                 display = roster.as_ref().map(|r| r.frame(visit.epoch, 0));

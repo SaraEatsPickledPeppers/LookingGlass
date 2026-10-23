@@ -48,12 +48,28 @@ The Blue-leading network repeat also passes on that build and those settings in
 `private/coop/village-test-064657842c4d466cb6e551e24be6bb98/`: both finish at 100
 Sanity, all six owners/reunions and personal Blades pass, 81 matching authoritative
 ticks agree, and both clients observe movement during ordinary speech without a warp.
-The death and disconnect requirements above still prevent marking the village row
-passed.
+Both real fall/death roles and the shared saved-checkpoint wipe now pass in a
+separate public run with the same delay/jitter. Each player spectates the moving
+survivor for exactly 1,200 ticks, revives at 25 Sanity with their Blade preserved,
+and regains their own camera. A subsequent team wipe restores the actual earlier
+automatic checkpoint's resources, placements and scene progress. Both restored
+views were inspected. Evidence:
+`private/coop/village-test-db59178229354bdbb2011361cf51ca9d/`, build
+`f6304f3344c2f6d0340da41879fb00c4c7d37ada0076df301d49ae75a49f331d`.
+The village has ambient moving machinery and a shootable hatch, but no activated
+shared passenger lift or ride (`Village::event` / `Village::advance_players`);
+the shared-transport boarding requirement is not applicable to this visit.
+Fresh-process guest rejoin followed by the authored exit now passes on the same
+build in `private/coop/village-test-49531ea8bd3f460da591f2be6a8c4465/` (Blue leads,
+40 ms delay + 20 ms jitter). Both personal Blades and completed scenes survive;
+all six owners/reunions and 63 matching authoritative player-state samples pass.
+Both enter Pandemonium alive (Blue 100 / Red 92 Sanity), without a respawn or wipe.
+Both final views were inspected and all owned processes/helpers closed. Per-visit
+consumable and enemy evidence remains open before this row can be marked passed.
 
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
-| 1 | `gvillage` | `Initial` | Partial: native and delayed public two-process traversal pass with both arrival orders; death/rejoin matrix pending |
+| 1 | `gvillage` | `Initial` | Partial: both arrival orders, deaths/spectator/respawn in both roles, saved-checkpoint wipe and fresh guest rejoin-to-exit pass; consumable/enemy evidence pending; shared boarding N/A |
 | 2 | `pandemonium` | `Initial` | Not run |
 | 3 | `fortress1` | `Initial` | Not run |
 | 4 | `fortress2` | `Initial` | Not run |
