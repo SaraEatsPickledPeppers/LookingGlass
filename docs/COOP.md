@@ -123,9 +123,9 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after native village traversal verification: **36%** (previously 35%). Credited
+Overall estimate after public two-process village traversal verification: **37%** (previously 36%). Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
-6/15 for two-player movement/presentation, paired school supports and dry/swimming arrival placement, and 7/20 for native targeting, host-owned
+7/15 for two-player movement/presentation, paired school supports, dry/swimming arrival placement and a complete delayed village traversal in separate clients, and 7/20 for native targeting, host-owned
 weapons/damage, personal resources, timed respawns and full saved-state team wipes,
 plus 8/20 for shared world replication, ordered contacts, the verified theatre
 ownership/reunion slice, school boarding barriers, visit history and restart/backup
@@ -712,16 +712,16 @@ advances once for both bodies using the common atomic carry function. The villag
 derived hidden/relocated cast is rebuilt after snapshots and checkpoint restoration,
 including on the guest; guests do not advance the story or enemy clocks.
 
-`--coop-village-check` runs the production native arena from an unarmed village
-entrance to its authored Pandemonium exit, first with Blue leading and then Red.
-Both collect their own actual Blade pickup. All six original scenes complete,
-the intended first arrival owns each triggered scene, and eight scene/dialogue
-handoffs reunite the bodies safely. Each run takes 22,512 fixed ticks, ends with
+An earlier `--coop-village-check` ran the production native arena from an unarmed
+village entrance to its authored Pandemonium exit, with each first-arrival order.
+Both collected their own actual Blade pickup and completed the six scenes. It also
+counted two voice-only lines as cinematic handoffs; the correction and current
+six-reunion results are recorded below. Those runs took 22,512 fixed ticks, ending with
 the leader at 70 Sanity and the partner at 100, and performs no deaths, checkpoint
 resets, test resource grants or test teleports. Only production scenes relocate players.
 This is a single-process, two-body traversal, not a separate-process network test
 or a passed campaign-matrix row. The full village network/death/rejoin matrix remains
-pending. The final native repeat passes with build identity
+pending. That earlier native repeat passed with build identity
 `06ad4947fcada8789a50aa239b059306b4453fbd2328cf4459ff1f041dccd5c5` in
 `private/coop/village-route-2/coop-village/`, including per-reunion captures.
 Blue's third/fifth handoffs and Red's climb handoff were visually inspected.
@@ -790,6 +790,52 @@ the input fix. The harness now walks that approach through positions recorded by
 the single-player route. Full delayed traversal is still pending. The current
 build `028486987c95dd8d2ef21a4a148622aa8e9644aeb51fa2bfb7a2ba3f7113f210`
 passes all 734 Rust tests (one ignored) in `private/coop-network-route-tests6.log`.
+
+Later public runs separated test-driver failures from game failures. Guest plans
+must time their input segments on the local clock; using received simulation ticks
+turned network jitter into uneven key holds. Comparing a just-sent segment with
+a delayed position also restarted valid plans and duplicated movement. The driver
+now waits for its guest sequence to finish and the body to settle before replanning.
+The host still checks each segment against its directly observed simulation.
+These changes apply only to the explicitly enabled route driver.
+
+The fifth public Red-leading run reached Pandemonium with both players at 100 Sanity,
+but failed final verification: scene labels were sampled before the host step while
+ownership and bodies were recorded after it. A completed scene could therefore appear
+with no owner. Diagnostics now observe all those fields after simulation, record
+their frame identity, and the harness asserts that identity matches. The earlier
+failed runs remain evidence of development findings, not successful full tests.
+The updated build passes 734 Rust tests (one ignored) in
+`private/coop-network-route-tests8.log`.
+
+The sixth public run verified consistent diagnostic clocks and correct owners for
+the first five scenes, then missed the late climb. Its single long input plan kept
+steering after the first missed landing. The harness now follows separate goals at
+the actual intermediate landings before continuing the climb, with the same public
+transport and delay/jitter settings. The failed run is retained in
+`private/coop/village-test-a1044142d0b04cdeb70771de3b6ebe64/`.
+The seventh run cleared those landings with both players and recorded all six
+correct scene owners, then missed the final descent. The harness now also walks
+the supported approach to that drop before planning the landing. Evidence:
+`private/coop/village-test-e5eb38fdf0b24efb869e3c71abd6936a/`.
+
+The public Red-leading repeat now passes the full traversal with 40 ms injected
+delay and 20 ms jitter per sender. Both independent clients reach Pandemonium at
+100 Sanity. Each observes all six correctly owned scenes and six reunions, both
+actual personal Blade pickups and 50 moving-speech sample pairs without a voice-only
+warp. All 84 matching authoritative ticks agree. Final captures from both clients
+were visually inspected; both processes exit cleanly and the tunnel helper stops.
+Evidence: `private/coop/village-test-eb20704fbc3547b1ab7bf766699c54a8/`, build
+`5cae1ad45d01ad0b9a6f04a8f9a209c9bbff3ff804697cde94dbb3fefe2f5114`, reproduced by
+`tools/test_coop_village.py --first red --delay-ms 40 --jitter-ms 20 --data <base-folder>`.
+The Blue-leading repeat passes on the same build and network settings in
+`private/coop/village-test-064657842c4d466cb6e551e24be6bb98/`: both players finish
+at 100 Sanity, all six scene owners/reunions and personal Blades pass, 81 matching
+authoritative ticks agree, and ordinary speech includes 49 host/51 guest moving
+sample pairs without a warp. Both processes and the helper exit cleanly. Thus both
+network arrival orders are verified. The village death/rejoin matrix remains
+unfinished; these results do not mark the campaign row complete. The 19 synthetic
+packaging/setup checks also pass.
 
 Run the native check in Anode (it needs a graphics context), with an isolated profile:
 

@@ -535,12 +535,13 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                     ui.toast(&message, screen_height() * 0.4);
                 }
                 if report_at.elapsed() >= Duration::from_millis(200) {
+                    if let Some(driver) = &mut route_driver { driver.observe(frame, &arena, &scene.world); }
                     let path = crate::preferences::path("coop-live.json");
                     if let Some(parent) = path.parent() { let _ = std::fs::create_dir_all(parent); }
                     // Diagnostics are optional. A reader/virus scanner can
                     // briefly hold this file on Windows; never end gameplay.
                     if let Ok(bytes) = serde_json::to_vec(&serde_json::json!({ "role": if launch.host { "host" } else { "guest" },
-                        "pid": std::process::id(), "playing": playing, "frame": frame, "focused": focused,
+                        "pid": std::process::id(), "build": env!("LOOKING_GLASS_BUILD"), "playing": playing, "frame": frame, "focused": focused,
                         "camera_player": watched, "camera": camera_eye, "camera_target": target,
                         "camera_subject_feet": camera_subject_feet,
                         "combat": arena.snapshot(), "visit": visit, "completed_visits": if launch.host { Some(campaign.completed()) } else { None },

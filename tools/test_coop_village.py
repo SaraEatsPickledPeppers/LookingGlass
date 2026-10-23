@@ -27,6 +27,8 @@ class Pair:
         self.capture_commands = {}
         self.serial = 0
         self.heartbeat = 0
+        self.build = None
+        self.evidence = {}
         self.deadline = time.monotonic() + 1500
         for role in self.history:
             (self.folder / role).mkdir()
@@ -72,6 +74,10 @@ class Pair:
             frame, stage = report['frame'], report['combat']['stage']
             driver = report['route_driver']
             assert driver and not driver['error'], f'{role} driver failed: {driver}'
+            assert (driver['observed_epoch'], driver['observed_tick']) == (frame['epoch'], frame['tick']), 'Driver observed a different frame'
+            if self.build is None:
+                self.build = report['build']
+            assert self.build == report['build'], 'Client build identities differ'
             assert all(b['stats']['sanity'] > 0 for b in frame['players']), f'{role}: player died'
             assert frame['checkpoint_generation'] == 0, 'Unexpected team wipe during clean traversal'
             if stage['owner'] is None:
@@ -163,8 +169,19 @@ class Pair:
         self.wait(6)
         for goal in [(-4784,4784,-120),(-4512,4800,-96),(-4288,4808,-136),(-3984,4712,-176),(-3972,4332,-160),(-3960,4056,-224),(-3968,3840,-272),(-3776,3832,-208),(-3544,3856,-136)]: self.go(goal)
         self.wait(15)
-        for goal in [(-3208,4040,-56),(-2800,3872,-96),(-2808,3520,-96),(-2744,3304,-96),(-2936,3024,128)]: self.go(goal, True)
+        for goal in [(-3208,4040,-56),(-2800,3872,-96),(-2808,3520,-96)]: self.go(goal, True)
+        # Confirm each real landing before the next jump. A single open-loop
+        # plan for the whole climb can keep steering over a drop after network
+        # timing makes its first jump miss the small intermediate ledge.
+        self.go((-2744,3324,-104))
+        self.go((-2628,3220,16), True)
+        self.go((-2680,3028,68), True)
+        self.go((-2936,3024,128))
         self.wait(8)
+        # Walk the supported approach before committing to the final drop. These
+        # points follow the planner's recorded ground path; a long running plan
+        # magnifies a late first turn into a missed landing several steps later.
+        for goal in [(-2960,2998,138),(-2976,2940,164),(-2976,2876,184),(-2996,2840,184)]: self.go(goal)
         self.go((-3112,2584,40), True)
         self.go((-3312,2440,48))
         self.until(self.arrived, 120)
@@ -177,6 +194,7 @@ class Pair:
             self.until(lambda: self.processes[role].poll() is not None, 30)
             assert self.processes[role].returncode == 0
         (self.folder / 'result.json').write_text(json.dumps({'passed': True, 'internet': not self.args.local,
+            'build': self.build, 'evidence': self.evidence,
             'first': self.args.first, 'delay_ms': self.args.delay_ms, 'jitter_ms': self.args.jitter_ms,
             'scope': 'full village traversal in separate clients; death/rejoin matrix remains separate'}, indent=2))
         print('PASS two-process village: six scenes, personal Blade pickups, clean traversal and authored network transition.', flush=True)
@@ -213,6 +231,7 @@ class Pair:
             assert any(r['map'] == 'pandemonium' and r['epoch'] == 2 for r in rows)
             assert any(r['epoch'] == 1 and all(r['driver']['blade_pickups']) for r in rows), f'{role} missed an actual personal Blade pickup'
             assert all(b['spawned_at'] == 0 for r in rows for b in r['players']), 'Traversal silently respawned a player'
+            self.evidence[role] = {'scenes': len(owners), 'reunions': len(reunions), 'moving_speech_samples': moving_speech}
         host = {(r['epoch'],r['tick']): r for r in self.history['host']}
         compared = 0
         for guest in self.history['guest']:
@@ -221,6 +240,7 @@ class Pair:
                 assert other['players'] == guest['players'] and other['owner'] == guest['owner'], 'Authoritative client states disagree'
                 compared += 1
         assert compared >= 5, f'Only {compared} comparable network frames were observed'
+        self.evidence['matching_authoritative_ticks'] = compared
         print('Compared', compared, 'matching authoritative ticks.', flush=True)
 
     def close(self):

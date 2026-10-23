@@ -36,12 +36,24 @@ continued movement during ordinary speech and no deaths/wipes. Evidence:
 `0eb413f6731105a82780dc10d716c793fc04b3d7c3931d11391cbf6e9de9c2ee`.
 The former eight-reunion result also treated two voice-only lines as cutscenes;
 that behavior has been corrected to match single-player exploration.
-This is a single-process simulation. The separate-process network, death and
-disconnect requirements above still prevent marking the village row passed.
+That result is a single-process simulation. A subsequent public two-process
+Red-leading traversal also passes with 40 ms delay and 20 ms jitter per sender:
+six correctly owned scenes/reunions, both personal Blades, 50 moving-speech sample
+pairs in each client, 84 identical matching authoritative ticks, and both players
+entering Pandemonium at 100 Sanity. Both final views were inspected and the clients
+and helper exited cleanly. Evidence:
+`private/coop/village-test-eb20704fbc3547b1ab7bf766699c54a8/`, build
+`5cae1ad45d01ad0b9a6f04a8f9a209c9bbff3ff804697cde94dbb3fefe2f5114`.
+The Blue-leading network repeat also passes on that build and those settings in
+`private/coop/village-test-064657842c4d466cb6e551e24be6bb98/`: both finish at 100
+Sanity, all six owners/reunions and personal Blades pass, 81 matching authoritative
+ticks agree, and both clients observe movement during ordinary speech without a warp.
+The death and disconnect requirements above still prevent marking the village row
+passed.
 
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
-| 1 | `gvillage` | `Initial` | Partial: native two-body traversal with both first-arrival orders; full network/death matrix pending |
+| 1 | `gvillage` | `Initial` | Partial: native and delayed public two-process traversal pass with both arrival orders; death/rejoin matrix pending |
 | 2 | `pandemonium` | `Initial` | Not run |
 | 3 | `fortress1` | `Initial` | Not run |
 | 4 | `fortress2` | `Initial` | Not run |

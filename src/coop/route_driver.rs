@@ -37,6 +37,8 @@ pub struct Report {
     pub captured: Option<u64>,
     pub replans: usize,
     pub error: Option<String>,
+    pub observed_epoch: u64,
+    pub observed_tick: u64,
     pub scene: Option<String>,
     pub speech: bool,
     pub clear: [bool; 2],
@@ -62,6 +64,7 @@ pub struct Driver {
     worker: Option<Worker>,
     plan: VecDeque<(Controls, Vec3)>,
     step_tick: u64,
+    step_at: Instant,
     jumped: bool,
     location: Option<(u64, u64, u64)>,
     pub report: Report,
@@ -70,7 +73,7 @@ impl Driver {
     pub fn new(path: PathBuf) -> Self {
         let now = Instant::now();
         Self { path, command: None, modified: None, polled: now, refreshed: now, used: now,
-            worker: None, plan: VecDeque::new(), step_tick: 0, jumped: false,
+            worker: None, plan: VecDeque::new(), step_tick: 0, step_at: now, jumped: false,
             location: None, report: Report::default() }
     }
     pub fn poll(&mut self, now: Instant) {
@@ -103,18 +106,25 @@ impl Driver {
         keys.wish = Vec2::ZERO; keys.swim = Vec3::ZERO; keys.rise = 0.;
         keys.run = false; keys.primary = false; keys.alternate = false; keys.weapon = None;
     }
-    pub fn sample(&mut self, frame: &Frame, arena: &Arena, world: &World, local: PlayerId, keys: &mut Input, now: Instant) {
-        Self::neutral(keys);
-        self.report.reached = false;
-        self.report.expected = self.plan.front().map(|(_, at)| *at);
-        self.report.plan_remaining = self.plan.len();
-        self.report.jumps = keys.jumps;
+    // Observe after simulation, alongside the frame being written. Input sampling
+    // happens before a host step and can otherwise label a finished scene with
+    // its previous name but the new (empty) owner.
+    pub fn observe(&mut self, frame: &Frame, arena: &Arena, world: &World) {
+        self.report.observed_epoch = frame.epoch;
+        self.report.observed_tick = frame.tick;
         self.report.clear = frame.players.each_ref().map(|b| !b.stats.alive() || world.body_clear(b.player.feet));
         self.report.blade_pickups = frame.players.each_ref().map(|b| b.stats.copies(0) > 0
             && arena.pickups.iter().any(|p| matches!(p.kind, crate::inventory::PickupKind::Weapon(0))
                 && b.stats.collected.contains(&p.id)));
         self.report.scene = arena.stage.interactions.village.as_ref().and_then(|v|v.cinema.scene_id()).map(str::to_owned);
         self.report.speech = arena.stage.story.busy() && !arena.stage.busy();
+    }
+    pub fn sample(&mut self, frame: &Frame, arena: &Arena, world: &World, local: PlayerId, keys: &mut Input, now: Instant) {
+        Self::neutral(keys);
+        self.report.reached = false;
+        self.report.expected = self.plan.front().map(|(_, at)| *at);
+        self.report.plan_remaining = self.plan.len();
+        self.report.jumps = keys.jumps;
         self.report.phase = "idle";
         let body = &frame.players[local.index()];
         let location = (frame.epoch, body.warped_at, body.spawned_at);
@@ -140,7 +150,7 @@ impl Driver {
                             if let Ok(bytes) = serde_json::to_vec(&trace) {
                                 let _ = std::fs::write(crate::preferences::path(&format!("route-plan-{}-{}.json",worker.id,self.report.replans)),bytes);
                             }
-                            self.plan = plan.into(); self.step_tick = frame.tick; self.jumped = false;
+                            self.plan = plan.into(); self.step_tick = frame.tick; self.step_at = now; self.jumped = false;
                         }
                         Err(0) => self.report.error = Some("Route planning worker ended without a result".into()),
                         Err(states) => self.report.error = Some(format!("No route after {states} physics states from {:?}", worker.start)),
@@ -181,14 +191,20 @@ impl Driver {
         if self.report.reached { self.report.phase="reached"; self.plan.clear(); return; }
         if command.navigate {
             self.report.phase="navigating";
-            // Measure segments on the observed simulation clock: asset/render
-            // stalls must not consume an entire sequence without simulating it.
-            while !self.plan.is_empty() && frame.tick.saturating_sub(self.step_tick) >= 24 {
+            // A host observes its own simulation clock directly. A guest sends
+            // 200 ms input segments on its local clock; timing them from received
+            // snapshots would turn delivery jitter into uneven key-hold lengths.
+            while !self.plan.is_empty() && if local == PlayerId::Blue {
+                frame.tick.saturating_sub(self.step_tick) >= 24
+            } else { now.duration_since(self.step_at) >= Duration::from_millis(200) } {
                 let (_, expected) = self.plan.pop_front().unwrap();
-                self.step_tick += 24; self.jumped=false;
-                // Allow for the sampled network view; abandon a missed landing
-                // instead of blindly taking the next jump from the wrong place.
-                if body.player.grounded && body.player.feet.distance(expected) > 24. {
+                self.step_tick += 24; self.step_at += Duration::from_millis(200); self.jumped=false;
+                // The host can check a landing immediately. Guest snapshots
+                // still show the position before its in-flight inputs: comparing
+                // them here restarts a valid plan and duplicates its first move.
+                // A guest waits for the full sequence and a settled body before
+                // planning again from the resulting authoritative position.
+                if local == PlayerId::Blue && body.player.grounded && body.player.feet.distance(expected) > 24. {
                     self.plan.clear();
                 }
             }
