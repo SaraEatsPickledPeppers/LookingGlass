@@ -197,6 +197,10 @@ impl Write for HandshakeStream {
 }
 
 fn handshake(stream: TcpStream, invite: &Invite) -> Result<WebSocket<HandshakeStream>> {
+    // Windows accepts inherit the listener's nonblocking mode. The bounded
+    // upgrade below is synchronous: otherwise a perfectly valid guest whose
+    // first HTTP bytes arrive later is mistaken for a failed handshake.
+    stream.set_nonblocking(false)?;
     stream.set_nodelay(true)?;
     stream.set_read_timeout(Some(Duration::from_secs(2)))?;
     stream.set_write_timeout(Some(Duration::from_secs(2)))?;
@@ -533,6 +537,31 @@ fn exchange<S: Read + Write>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn accepted_nonblocking_socket_waits_for_delayed_upgrade_bytes() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let invite = Invite::new(&format!("http://{address}")).unwrap();
+        let server_invite = invite.clone();
+        let (accepted, ready) = mpsc::channel();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            // Reproduce Windows inheritance on every test platform.
+            stream.set_nonblocking(true).unwrap();
+            accepted.send(()).unwrap();
+            handshake(stream, &server_invite).map(|_| ())
+        });
+        let stream = TcpStream::connect(address).unwrap();
+        stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+        ready.recv_timeout(Duration::from_secs(3)).unwrap();
+        thread::sleep(Duration::from_millis(100));
+        let mut request = invite.websocket_url().into_client_request().unwrap();
+        request.headers_mut().insert(header::AUTHORIZATION, invite.authorization().parse().unwrap());
+        request.headers_mut().insert(header::SEC_WEBSOCKET_PROTOCOL, PROTOCOL.parse().unwrap());
+        let result = tungstenite::client(request, stream);
+        server.join().unwrap().unwrap();
+        assert_eq!(result.unwrap().1.status(), StatusCode::SWITCHING_PROTOCOLS);
+    }
     #[track_caller]
     fn wait_for(mut done: impl FnMut() -> bool) {
         let started = Instant::now();
