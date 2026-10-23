@@ -157,6 +157,9 @@ fn main() {
 }
 
 fn run() -> Result<()> {
+    if let Some(result) = coop::check::cli(&std::env::args().skip(1).collect::<Vec<_>>()) {
+        return result;
+    }
     let mut o = Options {
         difficulty: Default::default(),
         save_dir: PathBuf::from("private/saves"),
@@ -199,6 +202,11 @@ fn run() -> Result<()> {
             }
             "--save-dir" => {
                 o.save_dir = args.next().context("--save-dir requires a folder")?.into()
+            }
+            "--profile" => {
+                let profile = PathBuf::from(args.next().context("--profile requires a folder")?);
+                o.save_dir = profile.join("saves");
+                std::env::set_var("LOOKING_GLASS_SETTINGS_DIR", profile);
             }
             "--load" => {
                 o.load = Some(save::Slot::parse(

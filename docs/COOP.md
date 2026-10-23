@@ -50,7 +50,7 @@ limit connection/message sizes, verify compatible builds/data, and clean up owne
 processes when hosting ends. Invite tokens are session secrets and must not be committed
 or printed in public logs. Input must time out to neutral after a disconnect.
 
-The internet transport is being evaluated. Cloudflare Quick Tunnels support temporary
+The development internet transport uses Cloudflare Quick Tunnels, which support temporary
 public URLs without an account, but are explicitly a development service with no uptime
 guarantee; this cannot be silently treated as a production service commitment.
 See [Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
@@ -82,4 +82,40 @@ and exercise slow readers rather than assuming loopback performance represents t
   not yet connected to the viewer or enemy controllers. All six initial policy
   scenarios pass: countdown, simultaneous death, saved/cinematic countdown,
   visible targeting, scene ownership/reunion and the boarding barrier.
-- Host/Join, the two-process launcher and full-campaign integration are not yet implemented.
+- Authenticated, bounded WebSocket transport runs on background threads, with TLS
+  on public invites, one guest slot, reconnect generations and delay/jitter injection.
+  Slow readers disconnect without growing an unbounded queue. Invite secrets stay
+  in link fragments and authorization headers, never normal logs or command lines.
+- `--profile <folder>` isolates settings and saves. The two-process network probe
+  uses the same profile resolution, transport and public tunnel as the future UI.
+- On 2026-10-23, the current transport passed 681 Rust tests (one unrelated ignored
+  test), a two-process loopback run at 60 ms delay + 30 ms jitter per sender, and
+  a two-process public internet run at 40 ms + 20 ms per sender. Both exchanged
+  16 ordered messages, verified independent profiles/PIDs and observed clean guest
+  shutdown. The internet guest joined immediately after invite publication.
+- New tunnel hostnames initially failed DNS resolution when published too early.
+  Hosting now waits for tunnel registration and a 12-second propagation grace.
+  This passed repeated public tests; it is not a universal DNS availability guarantee.
+- Main/ESC Host/Join, shared gameplay and full-campaign integration remain unfinished.
+  Current probes verify networking, not two playable Alices. Overall estimate: 10%.
+
+## Reproducing transport checks
+
+Build with `cargo build --locked`, then run:
+
+```text
+python tools/test_coop_network.py --delay-ms 60 --jitter-ms 30
+python tools/test_coop_network.py --internet --delay-ms 40 --jitter-ms 20
+```
+
+The internet check downloads the official Windows x64 cloudflared 2026.10.2 helper
+if absent, verifies its size (55,329,336 bytes) and SHA-256 before execution:
+`12c7c887f8aaab779aef1dfa9b60673530a5adb88ecc55dd6df8f56e0b70f199`.
+It creates only an owned temporary tunnel to the loopback co-op listener and stops
+that helper at the end. It does not install a service or change firewall/router
+settings. Each run writes private diagnostic evidence under `private/coop/` and
+removes its invite file. These checks need no original game assets.
+
+Quick Tunnels are for development/testing, not an uptime promise. A released build
+needs a separately reviewed service choice and updated third-party notices for the
+network dependencies/helper. No co-op release has been created.
