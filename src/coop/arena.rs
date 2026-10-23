@@ -87,6 +87,7 @@ impl Arena {
         for (c, state) in self.characters.iter_mut().zip(&s.characters) {
             c.restore(state)?;
         }
+        self.sync_cast();
         Ok(())
     }
     /// Load into a newly constructed arena before exposing any restored state.
@@ -99,6 +100,7 @@ impl Arena {
             character.restore(saved)?;
         }
         self.alive = [true; 2];
+        self.sync_cast();
         self.remember_checkpoint();
         Ok(())
     }
@@ -112,6 +114,7 @@ impl Arena {
         self.stage.restore(&state.stage, map, world)?;
         self.npcs.restore(&state.npcs)?;
         self.stage.reentered();
+        self.sync_cast();
         self.initial = self.npcs.snapshot();
         Ok(())
     }
@@ -123,7 +126,18 @@ impl Arena {
         mut inputs: [(Controls, Input); 2],
     ) -> Result<()> {
         if self.stage.busy() {
+            for character in &mut self.characters {
+                character.cancel_weapon_action();
+                character.dismiss_summon();
+            }
             self.stage.scene_step(roster, map, world, &inputs)?;
+            self.stage.interactions.activate_enemies();
+            self.story_cast(roster, world);
+            return self.finish(roster, map, world, true);
+        }
+        self.stage.conversations(roster, world, &mut inputs, &mut self.npcs);
+        if self.stage.busy() {
+            roster.tick += 1;
             return self.finish(roster, map, world, true);
         }
         let world_dt = roster.players.iter().fold(FIXED_DT, |dt, b| b.stats.powers.world_dt(dt));
@@ -143,7 +157,17 @@ impl Arena {
         roster.move_players(world, inputs);
         self.stage.contacts(roster, world, feet)?;
         if self.stage.busy() { return self.finish(roster, map, world, true); }
-        let before = self.npcs.loot_sources();
+        for (index, body) in roster.players.iter_mut().enumerate() {
+            if body.stats.alive() {
+                if let Some(weapon) = inputs[index].1.weapon { body.stats.select(weapon as usize); }
+                inventory::collect(&mut body.stats, &self.pickups, body.player.feet, world);
+            }
+        }
+        self.stage.village_pickup(roster, world);
+        if self.stage.busy() { return self.finish(roster, map, world, true); }
+        self.stage.interactions.activate_enemies();
+        let mut before = self.npcs.loot_sources();
+        before.extend(self.stage.interactions.loot_sources());
         // One clock for the world. Either player's Watch can stop its enemies;
         // each player's own movement, weapon and resource clocks still run.
         let world_dt = roster
@@ -153,15 +177,12 @@ impl Arena {
         for index in 0..2 {
             let character = &mut self.characters[index];
             let body = &mut roster.players[index];
-            if body.stats.alive() {
-                if let Some(weapon) = inputs[index].1.weapon {
-                    body.stats.select(weapon as usize);
-                }
-                inventory::collect(&mut body.stats, &self.pickups, body.player.feet, world);
-            } else {
+            if !body.stats.alive() {
                 character.die();
             }
             let mut targets = self.npcs.targets();
+            if let Some(encounters) = &self.stage.interactions.encounters { targets.extend(encounters.targets()); }
+            targets.extend(self.stage.interactions.shot_targets());
             targets.extend(character.ice_targets());
             if let Some(summon) = character.summon_target() {
                 targets.push(summon);
@@ -200,29 +221,36 @@ impl Arena {
                     continue;
                 }
                 if hit.id == crate::dice::ALICE {
-                    body.stats.damage(hit.damage);
-                    body.player.knockback(hit.knockback * 2.5);
+                    roster.players[index].stats.damage(hit.damage);
+                    roster.players[index].player.knockback(hit.knockback * 2.5);
                 } else if hit.id == crate::dice::SUMMON {
                     character.hit_summon(hit);
                 } else {
                     if hit.kind.is_demon() {
                         hit.kind = hit.kind.means();
                     } else {
-                        hit.damage = body.stats.attack_damage(hit.damage);
+                        hit.damage = roster.players[index].stats.attack_damage(hit.damage);
                     }
                     self.npcs.hit(hit);
+                    if let Some(encounters) = &mut self.stage.interactions.encounters { encounters.hit(hit); }
+                    let events = self.stage.interactions.shoot(hit);
+                    self.stage.accept(events, PlayerId::ALL[index], roster, world);
                 }
             }
             // These transient queues are consumed even when sound is disabled.
             character.take_audio();
             character.take_world_audio();
+            if self.stage.busy() { return self.finish(roster, map, world, true); }
         }
         let targets = roster.players.each_ref().map(|body| combat::PlayerTarget {
             eye: body.player.eye(),
             alive: body.stats.alive(),
             hidden: body.stats.ignores_alice(),
         });
-        let feedback = self.npcs.update_players(world_dt, world, targets);
+        let mut feedback = self.npcs.update_players(world_dt, world, targets);
+        if let Some(encounters) = &mut self.stage.interactions.encounters {
+            feedback.append(encounters.update_players(world_dt, world, targets));
+        }
         for (body, hit) in roster.players.iter_mut().zip(feedback.players) {
             body.stats.damage(hit.damage);
             body.player.knockback(hit.impulse);
@@ -230,7 +258,8 @@ impl Arena {
                 body.stats.spend_will(hit.will_drain.min(body.stats.will()));
             }
         }
-        let after = self.npcs.loot_sources();
+        let mut after = self.npcs.loot_sources();
+        after.extend(self.stage.interactions.loot_sources());
         for body in &mut roster.players {
             crate::loot::tick(
                 &mut body.stats,
@@ -242,7 +271,19 @@ impl Arena {
                 world,
             );
         }
+        self.story_cast(roster, world);
         self.finish(roster, map, world, false)
+    }
+    fn story_cast(&mut self, roster: &Roster, world: &World) {
+        let owner = self.stage.owner.unwrap_or(PlayerId::Blue);
+        self.npcs.story_pose(&self.stage.story, FIXED_DT, world, roster.players[owner.index()].player.eye());
+    }
+    // The hidden cast is derived presentation, not a saved NPC field. Rebuild
+    // it on guests and after a wipe as well as during host simulation.
+    fn sync_cast(&mut self) {
+        if let Some(village) = &self.stage.interactions.village {
+            village.cinema.apply_npcs(&mut self.npcs);
+        }
     }
     fn finish(&mut self, roster: &mut Roster, map: &Bsp, world: &mut World, cinematic: bool) -> Result<()> {
         let generation = roster.checkpoint_generation;
@@ -278,6 +319,7 @@ impl Arena {
                 self.alive[index] = alive;
             }
         }
+        self.sync_cast();
         Ok(())
     }
 }

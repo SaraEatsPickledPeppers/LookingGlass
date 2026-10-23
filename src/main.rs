@@ -421,6 +421,7 @@ fn run() -> Result<()> {
             "--world-check" => mode = "world",
             "--coop-world-check" => mode = "coop-world",
             "--coop-campaign-check" => mode = "coop-campaign",
+            "--coop-village-check" => mode = "coop-village",
             "--school-check" => mode = "school",
             "--footing-check" => mode = "footing",
             "--shelf-preview" => o.shelf_preview = true,
@@ -630,6 +631,7 @@ fn run() -> Result<()> {
     if mode == "coop-world" {
         interaction::coop::check(&mut assets)?;
         school::coop_check::check(&mut assets)?;
+        village::check_coop(&mut assets)?;
         return coop::stage::check(&mut assets);
     }
     if mode == "coop-campaign" { return coop::campaign::check(&mut assets); }
@@ -1227,6 +1229,15 @@ fn run() -> Result<()> {
         macroquad::Window::from_config(viewer::config(), async move {
             if let Err(e) = fortress::check::render_check(&mut assets).await {
                 eprintln!("Fortress cinema render failed: {e:#}");
+                std::process::exit(1);
+            }
+        });
+        return Ok(());
+    }
+    if mode == "coop-village" {
+        macroquad::Window::from_config(viewer::config(), async move {
+            if let Err(e) = coop::village_check::check(&mut assets).await {
+                eprintln!("Co-op village route failed: {e:#}");
                 std::process::exit(1);
             }
         });

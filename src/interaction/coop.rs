@@ -120,7 +120,7 @@ impl Interactions {
             .and_then(|s| s.boarding_ready(thread, feet))
     }
 
-    /// The school adapter advances shared machinery once and carries all living
+    /// The reviewed adapters advance shared machinery once and carry all living
     /// bodies atomically. Other controllers require their own explicit adapters.
     pub fn movers_pair(
         &mut self,
@@ -129,6 +129,11 @@ impl Interactions {
         world: &mut World,
         players: &mut [&mut Player],
     ) -> Result<()> {
+        if let Some(village) = &mut self.village {
+            let fixed = self.doors.iter().filter(|d| d.enabled && self.event_world.enabled(d.id))
+                .map(|d| d.collider.clone()).collect::<Vec<_>>();
+            village.advance_players(dt, map, world, players, &fixed)?;
+        }
         if let Some(school) = &mut self.school {
             let fixed = self
                 .doors

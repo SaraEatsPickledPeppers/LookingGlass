@@ -123,14 +123,15 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after persistent shared-checkpoint verification: **35%** (previously 32%). Credited
+Overall estimate after native village traversal verification: **36%** (previously 35%). Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
 6/15 for two-player movement/presentation, paired school supports and dry/swimming arrival placement, and 7/20 for native targeting, host-owned
 weapons/damage, personal resources, timed respawns and full saved-state team wipes,
-plus 7/20 for shared world replication, ordered contacts, the verified theatre
+plus 8/20 for shared world replication, ordered contacts, the verified theatre
 ownership/reunion slice, school boarding barriers, visit history and restart/backup
-restoration of shared checkpoints. Full-campaign verification remains at zero. Standalone
-policy tests receive no campaign credit; every campaign-matrix row remains Not run.
+restoration of shared checkpoints, and native traversal of all six village scenes
+with either player arriving first. Full-campaign verification remains at zero. Standalone
+policy tests receive no campaign credit; no campaign-matrix row has passed its full requirements.
 
 The native enemy combat foundation now supplies two live targets to each enemy
 and keeps damage, knockback and Will drain separate for Blue and Red. Closest
@@ -696,10 +697,65 @@ cameras. Evidence is `play-test-98a3ab7d87454f7bb2cba07530c75ec1`. All owned gam
 processes and the tunnel helper were gone after these checks. Source packaging
 tests (7), portable setup tests (6) and Windows setup tests (6) passed as well.
 
-Still missing from this slice: two-demon targeting, co-op audio, scripted enemy/world
-controllers, moving supports beyond the school adapter, cutscenes beyond the verified fixture, full campaign progression and checkpoint validation,
+Still missing from this slice: two-demon targeting, co-op audio, remaining scripted enemy/world
+controllers, moving supports beyond the school/village adapters, remaining cutscenes, full campaign progression and checkpoint validation,
 prediction/latency tuning and campaign validation. Do not use the movement or staged
 combat test as evidence of completing any campaign visit.
+
+## Village integration and traversal
+
+The host now advances trigger-owned encounters with the same two-player target
+roster as placed NPCs. Their activation, damage, defeat and personal loot join the
+shared simulation. Explicit conversations, the actual hallway Blade pickup scene
+and shootable world switches enter the same scene-ownership path. Village machinery
+advances once for both bodies using the common atomic carry function. The village's
+derived hidden/relocated cast is rebuilt after snapshots and checkpoint restoration,
+including on the guest; guests do not advance the story or enemy clocks.
+
+`--coop-village-check` runs the production native arena from an unarmed village
+entrance to its authored Pandemonium exit, first with Blue leading and then Red.
+Both collect their own actual Blade pickup. All six original scenes complete,
+the intended first arrival owns each triggered scene, and eight scene/dialogue
+handoffs reunite the bodies safely. Each run takes 22,512 fixed ticks, ends with
+the leader at 70 Sanity and the partner at 100, and performs no deaths, checkpoint
+resets, test resource grants or test teleports. Only production scenes relocate players.
+This is a single-process, two-body traversal, not a separate-process network test
+or a passed campaign-matrix row. The full village network/death/rejoin matrix remains
+pending. The final native repeat passes with build identity
+`06ad4947fcada8789a50aa239b059306b4453fbd2328cf4459ff1f041dccd5c5` in
+`private/coop/village-route-2/coop-village/`, including per-reunion captures.
+Blue's third/fifth handoffs and Red's climb handoff were visually inspected.
+The initial run remains in `private/coop/village-route-1/coop-village/`.
+All 734 Rust tests pass, with one pre-existing ignored test
+(`private/coop-village-tests3.log`).
+
+The same build also passes the public two-process checkpoint regression with
+40 ms delay and 20 ms jitter per sender: travel/rejoin, exact restart/team-wipe
+restoration and corrupt-primary backup recovery. Both final views were inspected;
+all clients/helpers exited. Evidence:
+`private/coop/travel-test-2e029f8371424a16884acb1619a3bbd0/` and
+`private/coop-village-checkpoint.log`. This fixture still uses staged school travel,
+not a networked village playthrough.
+
+The new `--coop-world-check` village fixture compares 960 shared machinery ticks
+against single-player poses and verifies paused clocks and serialized continuation.
+It stages both bodies at a clear entrance; it does not claim riding every mechanism.
+The original roof/sawmill rider probes found no clear standing positions inside the
+map's collision boundaries and are retained in `private/coop-village-world1.log`
+through `world3.log`, not counted as successful ride tests. Atomic rider and blocker
+behavior remains covered by `moving::tests` and the authored school lift fixtures.
+The corrected world fixture passes in `private/coop-village-world4.log`.
+
+The single-player village route remains exactly 17,790 ticks, six jumps, two throws,
+zero combat damage and 100 Sanity, matching the frozen pre-change executable. The
+single-player machinery and six-scene cinematic checks also pass. Evidence:
+`private/coop-village-before-*.log` and `private/coop-village-after-*.log`.
+
+Run the native check in Anode (it needs a graphics context), with an isolated profile:
+
+```text
+looking-glass.exe --data <base-folder> --coop-village-check --no-audio --profile private/coop/village-route
+```
 
 ## Reproducing transport checks
 

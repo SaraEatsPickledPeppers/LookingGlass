@@ -26,11 +26,19 @@ Persistence-only evidence: the public two-process fixture
 `private/coop/travel-test-0abfe07a7db0413db758682defa42cd9/` passes travel/rejoin,
 save/close/restart, exact shared checkpoint/team-wipe restoration and backup
 recovery with distinct player resources. It uses staged school transitions;
-quest-gated exits and complete level traversal remain unverified.
+school quest-gated exits and complete level traversal remain unverified by that fixture.
+
+Village partial traversal: `--coop-village-check` now reaches the authored exit
+from the unarmed entrance with both native bodies and both first-arrival orders.
+It verifies both real Blade pickups, all six scenes, eight safe reunions and no
+deaths/wipes. Evidence: `private/coop/village-route-2/coop-village/`, build
+`06ad4947fcada8789a50aa239b059306b4453fbd2328cf4459ff1f041dccd5c5`.
+This is a single-process simulation. The separate-process network, death and
+disconnect requirements above still prevent marking the village row passed.
 
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
-| 1 | `gvillage` | `Initial` | Not run |
+| 1 | `gvillage` | `Initial` | Partial: native two-body traversal with both first-arrival orders; full network/death matrix pending |
 | 2 | `pandemonium` | `Initial` | Not run |
 | 3 | `fortress1` | `Initial` | Not run |
 | 4 | `fortress2` | `Initial` | Not run |

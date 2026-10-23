@@ -147,7 +147,7 @@ impl Stage {
         self.contacts.reset_player(id);
     }
 
-    fn accept(&mut self, events: Events, id: PlayerId, roster: &mut Roster, world: &World) {
+    pub fn accept(&mut self, events: Events, id: PlayerId, roster: &mut Roster, world: &World) {
         apply(
             &events,
             id,
@@ -161,6 +161,33 @@ impl Stage {
         if self.owner.is_none() && (self.interactions.scripted() || self.story.busy()) {
             self.owner = Some(id);
             self.last_owner = id;
+        }
+    }
+    pub fn conversations(&mut self, roster: &mut Roster, world: &World,
+        inputs: &mut [(Controls, Input); 2], npcs: &mut crate::npc::Npcs) {
+        for id in PlayerId::ALL {
+            if self.busy() { break; }
+            let body = &roster.players[id.index()];
+            let input = &mut inputs[id.index()];
+            if !body.stats.alive() || !input.0.use_pressed || body.player.rope_prompt(world).is_some() { continue; }
+            let Some(talk) = self.interactions.conversation(world, body.player.eye(),
+                direction(input.1.yaw, input.1.pitch), npcs, &self.story) else { continue; };
+            if let Some(events) = self.interactions.start_conversation(talk, &mut self.story) {
+                input.0.use_pressed = false;
+                npcs.begin_talk(talk.actor());
+                self.accept(events, id, roster, world);
+            }
+        }
+    }
+    pub fn village_pickup(&mut self, roster: &mut Roster, world: &World) {
+        for id in PlayerId::ALL {
+            if self.busy() { break; }
+            let body = &roster.players[id.index()];
+            if !body.stats.alive() { continue; }
+            if let Some(village) = &mut self.interactions.village {
+                village.cinema.sync_pickups(&body.stats, &mut self.story);
+                self.accept(Events::default(), id, roster, world);
+            }
         }
     }
     pub fn before_move(
