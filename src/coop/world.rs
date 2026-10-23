@@ -8,11 +8,13 @@ use super::{
 use crate::{
     collision::World,
     inventory::Stats,
-    movement::{Controls, Player, EYE_HEIGHT, FIXED_DT},
+    movement::{Controls, Player, FIXED_DT},
 };
 use anyhow::{ensure, Context, Result};
 use macroquad::prelude::*;
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
+use crate::movement::EYE_HEIGHT;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -78,8 +80,12 @@ pub struct Roster {
 impl Roster {
     /// Real exits carry each player's earned inventory and resources separately.
     /// A dead partner keeps the same countdown while the next visit loads.
+    #[cfg(test)]
     pub fn arrive(&self, world: &World, eye: Vec3, yaw: f32, map: &str, entry: Option<&str>) -> Result<Self> {
-        let mut next = Self::new(world, eye, yaw, self.players[0].stats.clone())?;
+        self.arrive_with(world, eye, yaw, map, entry, |_| true)
+    }
+    pub fn arrive_with(&self, world: &World, eye: Vec3, yaw: f32, map: &str, entry: Option<&str>, safe: impl Fn(Vec3) -> bool) -> Result<Self> {
+        let mut next = Self::new_with(world, eye, yaw, self.players[0].stats.clone(), safe)?;
         next.tick = self.tick;
         next.checkpoint_generation = self.checkpoint_generation;
         next.lives = self.lives.clone();
@@ -98,8 +104,12 @@ impl Roster {
         Ok(next)
     }
     pub fn new(world: &World, eye: Vec3, yaw: f32, stats: Stats) -> Result<Self> {
+        Self::new_with(world, eye, yaw, stats, |_| true)
+    }
+    pub fn new_with(world: &World, eye: Vec3, yaw: f32, stats: Stats, safe: impl Fn(Vec3) -> bool) -> Result<Self> {
         let blue = Player::spawn(world, eye).context("Alice's entrance is obstructed.")?;
-        let red = safe_near(world, blue.feet)
+        ensure!(safe(blue.feet), "Alice's entrance is hazardous.");
+        let red = super::placement::entrance(world, blue.feet, safe)
             .context("There is no safe space for player two at this entrance.")?;
         let players = [blue, red].map(|player| Body {
             player,
@@ -200,40 +210,14 @@ pub fn interpolate_body(body: &mut Body, previous: &Body, elapsed: f32) {
     }
 }
 
-/// Grounded, clear placement close to the survivor, reached without crossing a
-/// wall. Do not spawn on a ledge, in a liquid, on the other body or over a drop.
+/// Clear placement close to the survivor on supported ground or in the same
+/// safe swimming volume, without crossing a wall or dropping to a distant floor.
+#[cfg(test)]
 pub fn safe_near(world: &World, feet: Vec3) -> Option<Player> {
     safe_near_with(world, feet, |_| true)
 }
 pub fn safe_near_with(world: &World, feet: Vec3, safe: impl Fn(Vec3) -> bool) -> Option<Player> {
-    for radius in [48., 72., 96.] {
-        for direction in [
-            Vec3::X,
-            -Vec3::X,
-            Vec3::Y,
-            -Vec3::Y,
-            vec3(1., 1., 0.).normalize(),
-            vec3(-1., 1., 0.).normalize(),
-            vec3(1., -1., 0.).normalize(),
-            vec3(-1., -1., 0.).normalize(),
-        ] {
-            let candidate = feet + direction * radius + Vec3::Z * 18.;
-            let path = world.body_trace(feet + Vec3::Z * 1., candidate);
-            if path.start_solid || path.fraction < 1. {
-                continue;
-            }
-            let floor = world.body_trace(candidate, candidate - Vec3::Z * 50.);
-            if floor.start_solid || floor.fraction >= 1. || floor.normal.z < 0.65 {
-                continue;
-            }
-            let landing = candidate - Vec3::Z * (50. * floor.fraction);
-            if !crate::recovery::supported(world, landing) || !safe(landing) {
-                continue;
-            }
-            return Player::spawn(world, landing + Vec3::Z * EYE_HEIGHT);
-        }
-    }
-    None
+    super::placement::near(world, feet, 32., safe)
 }
 
 pub fn camera_player(frame: &Frame, local: PlayerId) -> PlayerId {

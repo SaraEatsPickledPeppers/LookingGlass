@@ -56,6 +56,7 @@ impl Stage {
         visit: &Visit,
         staged: bool,
     ) -> Result<Self> {
+        crate::save::validate_entry(map, visit.entry.as_deref())?;
         let mut interactions = Interactions::load(map)?;
         interactions.set_entry(assets, map, &visit.map, visit.entry.as_deref())?;
         // The staged native guard replaces the authored encounter cast, as in single player.
@@ -125,6 +126,16 @@ impl Stage {
     }
     pub fn reset(&mut self, map: &Bsp, world: &mut World) -> Result<()> {
         self.restore(&self.initial.as_ref().unwrap().clone(), map, world)
+    }
+    /// World progress survives leaving a visit. Re-entering places both players
+    /// at its entrance, so old contact sweeps, notices and the departure request
+    /// no longer belong to those bodies. The restored world is the new checkpoint.
+    pub fn reentered(&mut self) {
+        self.contacts = Contacts::new(&self.interactions);
+        self.notices = [None, None];
+        self.transition = None;
+        self.owner = (self.interactions.scripted() || self.story.busy()).then_some(self.last_owner);
+        self.initial = Some(self.snapshot());
     }
     pub fn busy(&self) -> bool {
         self.owner.is_some() || self.transition.is_some()
@@ -579,6 +590,34 @@ pub fn check(assets: &mut Assets) -> Result<()> {
             "Scene reunion reported a death/respawn"
         );
         println!("PASS co-op theatre owner {first:?}: {count} fixed ticks, original camera/story, waiting partner frozen, snapshot replica, safe reunion {separation:.2}");
+        // A revisit's wipe must retain the completed scene, not resurrect the
+        // fresh world's opening puzzle state. Exercise actual world advancement
+        // after re-entry before rolling back to that new checkpoint.
+        mirror.restore(&stage.snapshot(), &map, &mut mirror_world)?;
+        mirror.reentered();
+        let checkpoint = serde_json::to_value(mirror.snapshot())?;
+        ensure!(!mirror.busy(), "Cached theatre replayed its finished scene");
+        mirror.before_move(
+            &mut roster,
+            &map,
+            &mut mirror_world,
+            &Default::default(),
+            FIXED_DT,
+        )?;
+        ensure!(
+            serde_json::to_value(mirror.snapshot())? != checkpoint,
+            "Revisit checkpoint test did not advance the world"
+        );
+        mirror.reset(&map, &mut mirror_world)?;
+        ensure!(
+            serde_json::to_value(mirror.snapshot())? == checkpoint,
+            "Revisit wipe discarded completed world/story progress"
+        );
+        ensure!(
+            checkpoint != serde_json::to_value(stage.initial.as_ref().unwrap())?,
+            "Revisit checkpoint is indistinguishable from a fresh visit"
+        );
+        println!("PASS co-op revisit {first:?}: finished theatre remains finished after world advancement and checkpoint rollback");
         stage.reset(&map, &mut world)?;
         for b in &mut roster.players {
             b.stats.damage(10000.);

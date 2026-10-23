@@ -26,6 +26,7 @@ pub struct Launch {
     pub drive: bool,
     pub death_check: Option<PlayerId>,
     pub scene_check: Option<PlayerId>,
+    pub travel_check: bool,
     pub conditions: Conditions,
 }
 pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Result<()> {
@@ -91,6 +92,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
             "The co-op death check requires the staged school combat preview.");
         anyhow::ensure!(launch.scene_check.is_none() || visit.map == "skool1" && visit.entry.is_none()
             && !visit.combat_preview && launch.death_check.is_none(), "The scene fixture requires the first school visit.");
+        anyhow::ensure!(!launch.travel_check || visit.map == "skool1" && !visit.combat_preview
+            && launch.death_check.is_none() && launch.scene_check.is_none(), "The travel fixture requires the school.");
         clear_background(BLACK);
         ui.toast("Opening Wonderland for two...", screen_height() * 0.5);
         next_frame().await;
@@ -105,7 +108,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         let eye = if launch.scene_check.is_some() { vec3(-2440., 2368., -480. + crate::movement::EYE_HEIGHT) } else { eye };
         let mut stats = Stats::for_level(&visit.map, visit.entry.as_deref());
         stats.difficulty = visit.difficulty;
-        let mut roster = if launch.host { Some(Roster::new(&scene.world, eye, initial_yaw, stats)?) } else { None };
+        let mut roster = if launch.host { Some(Roster::new_with(&scene.world, eye, initial_yaw, stats, |at| !arena.stage.interactions.hazardous(at))?) } else { None };
         if let Some(roster) = &roster { arena.reset_characters(&roster.players); }
         if let Some(host) = &mut host { host.loaded(visit.epoch)?; }
         if let Some(guest) = &mut guest { guest.loaded(visit.epoch)?; }
@@ -138,9 +141,13 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         let mut captured_recovery = [false; 3];
         let mut restored_at = None;
         let mut pending_visit = None;
+        let mut campaign = super::campaign::Campaign::default();
+        let mut leaving_visit = None;
         let mut local_location = None;
         let mut reunited_at = None;
         let mut captured_scene = false;
+        let mut entered_tick = 0;
+        let mut travel_used = false;
         loop {
             let now = Instant::now();
             if let Some(setup) = &hosting {
@@ -160,20 +167,37 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                     display = Some(frame);
                 }
             }
-            if let Some(next) = pending_visit.take() {
+            if pending_visit.is_some() && host.as_ref().is_none_or(|host| host.can_load()) {
+                let next = pending_visit.take().unwrap();
                 clear_background(BLACK);
                 ui.toast("Travelling to the next part of Wonderland...", screen_height() * 0.5);
                 next_frame().await;
-                scene = crate::render::Scene::load_for(assets, &next.map, next.difficulty)?;
-                arena = super::arena::Arena::load(assets, &scene.map, &mut scene.world, &next, false)?;
-                level_art = crate::viewer::LevelArt::default();
-                level_art.prepare(assets, &scene, &arena.stage.interactions, false)?;
-                let (eye, facing) = crate::interaction::spawn(&scene.map, next.entry.as_deref());
-                if let Some(old) = roster.take() {
-                    let arrived = old.arrive(&scene.world, eye, facing, &next.map, next.entry.as_deref())?;
-                    arena.reset_characters(&arrived.players);
-                    roster = Some(arrived);
+                let mut next_scene = crate::render::Scene::load_for(assets, &next.map, next.difficulty)?;
+                let mut next_arena = super::arena::Arena::load(assets, &next_scene.map, &mut next_scene.world, &next, false)?;
+                if launch.host {
+                    let saved = leaving_visit.as_ref().filter(|saved: &&super::campaign::VisitState|
+                        saved.key() == crate::save::visit_key(&next.map, next.entry.as_deref()))
+                        .or_else(|| campaign.cached(&next));
+                    if let Some(saved) = saved {
+                        next_arena.restore_visit(saved, &next, &next_scene.map, &mut next_scene.world)?;
+                        if launch.travel_check {
+                            anyhow::ensure!(serde_json::to_value(&saved.stage.world)? == serde_json::to_value(next_arena.stage.interactions.snapshot())?
+                                && serde_json::to_value(&saved.npcs)? == serde_json::to_value(next_arena.npcs.snapshot())?, "Co-op cached world did not restore exactly");
+                            println!("PASS co-op travel fixture: cached shared world and NPC state restored exactly");
+                        }
+                    }
                 }
+                let mut next_art = crate::viewer::LevelArt::default();
+                next_art.prepare(assets, &next_scene, &next_arena.stage.interactions, false)?;
+                let (eye, facing) = crate::interaction::spawn(&next_scene.map, next.entry.as_deref());
+                let arrived = roster.as_ref().map(|old| old.arrive_with(&next_scene.world, eye, facing, &next.map, next.entry.as_deref(), |at| !next_arena.stage.interactions.hazardous(at))).transpose()?;
+                if let Some(arrived) = &arrived { next_arena.reset_characters(&arrived.players); }
+                if let Some(leaving) = leaving_visit.take() { campaign.departed(leaving)?; }
+                roster = arrived;
+                entered_tick = roster.as_ref().map_or(0, |r| r.tick);
+                scene = next_scene;
+                arena = next_arena;
+                level_art = next_art;
                 visit = next;
                 if let Some(host) = &mut host { host.loaded(visit.epoch)?; }
                 if let Some(guest) = &mut guest { guest.loaded(visit.epoch)?; }
@@ -250,7 +274,20 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 keys.run = false;
                 keys.wish = if (2. ..4.).contains(&age) { if launch.host { Vec2::Y } else { Vec2::X } } else { Vec2::ZERO };
                 keys.swim = keys.wish.extend(0.);
-                if let Some(first) = launch.scene_check {
+                if launch.travel_check {
+                    let tick = display.as_ref().map_or(0, |f| f.tick);
+                    keys.wish = if visit.epoch == 1 && (120..960).contains(&tick) { Vec2::Y } else { Vec2::ZERO };
+                    keys.yaw = std::f32::consts::FRAC_PI_2;
+                    keys.pitch = 0.;
+                    keys.swim = keys.wish.extend(0.);
+                    keys.primary = false;
+                    keys.alternate = false;
+                    keys.weapon = None;
+                    if launch.host && visit.epoch == 1 && tick >= 1000 && !travel_used {
+                        keys.uses += 1;
+                        travel_used = true;
+                    }
+                } else if let Some(first) = launch.scene_check {
                     keys.wish = if local == first && age >= 2. && !arena.stage.busy()
                         && display.as_ref().is_some_and(|f| f.players.iter().all(|b| b.warped_at == 0)) { -Vec2::X } else { Vec2::ZERO };
                     keys.yaw = std::f32::consts::PI;
@@ -318,7 +355,17 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         if host.send_frame(network)? { last_sent = frame.tick; }
                     }
                     display = Some(frame);
+                    // Explicit travel fixture: it requests normal load barriers
+                    // without claiming the quest-gated exits were played through.
+                    if launch.travel_check && arena.stage.transition.is_none() {
+                        if visit.epoch == 1 && roster.tick >= 1440 {
+                            arena.stage.transition = Some(("skool1".into(), Some("skool1_start2".into())));
+                        } else if visit.epoch == 2 && roster.tick >= entered_tick + 600 {
+                            arena.stage.transition = Some(("skool1".into(), Some("skool1_start1".into())));
+                        }
+                    }
                     if let Some((map, entry)) = arena.stage.transition.take() {
+                        leaving_visit = Some(super::campaign::VisitState::capture(&visit, &arena));
                         host.enter(map, entry, visit.difficulty, now)?;
                         pending_visit = Some(host.visit().clone());
                     }
@@ -403,7 +450,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         "pid": std::process::id(), "playing": playing, "frame": frame, "focused": focused,
                         "camera_player": watched, "camera": camera_eye, "camera_target": target,
                         "camera_subject_feet": camera_subject_feet,
-                        "combat": arena.snapshot() })) {
+                        "combat": arena.snapshot(), "visit": visit, "completed_visits": if launch.host { Some(campaign.completed()) } else { None } })) {
                         let _ = std::fs::write(path, bytes);
                     }
                     report_at = now;
@@ -488,7 +535,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 }
                 anyhow::ensure!(!started_playing.is_some_and(|at| at.elapsed().as_secs() > 180), "Co-op scene did not reunite both players");
             }
-            if launch.drive && launch.death_check.is_none() && launch.scene_check.is_none() && started_playing.is_some_and(|start| start.elapsed()
+            if launch.drive && !launch.travel_check && launch.death_check.is_none() && launch.scene_check.is_none() && started_playing.is_some_and(|start| start.elapsed()
                 >= Duration::from_secs(if launch.host { 12 } else { 10 }
                     + if visit.combat_preview { 4 } else { 0 })) {
                 crate::viewer::save_capture(&crate::preferences::path("coop-screenshot.png"))?;

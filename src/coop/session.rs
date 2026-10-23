@@ -54,6 +54,7 @@ pub struct Host {
     pending: VecDeque<Vec<u8>>,
     local_ready: bool,
     guest_ready: bool,
+    guest_loading: bool,
     input: RemoteInput,
 }
 impl Host {
@@ -70,6 +71,7 @@ impl Host {
             pending: VecDeque::new(),
             local_ready: false,
             guest_ready: false,
+            guest_loading: false,
             input: RemoteInput::default(),
         })
     }
@@ -78,6 +80,12 @@ impl Host {
     }
     pub fn visit(&self) -> &Visit {
         &self.visit
+    }
+    /// Keep polling old controls until the guest's ordered Loading message.
+    /// After that barrier it can send only Ready, so synchronous asset loading
+    /// cannot fill the bounded input queue with an in-flight internet burst.
+    pub fn can_load(&self) -> bool {
+        self.phase != Phase::Loading || self.guest_loading
     }
     pub fn acknowledged_input(&self) -> u64 {
         self.input.sequence()
@@ -91,9 +99,11 @@ impl Host {
             "Host snapshot belongs to another visit."
         );
         frame.validate()?;
-        self.peer.send(super::codec::encode(&serde_json::to_vec(&FromHost::Frame {
-            frame: Box::new(frame),
-        })?)?)
+        self.peer.send(super::codec::encode(&serde_json::to_vec(
+            &FromHost::Frame {
+                frame: Box::new(frame),
+            },
+        )?)?)
     }
 
     pub fn poll(&mut self, now: Instant) -> Result<()> {
@@ -104,6 +114,7 @@ impl Host {
             self.input = RemoteInput::default();
             self.pending.clear();
             self.deadline = None;
+            self.guest_loading = false;
         }
         result
     }
@@ -121,6 +132,7 @@ impl Host {
             };
             self.input = RemoteInput::default();
             self.guest_ready = false;
+            self.guest_loading = false;
             self.pending.clear();
             self.deadline = None;
             return Ok(());
@@ -129,6 +141,7 @@ impl Host {
             self.generation = self.peer.generation();
             self.phase = Phase::Checking;
             self.guest_ready = false;
+            self.guest_loading = false;
             self.input = RemoteInput::default();
             self.pending.clear();
             self.deadline = Some(now + CHECK_TIMEOUT);
@@ -166,6 +179,19 @@ impl Host {
                         },
                     )?;
                 }
+                FromGuest::Loading { epoch } => {
+                    ensure!(
+                        matches!(self.phase, Phase::Loading | Phase::Playing),
+                        "Guest loading arrived before identification."
+                    );
+                    ensure!(
+                        epoch <= self.visit.epoch,
+                        "Guest is loading a future visit."
+                    );
+                    if epoch == self.visit.epoch {
+                        self.guest_loading = true;
+                    }
+                }
                 FromGuest::Ready { epoch } => {
                     ensure!(
                         matches!(self.phase, Phase::Loading | Phase::Playing),
@@ -176,6 +202,10 @@ impl Host {
                         "Guest acknowledged a future level."
                     );
                     if epoch == self.visit.epoch {
+                        ensure!(
+                            self.guest_loading,
+                            "Guest readiness arrived before the loading barrier."
+                        );
                         self.guest_ready = true;
                     }
                 }
@@ -241,6 +271,7 @@ impl Host {
         self.visit = visit;
         self.local_ready = false;
         self.guest_ready = false;
+        self.guest_loading = false;
         self.input = RemoteInput::default();
         if matches!(self.phase, Phase::Loading | Phase::Playing) {
             queue(
@@ -382,6 +413,12 @@ impl Guest {
                     self.frame = None;
                     self.last_tick = None;
                     self.pending.clear();
+                    queue(
+                        &mut self.pending,
+                        &FromGuest::Loading {
+                            epoch: self.visit.as_ref().unwrap().epoch,
+                        },
+                    )?;
                 }
                 FromHost::Playing { epoch } => {
                     ensure!(
@@ -556,6 +593,51 @@ mod tests {
         guest.loaded(2).unwrap();
         host.loaded(2).unwrap();
         until(&mut host, &mut guest, |_, g| g.phase() == Phase::Playing);
+        assert_eq!(host.controls(Instant::now()).0.wish, Vec2::ZERO);
+        guest
+            .controls(Input {
+                wish: Vec2::Y,
+                ..Default::default()
+            })
+            .unwrap();
+        until(&mut host, &mut guest, |h, _| h.input.sequence() == 1);
+        assert_eq!(host.controls(Instant::now()).0.wish, Vec2::Y);
+    }
+
+    #[test]
+    fn transition_drains_old_inputs_before_a_slow_host_load() {
+        let (mut host, mut guest, _) = pair();
+        play(&mut host, &mut guest);
+        host.enter("skool1".into(), None, Default::default(), Instant::now())
+            .unwrap();
+        assert!(!host.can_load());
+        // The guest has not received Enter yet. These controls must drain before
+        // loading, not sit in the four-packet channel for the whole disk stall.
+        for _ in 0..12 {
+            guest
+                .controls(Input {
+                    wish: Vec2::X,
+                    ..Default::default()
+                })
+                .unwrap();
+            host.poll(Instant::now()).unwrap();
+            assert!(!host.can_load());
+            thread::sleep(Duration::from_millis(10));
+        }
+        until(&mut host, &mut guest, |h, g| {
+            h.can_load() && g.phase() == Phase::Loading
+        });
+        assert_eq!(guest.take_visit().unwrap().epoch, 2);
+        guest.loaded(2).unwrap();
+        guest.poll(Instant::now()).unwrap();
+        // Longer than the transport's ordinary two-second consumer timeout.
+        thread::sleep(Duration::from_millis(2300));
+        assert_eq!(host.peer.state(), State::Connected);
+        assert_eq!(guest.peer.state(), State::Connected);
+        host.loaded(2).unwrap();
+        until(&mut host, &mut guest, |h, g| {
+            h.phase() == Phase::Playing && g.phase() == Phase::Playing
+        });
         assert_eq!(host.controls(Instant::now()).0.wish, Vec2::ZERO);
         guest
             .controls(Input {

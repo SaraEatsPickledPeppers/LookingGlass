@@ -16,6 +16,12 @@ Repeat traversal and combat with latency/jitter. Keep separate single-player/sav
 regression evidence. The leaves, swimming, moving supports and scripted rides need
 rendered two-process playtests as well as headless checks.
 
+Entrance-only evidence: `--coop-campaign-check` passes all 39 visits for paired
+placement, two seconds of arrival physics, shared-world snapshot restoration and
+entrance wipe placement. Both underwater death roles also pass at the temple and
+first garden entrance. This is preparation for the traversal checks below, not
+completion of a campaign row. Evidence: `private/coop-progression-entrances4.log`.
+
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Not run |

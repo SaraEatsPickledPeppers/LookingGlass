@@ -201,10 +201,15 @@ fn run() -> Result<()> {
             "--coop-host" | "--coop-join" => {
                 o.coop = Some(coop::preview::Launch { host: arg == "--coop-host", internet: true,
                     invite_file: Some(args.next().context("Co-op requires an invite file")?.into()),
-                    invite: None, start: None, drive: false, death_check: None, scene_check: None, conditions: Default::default() });
+                    invite: None, start: None, drive: false, death_check: None, scene_check: None, travel_check: false, conditions: Default::default() });
             }
             "--coop-local" => o.coop.as_mut().context("Use --coop-host before --coop-local")?.internet = false,
             "--coop-drive" => o.coop.as_mut().context("Choose a co-op role before --coop-drive")?.drive = true,
+            "--coop-travel-check" => {
+                let launch = o.coop.as_mut().context("Choose a co-op role before --coop-travel-check")?;
+                launch.drive = true;
+                launch.travel_check = true;
+            }
             "--coop-scene-check" => {
                 let launch = o.coop.as_mut().context("Choose a co-op role before --coop-scene-check")?;
                 launch.drive = true;
@@ -409,6 +414,7 @@ fn run() -> Result<()> {
             "--weapon-input-check" => mode = "weapon-input",
             "--world-check" => mode = "world",
             "--coop-world-check" => mode = "coop-world",
+            "--coop-campaign-check" => mode = "coop-campaign",
             "--school-check" => mode = "school",
             "--footing-check" => mode = "footing",
             "--shelf-preview" => o.shelf_preview = true,
@@ -620,6 +626,7 @@ fn run() -> Result<()> {
         school::coop_check::check(&mut assets)?;
         return coop::stage::check(&mut assets);
     }
+    if mode == "coop-campaign" { return coop::campaign::check(&mut assets); }
     if mode == "dice" {
         return dice::check(&mut assets);
     }

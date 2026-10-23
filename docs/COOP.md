@@ -123,12 +123,12 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after shared school lift checks: **30%** (previously 28%). Credited
+Overall estimate after visit-history and entrance checks: **32%** (previously 30%). Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
-5/15 for two-player movement/presentation and paired school supports, and 6/20 for native targeting, host-owned
+6/15 for two-player movement/presentation, paired school supports and dry/swimming arrival placement, and 6/20 for native targeting, host-owned
 weapons/damage, personal resources and the entrance-checkpoint/respawn slice,
-plus 4/20 for shared world replication, ordered contacts, the verified theatre
-ownership/reunion slice and school boarding barriers. Full-campaign verification remains at zero. Standalone
+plus 5/20 for shared world replication, ordered contacts, the verified theatre
+ownership/reunion slice, school boarding barriers and in-session visit history. Full-campaign verification remains at zero. Standalone
 policy tests receive no campaign credit; every campaign-matrix row remains Not run.
 
 The native enemy combat foundation now supplies two live targets to each enemy
@@ -377,6 +377,65 @@ and both clients exited successfully; no game or tunnel helper remained. Evidenc
 `private/coop/lift-test-3e9dd3b1787b413d8767094b6d70fb16`. This successful connection
 does not remove the previously recorded fresh-hostname DNS limitation.
 Every campaign-matrix row remains **Not run**.
+
+## Shared visit history and arrival placement
+
+The host now retains each departed visit's shared controllers, story/hint state and
+native NPC state for the lifetime of the session. Canonical first entrances share
+one cache key; authored return visits remain separate. Re-entering restores that
+world before placing the pair, resets their old contact sweeps, and makes the
+restored world the new entrance checkpoint. Individual resources and pickup
+entitlements travel with each player's roster entry, never with an old world copy.
+Destination geometry, restored collision, arrival positions and art are prepared
+before committing the local visit history. A load error still ends the co-op session;
+there is no persistent shared save/resume UI or recoverable failed-transition UI yet.
+
+Protocol revision 3 adds an ordered guest loading acknowledgement. The host keeps
+draining old controls until it receives that acknowledgement, then begins its
+synchronous asset load. The queue stays bounded and retains its ordinary stall
+deadline; loading does not require increasing either. This addresses the public
+travel run in `travel-test-7f597a3d82be4a71a8d81999563481e8`, where late controls
+filled the host queue during asset loading and disconnected the guest.
+
+Partner placement accepts clear swimming positions in the survivor's water volume.
+Dry placement checks a complete footprint against the local floor plane, including
+slopes. Entrance placement can search up to 256 units below an authored elevated
+start; ordinary revival remains limited to 32 units down. Walls, narrow ledges,
+harmful liquids and hazardous destination triggers remain rejected. These changes
+are confined to co-op placement; single-player recovery is unchanged.
+
+`--coop-campaign-check` checks all 39 authored entrances for two clear bodies,
+two seconds of collision/swimming physics, world snapshot roundtrip and an entrance
+wipe. It deliberately does not advance the level controllers or establish traversal.
+All 39 pass (`private/coop-progression-entrances4.log`). The underwater temple and
+first garden entrance also pass both death roles: ten seconds of following the
+living swimmer, then revival at the same depth with 25 health and fresh air. This
+uses real entrance geometry and ordinary movement/death policy, without enemy AI.
+The shared-world suite still passes its school lifts, theatre reunion and
+revisit-checkpoint rollback (`private/coop-progression-world2.log`).
+
+`tools/test_coop_travel.py --data <base> --reconnect --delay-ms 40 --jitter-ms 20`
+uses two rendered clients and a public invite (add `--local` for loopback). Its
+explicit `--coop-travel-check` driver opens the first school door with ordinary input,
+requests a normal load barrier to the return entrance, disconnects/rejoins the guest,
+then requests the first entrance again. It checks exact world/NPC restoration,
+separate visit histories, personal resources, paired relocations and clean exits.
+The destination requests are staged; this does not exercise the quest-gated exits.
+
+On 2026-10-23, the public-invite run `travel-test-9b33f710636c4e03a1a54e81c9830d98`
+passed all gameplay assertions at 40 ms delay + 20 ms jitter per sender, including
+guest replacement, three visit epochs, exact cached world/NPC restoration and
+preserved inventories. Both final views were inspected on the user's desktop after
+Anode became occupied. The run's `ready.json` records those gameplay checks. The
+manual capture/close stage timed out because the foreground automation's F12 did
+not produce game captures; therefore this is not a completely green harness run
+or proof of clean voluntary exits. Its cleanup removed the owned clients, tunnel
+helper and invite. The earlier loopback run `travel-test-9ec9dd5f7d1c43048b14e2d791f76183`
+also passed gameplay assertions but exceeded its manual inspection deadline.
+Automating final capture/closure without depending on foreground key timing remains
+test-harness work. The full Rust suite passes 730 tests, with one pre-existing
+ignored test (`private/coop-progression-tests3.log`), including the new slow-load
+barrier regression. No co-op release or full campaign playthrough is claimed.
 
 ## Windowed movement and combat slice (development only)
 

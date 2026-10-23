@@ -87,6 +87,14 @@ impl Arena {
         }
         Ok(())
     }
+    pub fn restore_visit(&mut self, state: &super::campaign::VisitState, visit: &Visit, map: &Bsp, world: &mut World) -> Result<()> {
+        state.matches(visit)?;
+        self.stage.restore(&state.stage, map, world)?;
+        self.npcs.restore(&state.npcs)?;
+        self.stage.reentered();
+        self.initial = self.npcs.snapshot();
+        Ok(())
+    }
     pub fn step(
         &mut self,
         roster: &mut Roster,

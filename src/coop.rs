@@ -4,6 +4,8 @@
 //! evidence that the single-player viewer or the campaign already supports co-op.
 pub mod check;
 pub mod arena;
+pub mod campaign;
+mod placement;
 pub(crate) mod codec;
 pub mod hosting;
 pub mod invite;

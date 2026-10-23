@@ -7,7 +7,7 @@ use macroquad::prelude::{Vec2, Vec3};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
-pub const REVISION: u32 = 2;
+pub const REVISION: u32 = 3;
 pub const INPUT_TIMEOUT: Duration = Duration::from_millis(500);
 const MAX_EDGES: u64 = 8;
 
@@ -129,6 +129,10 @@ impl Input {
 pub enum FromGuest {
     Hello {
         identity: Identity,
+    },
+    /// Ordered after the last old-visit input, before any synchronous loading.
+    Loading {
+        epoch: u64,
     },
     Ready {
         epoch: u64,
