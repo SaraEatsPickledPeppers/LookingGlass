@@ -524,6 +524,9 @@ mod start;
 pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
     // Release cursor/audio before Miniquad destroys its native request queue.
     prevent_quit();
+    if let Some(launch) = &options.coop {
+        return crate::coop::preview::run(&mut assets, &options, launch).await;
+    }
     let ui = crate::ui::Ui::load(&mut assets)?;
     // Explicit native layout diagnostic; never opens or modifies player saves.
     if options.frames.is_some() && std::env::var_os("LOOKING_GLASS_PRESENTATION_CHECK").is_some() {

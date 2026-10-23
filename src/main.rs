@@ -126,6 +126,7 @@ use bsp::Bsp;
 use std::path::PathBuf;
 
 pub struct Options {
+    pub coop: Option<coop::preview::Launch>,
     pub difficulty: powerups::Difficulty,
     pub save_dir: PathBuf,
     pub load: Option<save::Slot>,
@@ -161,6 +162,7 @@ fn run() -> Result<()> {
         return result;
     }
     let mut o = Options {
+        coop: None,
         difficulty: Default::default(),
         save_dir: PathBuf::from("private/saves"),
         load: None,
@@ -195,6 +197,12 @@ fn run() -> Result<()> {
     let mut movie_name = String::new();
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--coop-host" | "--coop-join" => {
+                o.coop = Some(coop::preview::Launch { host: arg == "--coop-host", internet: true,
+                    invite_file: args.next().context("Co-op requires an invite file")?.into(), drive: false });
+            }
+            "--coop-local" => o.coop.as_mut().context("Use --coop-host before --coop-local")?.internet = false,
+            "--coop-drive" => o.coop.as_mut().context("Choose a co-op role before --coop-drive")?.drive = true,
             "--difficulty" => {
                 o.difficulty = powerups::Difficulty::parse(
                     &args.next().context("--difficulty requires a name")?,

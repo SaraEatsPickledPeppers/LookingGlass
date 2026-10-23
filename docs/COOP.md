@@ -78,8 +78,9 @@ and exercise slow readers rather than assuming loopback performance represents t
 ## Current evidence
 
 - `coop` exists from current public main.
-- `src/coop/rules.rs` implements policy decisions and scenario tests. These are
-  not yet connected to the viewer or enemy controllers. All six initial policy
+- `src/coop/rules.rs` implements policy decisions and scenario tests. The death
+  policy now drives the movement slice below; scene, boarding and targeting
+  policies still need campaign integration. All six initial policy
   scenarios pass: countdown, simultaneous death, saved/cinematic countdown,
   visible targeting, scene ownership/reunion and the boarding barrier.
 - Authenticated, bounded WebSocket transport runs on background threads, with TLS
@@ -96,8 +97,9 @@ and exercise slow readers rather than assuming loopback performance represents t
 - New tunnel hostnames initially failed DNS resolution when published too early.
   Hosting now waits for tunnel registration and a 12-second propagation grace.
   This passed repeated public tests; it is not a universal DNS availability guarantee.
-- Main/ESC Host/Join, shared gameplay and full-campaign integration remain unfinished.
-  Current probes verify networking, not two playable Alices.
+- Main/ESC Host/Join, shared combat and full-campaign integration remain unfinished.
+  These transport probes verify networking; the later rendered movement checks
+  described below exercise two independently controlled Alices.
 
 The next session layer (`protocol.rs`, `session.rs`, `hosting.rs`) checks exact source
 and dependency identity plus the mounted game-data fingerprint. Both roles must
@@ -108,23 +110,24 @@ jump/use counts preserve short presses across a busy send queue. An incompatible
 guest releases the slot so the same host can accept a correct build. Host setup,
 helper download and cancellation run off the UI thread.
 
-These APIs still need viewer/menu integration; their tests do not establish that
-gameplay already uses them. The source identity is a compatibility check, not an
+The development movement viewer now uses these APIs; the main/ESC menus and
+campaign still need integration. The source identity is a compatibility check, not an
 attestation that a peer is trustworthy. Guest messages cannot upload world state.
 
 The session changes passed 689 Rust tests (one unrelated ignored test), including
 real-socket scenarios for readiness, a transition with input still in flight,
 incompatible data followed by a successful rejoin, disconnection and loading timeout.
 The shared background Host setup also passed separate-process loopback and public
-internet probes with the delay/jitter above. The public probe waits for helper
-shutdown before exiting. The game quit path still needs this integration.
+internet probes with the delay/jitter above. The public probe and development
+movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate at this milestone: **12%**. Credited points are 8/10 for foundation
-and diagnostics and 4/15 for internet session infrastructure. The other four areas
-remain 0 credited points until their behavior is integrated and verified. This
-deliberately gives no campaign or gameplay credit to standalone policy tests.
+Overall estimate after the first rendered movement milestone: **17%**. Credited
+points are 8/10 for foundation/diagnostics, 4/15 for internet session infrastructure,
+4/15 for two-player movement/presentation, and 1/20 for the integrated personal
+health/respawn slice. Scenes/progression and full-campaign verification remain at
+zero. Standalone policy tests receive no campaign credit.
 
 ### Integration constraints found in the existing engine
 
@@ -140,6 +143,68 @@ deliberately gives no campaign or gameplay credit to standalone policy tests.
 - Alice's blouse/leg/inner-mouth regions share a texture. Runtime red clothing
   needs a blue-fabric mask on known clothing textures, preserving skin, apron,
   mouth, hair, and power-up appearances. Never distribute altered original assets.
+
+## Windowed movement slice (development only)
+
+`--coop-host <private-invite-file>` and `--coop-join <private-invite-file>` now open
+two actual game clients. Hosting uses the public internet tunnel by default;
+`--coop-local` after the host argument selects loopback for local diagnostics.
+Both still require the normal `--data`, `--profile`, and optional `--map` arguments.
+F8 copies the host invite. ESC opens a small personal overlay; Q leaves the session.
+The world continues when a window loses focus and its controls become neutral.
+
+The host advances two independent movement bodies at 120 Hz and sends validated
+snapshots at up to 20 Hz. The guest renders the received state; it cannot decide
+positions or health. Each client follows its own player, with camera collision and
+guest-side visual smoothing. Alice's blue-fabric pixels in the known clothing
+textures are recolored for player two at load time, including packed FTX textures.
+
+`world.rs` integrates individual health, falling/liquid damage, the 10-second
+spectating policy, safe nearby respawn at 25 health, and a two-body entrance checkpoint
+for this slice. Its tests exercise movement independence, death/respawn/wipe and
+refusing a spawn over a drop. This is not yet the campaign checkpoint system.
+
+Run `python tools/test_coop_play.py --data <original-base-folder>` in a desktop
+session (prefer Anode). It creates independent profiles and two rendered clients,
+uses scripted controls through the same session and simulation as normal controls,
+checks that both bodies moved and both clients agree, verifies separate cameras,
+captures both views and closes its processes/helpers. Add `--local` for loopback.
+The test never writes campaign saves or distributes original assets. Its scripted
+controls are enabled only by the explicit development flag `--coop-drive`.
+
+On 2026-10-23 the first loopback rendered test passed: blue moved 207.14 units and
+red 112.97 units (limited by the wall), both clients agreed within one unit, and
+the guest acknowledged 256 control messages. The full suite passed 694 tests with
+one unrelated test ignored. That first capture exposed packed-texture recoloring
+and overlay spacing errors, which were corrected and visually checked in later runs.
+
+The public internet movement run subsequently passed, including independent
+cameras, matching authoritative positions, acknowledged guest input, captures and
+clean process/helper shutdown. The captures show blue and red clothing together.
+An earlier public run disconnected during play. The transport now tolerates bounded
+bursts between render frames by pausing reads rather than disconnecting immediately;
+the new burst regression and all 27 focused co-op tests pass, including the existing
+persistent slow-reader limit. Keep the failed run in the private evidence rather
+than treating the first internet attempt as a pass.
+
+Real Anode keyboard/focus testing also passed: Red moved 107.47 units while Blue
+stayed still, then Blue moved 104.00 units while Red stayed still. Both clients left
+through ESC then Q; the interactive launcher exited successfully with no game
+windows left behind. `tools/run_coop_pair.ps1 -Data <original-base-folder>` launches
+that interactive pair; add `-Local` for loopback. It creates independent profiles,
+waits for the invite, starts the guest and retains private diagnostics.
+
+The final local rendered check passed after the sleeve recoloring and close-camera
+visibility fixes. Both clients agreed on positions; Blue moved 208.05 units and Red
+112.97 units. The inspected capture shows red sleeves/dress, blue player one,
+unchanged skin/apron/hair/boots, and separate readable overlays. Both processes
+exited successfully and no game windows remained. This final local run validates
+the visual changes after the successful public internet run above.
+
+Still missing from this slice: main/ESC Host/Join routing, combat and enemy selection,
+pickup collection, scripted world controllers, shared moving supports, cutscenes,
+campaign progression/checkpoints, prediction/latency tuning and campaign validation.
+Do not use the movement test as evidence of completing any campaign visit.
 
 ## Reproducing transport checks
 

@@ -139,6 +139,7 @@ pub enum FromHost {
     Hello { identity: Identity },
     Enter { visit: Visit },
     Playing { epoch: u64 },
+    Frame { frame: Box<super::world::Frame> },
 }
 
 /// Host-owned latch. Network traffic never advances the simulation clock.
@@ -151,8 +152,7 @@ pub struct RemoteInput {
     pending_uses: u64,
 }
 impl RemoteInput {
-    #[cfg(test)]
-    pub(super) fn sequence_for_test(&self) -> u64 {
+    pub fn sequence(&self) -> u64 {
         self.sequence
     }
     pub fn accept(&mut self, sequence: u64, input: Input, now: Instant) -> Result<()> {

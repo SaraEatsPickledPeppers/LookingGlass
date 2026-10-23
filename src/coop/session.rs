@@ -2,7 +2,7 @@
 //! A connected socket alone never means the guest is allowed to drive Alice.
 use super::{
     protocol::{FromGuest, FromHost, Identity, Input, RemoteInput, Visit},
-    transport::{Peer, State, MAX_INPUT},
+    transport::{Peer, State, MAX_INPUT, MAX_STATE},
 };
 use anyhow::{bail, ensure, Result};
 use serde::Serialize;
@@ -79,6 +79,22 @@ impl Host {
     pub fn visit(&self) -> &Visit {
         &self.visit
     }
+    pub fn acknowledged_input(&self) -> u64 {
+        self.input.sequence()
+    }
+    pub fn send_frame(&self, frame: super::world::Frame) -> Result<bool> {
+        if self.phase != Phase::Playing || !self.pending.is_empty() {
+            return Ok(false);
+        }
+        ensure!(
+            frame.epoch == self.visit.epoch,
+            "Host snapshot belongs to another visit."
+        );
+        frame.validate()?;
+        self.peer.send(serde_json::to_vec(&FromHost::Frame {
+            frame: Box::new(frame),
+        })?)
+    }
 
     pub fn poll(&mut self, now: Instant) -> Result<()> {
         let result = self.poll_inner(now);
@@ -93,6 +109,11 @@ impl Host {
     }
     fn poll_inner(&mut self, now: Instant) -> Result<()> {
         if self.peer.state() != State::Connected {
+            if self.phase != Phase::Waiting {
+                if let State::Disconnected(reason) = self.peer.state() {
+                    eprintln!("Co-op guest connection ended: {reason}");
+                }
+            }
             self.phase = if self.peer.state() == State::Stopped {
                 Phase::Ended
             } else {
@@ -254,6 +275,8 @@ pub struct Guest {
     new_visit: bool,
     local_ready: bool,
     sequence: u64,
+    frame: Option<super::world::Frame>,
+    last_tick: Option<u64>,
     pending: VecDeque<Vec<u8>>,
 }
 impl Guest {
@@ -269,6 +292,8 @@ impl Guest {
             new_visit: false,
             local_ready: false,
             sequence: 0,
+            frame: None,
+            last_tick: None,
             pending: VecDeque::new(),
         })
     }
@@ -282,6 +307,9 @@ impl Guest {
         } else {
             None
         }
+    }
+    pub fn take_frame(&mut self) -> Option<super::world::Frame> {
+        self.frame.take()
     }
     pub fn poll(&mut self, now: Instant) -> Result<()> {
         if self.phase == Phase::Ended {
@@ -320,7 +348,7 @@ impl Guest {
                 break;
             };
             ensure!(
-                bytes.len() <= MAX_INPUT,
+                bytes.len() <= MAX_STATE,
                 "Host session message exceeds its limit."
             );
             let message: FromHost = serde_json::from_slice(&bytes)
@@ -349,6 +377,8 @@ impl Guest {
                     self.phase = Phase::Loading;
                     self.deadline = now + LOAD_TIMEOUT;
                     self.sequence = 0;
+                    self.frame = None;
+                    self.last_tick = None;
                     self.pending.clear();
                 }
                 FromHost::Playing { epoch } => {
@@ -359,6 +389,21 @@ impl Guest {
                         "Host started before both players loaded the level."
                     );
                     self.phase = Phase::Playing;
+                }
+                FromHost::Frame { frame } => {
+                    ensure!(
+                        self.phase == Phase::Playing
+                            && self.visit.as_ref().is_some_and(|v| v.epoch == frame.epoch),
+                        "Host snapshot arrived outside its active visit."
+                    );
+                    ensure!(
+                        self.last_tick.is_none_or(|tick| frame.tick > tick)
+                            && frame.acknowledged_input <= self.sequence,
+                        "Host snapshot is out of order."
+                    );
+                    frame.validate()?;
+                    self.last_tick = Some(frame.tick);
+                    self.frame = Some(*frame);
                 }
             }
         }
@@ -480,9 +525,7 @@ mod tests {
                 ..Default::default()
             })
             .unwrap());
-        until(&mut host, &mut guest, |h, _| {
-            h.input.sequence_for_test() == 1
-        });
+        until(&mut host, &mut guest, |h, _| h.input.sequence() == 1);
         assert_eq!(host.controls(Instant::now()).0.wish, Vec2::X);
         assert!(!host.controls(Instant::now()).0.jump);
 
@@ -517,9 +560,7 @@ mod tests {
                 ..Default::default()
             })
             .unwrap();
-        until(&mut host, &mut guest, |h, _| {
-            h.input.sequence_for_test() == 1
-        });
+        until(&mut host, &mut guest, |h, _| h.input.sequence() == 1);
         assert_eq!(host.controls(Instant::now()).0.wish, Vec2::Y);
     }
 
@@ -575,9 +616,7 @@ mod tests {
                 ..Default::default()
             })
             .unwrap();
-        until(&mut host, &mut guest, |h, _| {
-            h.input.sequence_for_test() == 1
-        });
+        until(&mut host, &mut guest, |h, _| h.input.sequence() == 1);
         drop(guest);
         let started = Instant::now();
         while host.phase() != Phase::Waiting {
@@ -597,5 +636,46 @@ mod tests {
         until(&mut host, &mut guest, |_, g| g.phase() == Phase::Loading);
         assert!(host.poll(Instant::now() + LOAD_TIMEOUT).is_err());
         assert_eq!(host.phase(), Phase::Waiting);
+    }
+
+    #[test]
+    fn guest_input_moves_only_its_host_body_and_the_guest_receives_that_authoritative_state() {
+        use crate::{collision::World, inventory::Stats, movement::EYE_HEIGHT};
+        use macroquad::prelude::{vec3, Vec3};
+        let (mut host, mut guest, _) = pair();
+        play(&mut host, &mut guest);
+        let world = World::fixture(&[(vec3(-1000., -1000., -100.), vec3(1000., 1000., 0.))]);
+        let mut roster = crate::coop::world::Roster::new(
+            &world,
+            Vec3::Z * (EYE_HEIGHT + 0.04),
+            0.,
+            Stats::default(),
+        )
+        .unwrap();
+        let start = roster.players[1].player.feet;
+        guest
+            .controls(Input {
+                wish: Vec2::Y,
+                ..Default::default()
+            })
+            .unwrap();
+        until(&mut host, &mut guest, |h, _| h.acknowledged_input() == 1);
+        for _ in 0..120 {
+            roster
+                .step(&world, [Default::default(), host.controls(Instant::now())])
+                .unwrap();
+        }
+        assert!(host
+            .send_frame(roster.frame(1, host.acknowledged_input()))
+            .unwrap());
+        until(&mut host, &mut guest, |_, g| g.frame.is_some());
+        let received = guest.take_frame().unwrap();
+        assert!(received.players[0].player.feet.y.abs() < 0.1);
+        assert!((received.players[1].player.feet.y - start.y - 104.).abs() < 5.);
+        assert_eq!(
+            received.players[1].player.feet,
+            roster.players[1].player.feet
+        );
+        assert_eq!(received.acknowledged_input, 1);
     }
 }

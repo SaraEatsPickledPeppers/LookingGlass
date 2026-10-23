@@ -590,6 +590,9 @@ impl Character {
         }
     }
     pub fn load(assets: &mut Assets) -> Result<Self> {
+        Self::load_for_player(assets, crate::coop::PlayerId::Blue)
+    }
+    pub fn load_for_player(assets: &mut Assets, player: crate::coop::PlayerId) -> Result<Self> {
         let def = Definition::alice(assets)?;
         let skeleton = Skeleton::parse(&assets.read(&format!("{}/{}", def.path, def.model))?)?;
         let mut clips = Vec::new();
@@ -620,7 +623,10 @@ impl Character {
             let tex = if let Some(tex) = textures.get(&path) {
                 tex.clone()
             } else {
-                let image = texture::decode(assets, &path)?;
+                let mut image = texture::decode(assets, &path)?;
+                if player == crate::coop::PlayerId::Red {
+                    crate::coop::palette::red_clothing(&path, &mut image.pixels);
+                }
                 let tex = Texture2D::from_rgba8(image.width, image.height, &image.pixels);
                 tex.set_filter(FilterMode::Linear);
                 textures.insert(path, tex.clone());

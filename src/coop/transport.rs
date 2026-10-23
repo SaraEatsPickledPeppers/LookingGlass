@@ -419,6 +419,8 @@ fn exchange<S: Read + Write>(
     let mut pending = VecDeque::<(Instant, Vec<u8>)>::new();
     let mut random = 0x41872_u32;
     let generation = shared.generation.load(Ordering::Acquire);
+    let mut waiting_input = None;
+    let mut blocked_since = None;
     while !shared.stopped() {
         if shared.disconnect_generation.load(Ordering::Acquire) == generation {
             break;
@@ -473,15 +475,40 @@ fn exchange<S: Read + Write>(
                 bail!("The other player disconnected.");
             }
         }
+        // TCP may deliver a normal internet burst between render frames. Keep
+        // at most one additional message and stop reading until the consumer
+        // catches up. A persistently stalled consumer still has a deadline.
+        if let Some(data) = waiting_input.take() {
+            match incoming.try_send((generation, data)) {
+                Ok(()) => blocked_since = None,
+                Err(TrySendError::Full((_, data))) => waiting_input = Some(data),
+                Err(TrySendError::Disconnected(_)) => return Ok(()),
+            }
+        }
+        anyhow::ensure!(
+            blocked_since.is_none_or(|at: Instant| at.elapsed() < Duration::from_secs(2)),
+            "Game updates could not be consumed fast enough. Rejoin the host."
+        );
         // Bound processing as well as memory so flooding cannot starve outgoing traffic.
         for _ in 0..16 {
+            if waiting_input.is_some() {
+                break;
+            }
             match socket.read() {
                 Ok(message) => {
                     received_at = Instant::now();
                     match message {
                         Message::Binary(bytes) => {
                             anyhow::ensure!(!bytes.is_empty(), "Received an empty game packet.");
-                            incoming.try_send((generation, bytes.to_vec())).map_err(|_| anyhow::anyhow!("Game updates could not be consumed fast enough. Rejoin the host."))?;
+                            match incoming.try_send((generation, bytes.to_vec())) {
+                                Ok(()) => (),
+                                Err(TrySendError::Full((_, data))) => {
+                                    waiting_input = Some(data);
+                                    blocked_since.get_or_insert_with(Instant::now);
+                                    break;
+                                }
+                                Err(TrySendError::Disconnected(_)) => return Ok(()),
+                            }
                         }
                         Message::Ping(_) | Message::Pong(_) => (),
                         Message::Close(_) => return Ok(()),
@@ -577,6 +604,39 @@ mod tests {
             assert!(started.elapsed() < Duration::from_secs(5));
             thread::sleep(Duration::from_millis(5));
         }
+    }
+
+    #[test]
+    fn a_render_stall_applies_backpressure_without_losing_a_normal_burst() {
+        let (host, invite) = host(Conditions::default()).unwrap();
+        let guest = join(invite, Conditions::default()).unwrap();
+        wait_for(|| guest.state() == State::Connected && host.state() == State::Connected);
+        for n in 0..8_u8 {
+            wait_for(|| host.send(vec![n]).unwrap());
+        }
+        thread::sleep(Duration::from_millis(200));
+        assert_eq!(guest.state(), State::Connected);
+        for n in 0..8_u8 {
+            wait_for(|| {
+                guest
+                    .receive()
+                    .map(|packet| {
+                        assert_eq!(packet, vec![n]);
+                        true
+                    })
+                    .unwrap_or(false)
+            });
+        }
+        assert!(host.send(b"after burst".to_vec()).unwrap());
+        wait_for(|| {
+            guest
+                .receive()
+                .map(|packet| {
+                    assert_eq!(packet, b"after burst");
+                    true
+                })
+                .unwrap_or(false)
+        });
     }
 
     #[test]

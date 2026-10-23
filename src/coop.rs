@@ -5,11 +5,14 @@
 pub mod check;
 pub mod hosting;
 pub mod invite;
+pub mod palette;
+pub mod preview;
 pub mod protocol;
 pub mod rules;
 pub mod session;
 pub mod transport;
 pub mod tunnel;
+pub mod world;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
