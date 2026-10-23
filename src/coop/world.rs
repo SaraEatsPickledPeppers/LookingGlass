@@ -22,6 +22,9 @@ pub struct Body {
     pub yaw: f32,
     pub pitch: f32,
     pub running: bool,
+    /// Host tick of the most recent spawn. Presentation must never interpolate
+    /// through a death/respawn or checkpoint restore, even over short distances.
+    pub spawned_at: u64,
 }
 impl Body {
     fn validate(&self) -> Result<()> {
@@ -44,6 +47,7 @@ pub struct Frame {
     pub epoch: u64,
     pub tick: u64,
     pub acknowledged_input: u64,
+    pub checkpoint_generation: u64,
     pub players: [Body; 2],
     pub lives: Lives,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -52,8 +56,10 @@ pub struct Frame {
 impl Frame {
     pub fn validate(&self) -> Result<()> {
         ensure!(self.epoch > 0, "Invalid co-op visit.");
+        ensure!(self.checkpoint_generation <= self.tick, "Invalid co-op checkpoint generation.");
         for body in &self.players {
             body.validate()?;
+            ensure!(body.spawned_at <= self.tick, "Co-op spawn is in the future.");
         }
         self.lives.validate()
     }
@@ -77,6 +83,7 @@ impl Roster {
             yaw,
             pitch: 0.,
             running: false,
+            spawned_at: 0,
         });
         Ok(Self {
             checkpoint: players.clone(),
@@ -122,6 +129,7 @@ impl Roster {
         if events.contains(&DeathEvent::RestoreCheckpoint) {
             self.checkpoint_generation += 1;
             self.players = self.checkpoint.clone();
+            for body in &mut self.players { body.spawned_at = self.tick; }
             ensure!(
                 self.players.iter().all(|p| world.body_clear(p.player.feet)),
                 "Co-op checkpoint is obstructed."
@@ -132,6 +140,8 @@ impl Roster {
                 let body = &mut self.players[dead.index()];
                 body.player = player;
                 body.stats.set_health(RESPAWN_HEALTH)?;
+                body.spawned_at = self.tick;
+                self.lives.respawned(dead);
             }
         }
         Ok(())
@@ -141,10 +151,22 @@ impl Roster {
             epoch,
             tick: self.tick,
             acknowledged_input,
+            checkpoint_generation: self.checkpoint_generation,
             players: self.players.clone(),
             lives: self.lives.clone(),
             combat: None,
         }
+    }
+}
+
+/// Smooth normal network movement, but snap to a newly spawned body. The
+/// authoritative frame, health and spawn clock are never changed by rendering.
+pub fn interpolate_body(body: &mut Body, previous: &Body, elapsed: f32) {
+    if body.spawned_at == previous.spawned_at
+        && body.stats.alive() == previous.stats.alive()
+        && body.player.feet.distance(previous.player.feet) < 128.
+    {
+        body.player.feet = previous.player.feet.lerp(body.player.feet, (elapsed * 20.).clamp(0., 1.));
     }
 }
 
@@ -297,6 +319,8 @@ mod tests {
         assert!(!roster.players[1].stats.alive());
         roster.step(&world, Default::default()).unwrap();
         assert_eq!(roster.players[1].stats.sanity(), RESPAWN_HEALTH);
+        assert_eq!(roster.players[1].spawned_at, 1201);
+        assert_eq!(roster.lives.state(PlayerId::Red), super::super::rules::Life::Alive);
         assert!(
             roster.players[0]
                 .player
@@ -309,6 +333,26 @@ mod tests {
         }
         roster.step(&world, Default::default()).unwrap();
         assert!(roster.players.iter().all(|p| p.stats.sanity() == 100.));
+        assert!(roster.players.iter().all(|p| p.spawned_at == roster.tick));
+        assert_eq!(roster.frame(1, 0).checkpoint_generation, 1);
+    }
+    #[test]
+    fn short_respawns_are_not_blended_with_a_dead_body() {
+        let world = floor();
+        let roster = Roster::new(&world, Vec3::Z * (EYE_HEIGHT + 0.04), 0., Stats::default()).unwrap();
+        let old = roster.players[0].clone();
+        let mut moved = old.clone();
+        moved.player.feet += Vec3::X * 48.;
+        let destination = moved.player.feet;
+        let mut normal = moved.clone();
+        interpolate_body(&mut normal, &old, 0.01);
+        assert!(normal.player.feet.distance(destination) > 30.);
+        moved.spawned_at = 1201;
+        interpolate_body(&mut moved, &old, 0.01);
+        assert_eq!(moved.player.feet, destination);
+        let mut frame = roster.frame(1, 0);
+        frame.players[0].spawned_at = frame.tick + 1;
+        assert!(frame.validate().is_err());
     }
     #[test]
     fn no_safe_neighbor_does_not_place_a_body_over_a_drop() {

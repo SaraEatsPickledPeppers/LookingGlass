@@ -94,7 +94,7 @@ impl Lives {
     }
 
     /// The placement system retries pending spawns as the survivor moves.
-    /// Its success becomes visible through `alive` on the following tick.
+    /// After successful placement and health restoration, call `respawned`.
     pub fn pending_spawn(&self) -> Option<(PlayerId, PlayerId)> {
         if self.restoring_checkpoint {
             return None;
@@ -102,6 +102,13 @@ impl Lives {
         PlayerId::ALL.into_iter().find_map(|id| {
             (self.state(id) == Life::AwaitingSafeSpawn).then_some((id, id.partner()))
         })
+    }
+
+    /// Placement and health have already succeeded. Publish the living state
+    /// in that same snapshot instead of waiting for the following simulation tick.
+    pub fn respawned(&mut self, id: PlayerId) {
+        debug_assert_eq!(self.state(id), Life::AwaitingSafeSpawn);
+        self.states[id.index()] = Life::Alive;
     }
 
     /// Clear the wipe latch only AFTER an earlier checkpoint has loaded and

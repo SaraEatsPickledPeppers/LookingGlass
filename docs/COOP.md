@@ -123,9 +123,9 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after the rendered combat checks: **24%** (previously 21%). Credited
+Overall estimate after the rendered recovery checks: **25%** (previously 24%). Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
-4/15 for two-player movement/presentation, and 5/20 for native targeting, host-owned
+4/15 for two-player movement/presentation, and 6/20 for native targeting, host-owned
 weapons/damage, personal resources and the entrance-checkpoint/respawn slice.
 Scenes/progression and full-campaign verification remain at
 zero. Standalone policy tests receive no campaign credit.
@@ -245,6 +245,45 @@ checks that both bodies moved and both clients agree, verifies separate cameras,
 captures both views and closes its processes/helpers. Add `--local` for loopback.
 The test never writes campaign saves or distributes original assets. Its scripted
 controls are enabled only by the explicit development flag `--coop-drive`.
+
+Add `--death --death-first red` or `--death --death-first blue` for the staged
+guard recovery check. Ordinary movement makes the chosen Alice the nearest target;
+the real guard supplies all damage. The survivor moves during the countdown, then
+the pair continues until a wipe. The harness records both clients' death clocks,
+spawn ticks, camera subjects and native guard state, and checks the ten-second
+delay, 25-health nearby respawn, moving spectator camera and shared entrance reset.
+Use `--delay-ms 40 --jitter-ms 20` to add outbound network delay per sender.
+Both rendered recovery scenarios still cover only the school encounter.
+
+Snapshots identify each new body by its host spawn tick. Guest smoothing and
+camera collision history reset when the watched player changes or respawns,
+including short-distance respawns and checkpoint resets. Successful placement,
+health and the living state are published together. Co-op draws its own spectator
+countdown without the single-player retry panel; single-player keeps that panel.
+
+On 2026-10-23, a rendered local recovery run killed Blue first at host tick 2006
+and respawned her at tick 3206 with 25 health, 48 units from Red. Blue's camera
+followed Red moving during the countdown and switched back at recovery. Both
+clients reported the same respawn and the same entrance reset at tick 4208,
+including restored guard health, position and action state. Captures confirmed the
+spectator view no longer contains the single-player retry panel. Evidence:
+`private/coop/play-test-26fd3e2ac8944ab2b33ed7227fdb0d27`.
+
+The public internet recovery check added 40 ms delay and 0-20 ms jitter per sender.
+Red died at tick 2077 and respawned at tick 3277 with 25 health, 48 units from Blue.
+Her camera followed Blue moving during the countdown. Both clients agreed on the
+entrance reset at tick 4261 and the guest acknowledged 1098 inputs. Both processes
+exited successfully and the owned tunnel stopped. Evidence:
+`private/coop/play-test-55aa3fe401e24789a3fd6f1f5a9268dd`.
+The reverse order also passed over the public connection with the same added
+delay/jitter: Blue died at tick 2004, respawned at tick 3204 with 25 health and
+48-unit separation, and both clients restored the entrance at tick 4213. This
+also exercises delayed guest movement while the host spectates. Evidence:
+`private/coop/play-test-65f645a093ca4b0b98770c097ceff993`. No game windows or owned
+tunnel helper remained after the tests.
+The recovery revision passed 709 Rust tests (one unrelated ignored test), plus the
+19 source-package and portable/Windows setup tests. The reset tested here restores
+the entrance bodies and native guard, not the full campaign world or a saved puzzle.
 
 On 2026-10-23 the first loopback rendered test passed: blue moved 207.14 units and
 red 112.97 units (limited by the wall), both clients agreed within one unit, and

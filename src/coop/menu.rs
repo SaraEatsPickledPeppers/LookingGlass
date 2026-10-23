@@ -164,6 +164,8 @@ pub async fn open(assets: &mut Assets, options: &Options, backdrop: &mut Menu, v
                                 invite: Some(invite),
                                 start: None,
                                 drive: false,
+                                death_check: None,
+                                conditions: Default::default(),
                             })
                         }
                         Err(error) => message = error.to_string(),
@@ -200,6 +202,8 @@ pub async fn open(assets: &mut Assets, options: &Options, backdrop: &mut Menu, v
                             invite: None,
                             start: Some(visit.clone()),
                             drive: false,
+                            death_check: None,
+                            conditions: Default::default(),
                         })
                     }
                     1 => {
@@ -212,7 +216,7 @@ pub async fn open(assets: &mut Assets, options: &Options, backdrop: &mut Menu, v
             }
             text(
                 &ui,
-                "Development build: movement only; campaign work continues.",
+                "Development build: campaign co-op is still in progress.",
                 378.,
                 12.,
             );

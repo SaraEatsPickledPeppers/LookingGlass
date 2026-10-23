@@ -200,10 +200,26 @@ fn run() -> Result<()> {
             "--coop-host" | "--coop-join" => {
                 o.coop = Some(coop::preview::Launch { host: arg == "--coop-host", internet: true,
                     invite_file: Some(args.next().context("Co-op requires an invite file")?.into()),
-                    invite: None, start: None, drive: false });
+                    invite: None, start: None, drive: false, death_check: None, conditions: Default::default() });
             }
             "--coop-local" => o.coop.as_mut().context("Use --coop-host before --coop-local")?.internet = false,
             "--coop-drive" => o.coop.as_mut().context("Choose a co-op role before --coop-drive")?.drive = true,
+            "--coop-death-check" => {
+                let launch = o.coop.as_mut().context("Choose a co-op role before --coop-death-check")?;
+                launch.drive = true;
+                launch.death_check = Some(match args.next().as_deref() {
+                    Some("blue") => coop::PlayerId::Blue,
+                    Some("red") => coop::PlayerId::Red,
+                    _ => anyhow::bail!("--coop-death-check requires blue or red as the first victim"),
+                });
+            }
+            "--coop-delay-ms" | "--coop-jitter-ms" => {
+                let value: u16 = args.next().context("Co-op network delay requires milliseconds")?.parse()?;
+                anyhow::ensure!(value <= 500, "Co-op test delay must be between 0 and 500 ms");
+                let launch = o.coop.as_mut().context("Choose a co-op role before network test conditions")?;
+                if arg == "--coop-delay-ms" { launch.conditions.delay_ms = value; }
+                else { launch.conditions.jitter_ms = value; }
+            }
             "--difficulty" => {
                 o.difficulty = powerups::Difficulty::parse(
                     &args.next().context("--difficulty requires a name")?,

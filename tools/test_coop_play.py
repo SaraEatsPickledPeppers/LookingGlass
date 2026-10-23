@@ -26,7 +26,65 @@ def distance(a, b):
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
 
-def run(exe, data, local, combat=False):
+def recovery_report(history, role, initial, first_victim):
+    """Verify host-clock timing using observed deaths and authoritative spawn ticks."""
+    last_death = [None, None]
+    respawns = {}
+    wipe = None
+    local = 0 if role == 'host' else 1
+    followed = []
+    for report in history:
+        tick = report['tick']
+        players = report['players']
+        if report['checkpoint_generation']:
+            if wipe is None:
+                assert report['checkpoint_generation'] == 1
+                assert all(p['health'] == 100 for p in players), 'Checkpoint did not restore both players health'
+                assert players[0]['spawned_at'] == players[1]['spawned_at'] > 0
+                assert report['lives']['states'] == ['Alive', 'Alive']
+                for body, old in zip(players, initial['frame']['players']):
+                    assert distance(body['feet'], old['player']['feet']) < 8, 'Checkpoint did not restore entrance positions'
+                old_guard = initial['combat']['npcs']['actors'][0]['guard']
+                assert report['guard']['health'] == old_guard['health']
+                assert distance(report['guard']['feet'], old_guard['feet']) < 5, 'Enemy position was not restored with the players'
+                assert report['guard']['time'] < 1, 'Enemy action was not restarted'
+                wipe = players[0]['spawned_at']
+            continue
+        for i, (body, life) in enumerate(zip(players, report['lives']['states'])):
+            if body['health'] <= 0:
+                assert isinstance(life, dict) and 'Spectating' in life, 'Dead player did not enter the countdown'
+                remaining = life['Spectating']['ticks_left']
+                assert 0 < remaining <= 1200
+                last_death[i] = tick - (1200 - remaining)
+                if i == local:
+                    partner = 1 - i
+                    assert report['camera_player'] == ('Blue', 'Red')[partner], 'Dead player did not spectate the survivor'
+                    subject = report['camera_subject_feet']
+                    assert distance(report['camera_target'][:2], subject[:2]) < 1, 'Spectator camera did not follow its rendered subject'
+                    assert distance(subject, players[partner]['feet']) < 24, 'Spectator body drifted away from authoritative survivor'
+                    if local == first_victim:
+                        followed.append(report['camera_target'])
+            elif body['spawned_at'] and (i, body['spawned_at']) not in respawns:
+                assert last_death[i] is not None, 'Respawn without an observed death'
+                assert body['spawned_at'] - last_death[i] == 1200, 'Respawn did not wait exactly ten host simulation seconds'
+                assert body['health'] == 25, f"Respawn health was {body['health']}, expected 25"
+                assert life == 'Alive', 'Respawn health and life state were not published together'
+                separation = distance(body['feet'], players[1 - i]['feet'])
+                assert 40 <= separation <= 110, f'Unsafe or distant respawn: {separation}'
+                if i == local:
+                    assert report['camera_player'] == ('Blue', 'Red')[i], 'Camera did not return to the respawned player'
+                    assert distance(report['camera_target'][:2], body['feet'][:2]) < 1, 'Respawn camera blended from old body'
+                respawns[(i, body['spawned_at'])] = {'player': i, 'death_tick': last_death[i],
+                    'spawn_tick': body['spawned_at'], 'health': body['health'], 'separation': separation}
+    assert respawns, 'No ten-second respawn was observed before the wipe'
+    assert next(iter(respawns))[0] == first_victim, 'Encounter killed the wrong first victim'
+    if local == first_victim:
+        assert followed and max(distance(p, followed[0]) for p in followed) > 10, 'Spectator camera never followed a moving survivor'
+    assert wipe is not None, 'No shared checkpoint restore was observed'
+    return {'respawns': list(respawns.values()), 'checkpoint_tick': wipe}
+
+
+def run(exe, data, local, combat=False, death=False, delay=0, jitter=0, death_first='red'):
     folder = ROOT / 'private' / 'coop' / ('play-test-' + uuid.uuid4().hex)
     folder.mkdir(parents=True)
     invite = folder / 'invite.txt'
@@ -35,6 +93,7 @@ def run(exe, data, local, combat=False):
     logs = []
     initial = {}
     latest = {}
+    history = {role: [] for role in ('host', 'guest')}
     minimum_health = {role: [100., 100.] for role in ('host', 'guest')}
     try:
         def start(role):
@@ -47,8 +106,11 @@ def run(exe, data, local, combat=False):
                     str(invite), '--coop-drive']
             if local and role == 'host':
                 args.append('--coop-local')
-            if combat and role == 'host':
+            if (combat or death) and role == 'host':
                 args.append('--combat-preview')
+            if death:
+                args += ['--coop-death-check', death_first]
+            args += ['--coop-delay-ms', str(delay), '--coop-jitter-ms', str(jitter)]
             process = subprocess.Popen(args, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, creationflags=flags)
             processes.append(process)
             return process
@@ -69,6 +131,14 @@ def run(exe, data, local, combat=False):
                     latest[role] = report
                     minimum_health[role] = [min(old, body['stats']['sanity']) for old, body in
                         zip(minimum_health[role], report['frame']['players'])]
+                    if death and (not history[role] or history[role][-1]['tick'] != report['frame']['tick']):
+                        frame = report['frame']
+                        history[role].append({'tick': frame['tick'], 'checkpoint_generation': frame['checkpoint_generation'],
+                            'lives': frame['lives'], 'camera_player': report['camera_player'], 'camera_target': report['camera_target'],
+                            'camera_subject_feet': report['camera_subject_feet'],
+                            'guard': report['combat']['npcs']['actors'][0]['guard'],
+                            'players': [{'health': b['stats']['sanity'], 'feet': b['player']['feet'], 'spawned_at': b['spawned_at']}
+                                for b in frame['players']]})
             time.sleep(.05)
         assert host.returncode == 0, (folder / 'host.log').read_text()
         assert guest.returncode == 0, (folder / 'guest.log').read_text()
@@ -81,7 +151,12 @@ def run(exe, data, local, combat=False):
         after = positions(latest['host'])
         replicated = positions(latest['guest'])
         moved = [distance(a, b) for a, b in zip(before, after)]
-        if combat:
+        recovery = None
+        if death:
+            recovery = {role: recovery_report(history[role], role, initial[role], 0 if death_first == 'blue' else 1)
+                        for role in ('host', 'guest')}
+            assert recovery['host'] == recovery['guest'], 'Clients disagreed about death/respawn/checkpoint history'
+        elif combat:
             guard = lambda r: r['combat']['npcs']['actors'][0]['guard']['health']
             assert guard(initial['host']) > 0, 'Encounter did not begin with a living guard'
             assert guard(latest['host']) == guard(latest['guest']) == 0, 'Both clients must see the defeated guard'
@@ -95,7 +170,7 @@ def run(exe, data, local, combat=False):
             assert all(d > 5 for d in moved), f'Both independently driven players must move: {moved}'
         assert all(distance(a, b) < 1 for a, b in zip(after, replicated)), 'Guest diverged from the host'
         assert latest['guest']['frame']['acknowledged_input'] > 0, 'No guest controls acknowledged'
-        cameras = initial if combat else latest
+        cameras = initial if combat or death else latest
         # The school back wall retracts both camera arms to the same Y plane.
         # Their origins remain distinct, but can be only a few units apart even
         # when they follow players standing 48 units apart. Role checks above
@@ -103,15 +178,23 @@ def run(exe, data, local, combat=False):
         assert distance(cameras['host']['camera'], cameras['guest']['camera']) > .1, 'Both clients used the same camera origin'
         for role in ('host', 'guest'):
             assert (folder / role / 'coop-screenshot.png').exists(), 'Missing rendered capture'
-        result = {'passed': True, 'internet': not local, 'combat': combat, 'moved': moved,
+            if death:
+                for stage in ('spectating', 'respawn', 'checkpoint'):
+                    assert (folder / role / ('coop-' + stage + '.png')).exists(), 'Missing recovery capture: ' + stage
+        result = {'passed': True, 'internet': not local, 'combat': combat, 'death': death, 'recovery': recovery,
+                  'delay_ms': delay, 'jitter_ms': jitter, 'death_first': death_first if death else None, 'moved': moved,
                   'initial': initial, 'final': latest, 'minimum_health': minimum_health,
-                  'scope': 'native enemy, weapon and personal damage; campaign not validated' if combat else 'two-player movement and replication; campaign not validated'}
+                  'scope': 'native enemy death, timed spectating/respawn and entrance checkpoint; campaign not validated' if death else
+                    'native enemy, weapon and personal damage; campaign not validated' if combat else 'two-player movement and replication; campaign not validated'}
         (folder / 'result.json').write_text(json.dumps(result, indent=2))
-        print('PASS two rendered processes:', 'shared combat and personal damage.' if combat else 'independent movement/cameras and matching host/guest state.')
+        print('PASS two rendered processes:', 'ten-second respawn, spectator cameras and shared entrance checkpoint.' if death else
+            'shared combat and personal damage.' if combat else 'independent movement/cameras and matching host/guest state.')
         print('Evidence:', folder)
     finally:
         (folder / 'diagnostic.json').write_text(json.dumps({'initial': initial, 'latest': latest, 'minimum_health': minimum_health,
             'exit_codes': [p.poll() for p in processes]}, indent=2))
+        if death:
+            (folder / 'lifecycle.json').write_text(json.dumps(history, indent=2))
         for process in processes:
             if process.poll() is None:
                 if os.name == 'nt':
@@ -129,6 +212,13 @@ if __name__ == '__main__':
     parser.add_argument('--exe', type=Path, default=ROOT / 'target/debug/looking-glass.exe')
     parser.add_argument('--data', type=Path, required=True)
     parser.add_argument('--local', action='store_true')
-    parser.add_argument('--combat', action='store_true', help='Staged school guard, using real Blade attacks')
+    scenario = parser.add_mutually_exclusive_group()
+    scenario.add_argument('--combat', action='store_true', help='Staged school guard, using real Blade attacks')
+    scenario.add_argument('--death', action='store_true', help='School guard encounter: real deaths, moving spectator, respawn and wipe')
+    parser.add_argument('--death-first', choices=('red', 'blue'), default='red')
+    parser.add_argument('--delay-ms', type=int, default=0)
+    parser.add_argument('--jitter-ms', type=int, default=0)
     args = parser.parse_args()
-    run(args.exe.resolve(), args.data.resolve(), args.local, args.combat)
+    if not (0 <= args.delay_ms <= 500 and 0 <= args.jitter_ms <= 500):
+        parser.error('Network test delays must be between 0 and 500 milliseconds')
+    run(args.exe.resolve(), args.data.resolve(), args.local, args.combat, args.death, args.delay_ms, args.jitter_ms, args.death_first)

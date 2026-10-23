@@ -1,4 +1,4 @@
-//! Windowed development entry point for the shared movement simulation. This
+//! Windowed development entry point for shared movement and combat. This
 //! does not claim campaign/controller support and never writes campaign saves.
 use super::{
     hosting::{Hosting, Status},
@@ -24,6 +24,8 @@ pub struct Launch {
     pub invite: Option<Invite>,
     pub start: Option<Visit>,
     pub drive: bool,
+    pub death_check: Option<PlayerId>,
+    pub conditions: Conditions,
 }
 pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Result<()> {
     let ui = crate::ui::Ui::load(assets)?;
@@ -37,7 +39,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         let identity = Identity::current(assets.fingerprint()?);
         let (mut host, mut guest, invite) = if launch.host {
             hosting = Some(Hosting::start(crate::preferences::path("coop"),
-                PathBuf::from("private/coop/helpers"), launch.internet, Conditions::default())?);
+                PathBuf::from("private/coop/helpers"), launch.internet, launch.conditions)?);
             let setup = hosting.as_ref().unwrap();
             let (peer, invite) = loop {
                 if is_quit_requested() || is_key_pressed(KeyCode::Escape) { return Ok(()); }
@@ -65,7 +67,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
             let invite = if let Some(invite) = &launch.invite { invite.clone() } else {
                 Invite::parse(&std::fs::read_to_string(launch.invite_file.as_ref().context("Paste an invite link first.")?).context("The host invite is not ready.")?)?
             };
-            (None, Some(Guest::new(transport::join(invite, Conditions::default())?, identity, Instant::now())?), None)
+            (None, Some(Guest::new(transport::join(invite, launch.conditions)?, identity, Instant::now())?), None)
         };
         let local = if launch.host { PlayerId::Blue } else { PlayerId::Red };
         let mut visit = host.as_ref().map(|h| h.visit().clone());
@@ -84,6 +86,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
             next_frame().await;
         }
         let visit = visit.unwrap();
+        anyhow::ensure!(launch.death_check.is_none() || visit.combat_preview,
+            "The co-op death check requires the staged school combat preview.");
         clear_background(BLACK);
         ui.toast("Opening Wonderland for two...", screen_height() * 0.5);
         next_frame().await;
@@ -108,6 +112,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         look.inverted = prefs.invert_mouse;
         let mut controls = crate::input::Input::default();
         let mut camera = crate::camera::Follow::default();
+        let mut camera_subject = None;
         let mut local_latch = RemoteInput::default();
         let mut keys = Input::default();
         let mut local_sequence = 0;
@@ -124,6 +129,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         let mut weapon_buttons = crate::weapon_rules::Buttons::default();
         weapon_buttons.block();
         let mut captured_midpoint = false;
+        let mut captured_recovery = [false; 3];
+        let mut restored_at = None;
         loop {
             let now = Instant::now();
             if let Some(setup) = &hosting {
@@ -157,7 +164,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
             let flat = vec2(yaw.cos(), yaw.sin());
             let right = vec2(yaw.sin(), -yaw.cos());
             let direction = vec3(yaw.cos() * pitch.cos(), yaw.sin() * pitch.cos(), pitch.sin());
-            let input_active = focused && !menu && playing;
+            let input_active = focused && !menu && playing && !launch.drive;
             let held = |key| input_active && controls.key(&prefs, key, false);
             let pressed = |key| input_active && controls.key(&prefs, key, true);
             let axes = if input_active { controls.movement() } else { Vec2::ZERO };
@@ -190,7 +197,24 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 keys.run = false;
                 keys.wish = if (2. ..4.).contains(&age) { if launch.host { Vec2::Y } else { Vec2::X } } else { Vec2::ZERO };
                 keys.swim = keys.wish.extend(0.);
-                if visit.combat_preview {
+                if let Some(victim) = launch.death_check {
+                    // Let the real guard inflict damage. No health writes or
+                    // synthetic kill commands are used by this scenario.
+                    keys.wish = Vec2::ZERO;
+                    if victim == PlayerId::Blue && local == PlayerId::Blue && (2. ..3.).contains(&age) {
+                        keys.wish = Vec2::Y;
+                    }
+                    // The survivor walks during the first part of the countdown
+                    // so the spectator check exercises a moving camera subject.
+                    if local != victim && display.as_ref().is_some_and(|frame|
+                        matches!(frame.lives.state(victim), super::rules::Life::Spectating { ticks_left } if ticks_left > 1120)) {
+                        keys.wish = if local == PlayerId::Blue { Vec2::Y } else { Vec2::X };
+                    }
+                    keys.swim = keys.wish.extend(0.);
+                    keys.primary = false;
+                    keys.alternate = false;
+                    keys.weapon = None;
+                } else if visit.combat_preview {
                     // A reproducible real-weapon encounter, not injected damage.
                     keys.wish = Vec2::ZERO;
                     keys.swim = Vec3::ZERO;
@@ -240,14 +264,15 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 if !launch.host {
                     if let Some(previous) = &presented {
                         for (body, old) in visual.players.iter_mut().zip(&previous.players) {
-                            if body.player.feet.distance(old.player.feet) < 128. {
-                                body.player.feet = old.player.feet.lerp(body.player.feet, (elapsed * 20.).min(1.));
-                            }
+                            world::interpolate_body(body, old, elapsed);
                         }
                     }
                 }
                 let watched = world::camera_player(&visual, local);
                 let watched_body = &visual.players[watched.index()];
+                let camera_subject_feet = watched_body.player.feet;
+                let subject = (watched, watched_body.spawned_at);
+                if camera_subject != Some(subject) { camera.reset(); camera_subject = Some(subject); }
                 let (camera_eye, target, show_local) = camera.update(&scene.world, watched_body.player.feet, direction, 180., elapsed);
                 let view = Camera3D { position: camera_eye, target, up: Vec3::Z,
                     fovy: 60_f32.to_radians(), z_near: 2., z_far: 30000., ..Default::default() };
@@ -279,7 +304,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 scene.draw(camera_eye, frame.tick as f32 * FIXED_DT, false, true, &[]);
                 presented = Some(visual);
                 set_default_camera();
-                hud.draw(personal, &arena.catalog, false, &controls, &prefs);
+                hud.draw_coop(personal, &arena.catalog, &controls, &prefs);
                 ui.toast(&format!("{} Alice / Sanity {:.0}", if launch.host { "Blue" } else { "Red" }, frame.players[local.index()].stats.sanity()), 24.);
                 if !frame.players[local.index()].stats.alive() {
                     let message = match frame.lives.state(local) {
@@ -295,7 +320,9 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                     // briefly hold this file on Windows; never end gameplay.
                     if let Ok(bytes) = serde_json::to_vec(&serde_json::json!({ "role": if launch.host { "host" } else { "guest" },
                         "pid": std::process::id(), "playing": playing, "frame": frame, "focused": focused,
-                        "camera_player": watched, "camera": camera_eye, "combat": arena.snapshot() })) {
+                        "camera_player": watched, "camera": camera_eye, "camera_target": target,
+                        "camera_subject_feet": camera_subject_feet,
+                        "combat": arena.snapshot() })) {
                         let _ = std::fs::write(path, bytes);
                     }
                     report_at = now;
@@ -344,7 +371,29 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 crate::viewer::save_capture(&crate::preferences::path("coop-midpoint.png"))?;
                 captured_midpoint = true;
             }
-            if launch.drive && started_playing.is_some_and(|start| start.elapsed()
+            if launch.death_check.is_some() {
+                if let Some(frame) = &display {
+                    let milestones = [
+                        frame.players.iter().any(|p| !p.stats.alive()),
+                        frame.checkpoint_generation == 0 && frame.players.iter().any(|p| p.spawned_at > 0 && p.stats.alive()),
+                        frame.checkpoint_generation > 0,
+                    ];
+                    for (i, name) in ["spectating", "respawn", "checkpoint"].into_iter().enumerate() {
+                        if milestones[i] && !captured_recovery[i] {
+                            crate::viewer::save_capture(&crate::preferences::path(&format!("coop-{name}.png")))?;
+                            captured_recovery[i] = true;
+                        }
+                    }
+                    if milestones[2] { restored_at.get_or_insert(now); }
+                }
+                if restored_at.is_some_and(|at: Instant| at.elapsed() >= Duration::from_secs(if launch.host { 3 } else { 2 })) {
+                    crate::viewer::save_capture(&crate::preferences::path("coop-screenshot.png"))?;
+                    break;
+                }
+                anyhow::ensure!(!started_playing.is_some_and(|start| start.elapsed() > Duration::from_secs(90)),
+                    "The staged death/respawn/wipe scenario did not complete.");
+            }
+            if launch.drive && launch.death_check.is_none() && started_playing.is_some_and(|start| start.elapsed()
                 >= Duration::from_secs(if launch.host { 12 } else { 10 }
                     + if visit.combat_preview { 4 } else { 0 })) {
                 crate::viewer::save_capture(&crate::preferences::path("coop-screenshot.png"))?;
