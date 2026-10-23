@@ -136,6 +136,16 @@ impl Arena {
             return self.finish(roster, map, world, true);
         }
         self.stage.conversations(roster, world, &mut inputs, &mut self.npcs);
+        if !self.stage.busy() {
+            let talking = self.stage.story.busy();
+            let advance = talking && inputs.iter().zip(&roster.players)
+                .any(|((movement, _), body)| body.stats.alive() && movement.use_pressed);
+            if talking {
+                // E belongs to this dialogue, never also to a door or ledge.
+                for (movement, _) in &mut inputs { movement.use_pressed = false; }
+            }
+            self.stage.speech_step(roster, world, advance);
+        }
         if self.stage.busy() {
             roster.tick += 1;
             return self.finish(roster, map, world, true);
@@ -147,6 +157,12 @@ impl Arena {
         if self.stage.busy() {
             roster.tick += 1;
             return self.finish(roster, map, world, true);
+        }
+        if self.stage.story.busy() {
+            for character in &mut self.characters {
+                character.cancel_weapon_action();
+                character.dismiss_summon();
+            }
         }
         for (character, (movement, _)) in self.characters.iter().zip(&mut inputs) {
             if character.attack_movement_locked() || character.ice_locked() {
@@ -170,12 +186,17 @@ impl Arena {
         before.extend(self.stage.interactions.loot_sources());
         // One clock for the world. Either player's Watch can stop its enemies;
         // each player's own movement, weapon and resource clocks still run.
-        let world_dt = roster
+        let talking = self.stage.story.busy();
+        let world_dt = if talking { 0. } else { roster
             .players
             .iter()
-            .fold(FIXED_DT, |dt, b| b.stats.powers.world_dt(dt));
+            .fold(FIXED_DT, |dt, b| b.stats.powers.world_dt(dt)) };
         for index in 0..2 {
             let character = &mut self.characters[index];
+            if talking {
+                character.cancel_weapon_action();
+                character.dismiss_summon();
+            }
             let body = &mut roster.players[index];
             if !body.stats.alive() {
                 character.die();
@@ -190,7 +211,7 @@ impl Arena {
             character.world_time(FIXED_DT, world_dt);
             character.notarget(body.stats.ignores_alice());
             let input = inputs[index].1;
-            let click = if !body.stats.alive() {
+            let click = if talking || !body.stats.alive() {
                 None
             } else if input.primary {
                 Some(false)
@@ -275,7 +296,7 @@ impl Arena {
         self.finish(roster, map, world, false)
     }
     fn story_cast(&mut self, roster: &Roster, world: &World) {
-        let owner = self.stage.owner.unwrap_or(PlayerId::Blue);
+        let owner = self.stage.speaker();
         self.npcs.story_pose(&self.stage.story, FIXED_DT, world, roster.players[owner.index()].player.eye());
     }
     // The hidden cast is derived presentation, not a saved NPC field. Rebuild

@@ -14,6 +14,7 @@ struct Replay {
     leader: PlayerId,
     owners: BTreeMap<String, PlayerId>,
     reunions: usize,
+    moving_speech: usize,
 }
 impl Replay {
     fn new(assets: &mut Assets, leader: PlayerId) -> Result<Self> {
@@ -26,10 +27,12 @@ impl Replay {
         arena.reset_characters(&roster.players);
         let mut art = crate::viewer::LevelArt::default();
         art.prepare(assets, &scene, &arena.stage.interactions, false)?;
-        Ok(Self { scene, arena, roster, art, leader, owners: BTreeMap::new(), reunions: 0 })
+        Ok(Self { scene, arena, roster, art, leader, owners: BTreeMap::new(), reunions: 0, moving_speech: 0 })
     }
     async fn step(&mut self, movement: [Controls; 2]) -> Result<()> {
         let was_scene = self.arena.stage.owner;
+        let speech = self.arena.stage.story.busy() && !self.arena.stage.busy();
+        let before = self.roster.players.each_ref().map(|b| (b.player.feet, b.warped_at));
         let mut inputs = std::array::from_fn(|i| (movement[i], Input {
             yaw: self.roster.players[i].yaw, pitch: self.roster.players[i].pitch, ..Default::default()
         }));
@@ -37,6 +40,7 @@ impl Replay {
             // Advance original dialogue through its ordinary key edge; do not skip scenes.
             inputs[owner.index()].0.use_pressed = self.roster.tick % 30 == 0;
         } else {
+            if speech { inputs[self.leader.index()].0.use_pressed = self.roster.tick % 30 == 0; }
             let mut targets = self.arena.npcs.targets();
             if let Some(cast) = &self.arena.stage.interactions.encounters { targets.extend(cast.targets()); }
             targets.extend(self.arena.stage.interactions.shot_targets());
@@ -60,6 +64,13 @@ impl Replay {
             }
         }
         self.arena.step(&mut self.roster, &self.scene.map, &mut self.scene.world, inputs)?;
+        if speech && !self.arena.stage.busy() {
+            ensure!(self.roster.players.iter().zip(before).all(|(b, (_, warp))| b.warped_at == warp),
+                "Ordinary speech teleported a player");
+            if self.roster.players.iter().zip(before).any(|(b, (feet, _))| b.player.feet.distance(feet) > 0.1) {
+                self.moving_speech += 1;
+            }
+        }
         if let Some(owner) = self.arena.stage.owner {
             if let Some(id) = self.arena.stage.interactions.village.as_ref().unwrap().cinema.scene_id() {
                 if let Some(old) = self.owners.insert(id.into(), owner) { ensure!(old == owner, "Scene owner changed mid-scene"); }
@@ -68,6 +79,8 @@ impl Replay {
         if was_scene.is_some() && self.arena.stage.owner.is_none() && self.arena.stage.transition.is_none() {
             self.reunions += 1;
             ensure!(self.roster.players[0].player.feet.distance(self.roster.players[1].player.feet) <= 110., "Scene did not reunite players");
+            ensure!(self.roster.players.iter().all(|b| !b.player.grounded || b.player.velocity == Vec3::ZERO),
+                "Scene released grounded Alice with stale movement momentum");
             self.draw();
             crate::viewer::save_capture(&crate::preferences::path("coop-village")
                 .join(format!("{:?}-reunion-{}.png", self.leader, self.reunions)))?;
@@ -192,6 +205,8 @@ impl Replay {
         self.wait(8.).await?;
         ensure!(self.arena.stage.transition == Some(("pandemonium".into(),Some("player_start".into()))), "The authored village exit was not reached");
         ensure!(self.arena.stage.interactions.village.as_ref().unwrap().cinema.state.done.len() == 6, "Not all six village scenes completed");
+        ensure!(self.reunions == 6 && self.moving_speech > 0,
+            "Voice-only lines must permit movement without an extra scene reunion");
         ensure!(self.owners.len() == 6 && self.owners.iter().all(|(name, owner)|
             *owner == if name == "entry" { PlayerId::Blue } else { self.leader }),
             "The first arriving player did not own every triggered village scene: {:?}", self.owners);
@@ -209,7 +224,8 @@ pub async fn check(assets: &mut Assets) -> Result<()> {
         crate::viewer::save_capture(&folder.join(format!("{leader:?}.png")))?;
         std::fs::write(folder.join(format!("{leader:?}.json")), serde_json::to_vec(&serde_json::json!({
             "passed": result.is_ok(), "error": result.as_ref().err().map(|e| format!("{e:#}")), "leader": leader,
-            "owners": replay.owners, "reunions": replay.reunions, "frame": replay.roster.frame(1,0),
+            "owners": replay.owners, "reunions": replay.reunions, "moving_speech_ticks": replay.moving_speech,
+            "frame": replay.roster.frame(1,0),
             "arena": replay.arena.snapshot(), "build": env!("LOOKING_GLASS_BUILD"),
             "scope": "native two-body production simulation; not a separate-process network test"
         }))?)?;

@@ -21,6 +21,7 @@ pub mod tunnel;
 pub mod world;
 pub mod stage;
 pub mod village_check;
+pub mod route_driver;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,

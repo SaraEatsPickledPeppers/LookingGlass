@@ -69,7 +69,7 @@ impl Stage {
             interactions.entry_story(&mut story);
         }
         interactions.sync(world);
-        let owner = (interactions.scripted() || story.busy()).then_some(PlayerId::Blue);
+        let owner = controls_scene(&interactions).then_some(PlayerId::Blue);
         let contacts = Contacts::new(&interactions);
         let mut stage = Self {
             interactions,
@@ -137,12 +137,13 @@ impl Stage {
         self.contacts = Contacts::new(&self.interactions);
         self.notices = [None, None];
         self.transition = None;
-        self.owner = (self.interactions.scripted() || self.story.busy()).then_some(self.last_owner);
+        self.owner = controls_scene(&self.interactions).then_some(self.last_owner);
         self.initial = Some(self.snapshot());
     }
     pub fn busy(&self) -> bool {
         self.owner.is_some() || self.transition.is_some()
     }
+    pub fn speaker(&self) -> PlayerId { self.owner.unwrap_or(self.last_owner) }
     pub fn respawned(&mut self, id: PlayerId) {
         self.contacts.reset_player(id);
     }
@@ -158,9 +159,25 @@ impl Stage {
             &mut self.transition,
             &mut self.notices,
         );
-        if self.owner.is_none() && (self.interactions.scripted() || self.story.busy()) {
+        if self.owner.is_none() && controls_scene(&self.interactions) {
             self.owner = Some(id);
             self.last_owner = id;
+        }
+    }
+    /// Ordinary speech keeps exploration running, as in single player. Only a
+    /// controller-owned camera/motion scene freezes and later reunites the pair.
+    pub fn speech_step(&mut self, roster: &mut Roster, world: &World, advance: bool) {
+        let ready = self.interactions.prepare_story(&mut self.story);
+        self.story.tick(if ready { FIXED_DT } else { 0. }, advance);
+        self.interactions.sync_cinematic_story(&self.story);
+        for name in self.story.take_completed() {
+            let events = self.interactions.completed_dialogue(&name);
+            self.accept(events, self.last_owner, roster, world);
+        }
+        self.hints.sync(&self.interactions);
+        self.transition = self.interactions.take_story_exit(&mut self.story).or(self.transition.take());
+        if self.owner.is_none() && controls_scene(&self.interactions) {
+            self.owner = Some(self.last_owner);
         }
     }
     pub fn conversations(&mut self, roster: &mut Roster, world: &World,
@@ -173,6 +190,7 @@ impl Stage {
             let Some(talk) = self.interactions.conversation(world, body.player.eye(),
                 direction(input.1.yaw, input.1.pitch), npcs, &self.story) else { continue; };
             if let Some(events) = self.interactions.start_conversation(talk, &mut self.story) {
+                self.last_owner = id;
                 input.0.use_pressed = false;
                 npcs.begin_talk(talk.actor());
                 self.accept(events, id, roster, world);
@@ -235,7 +253,7 @@ impl Stage {
                 .map(|b| &mut b.player)
                 .collect::<Vec<_>>();
             self.interactions.movers_pair(dt, map, world, &mut bodies)?;
-            if self.interactions.scripted() {
+            if controls_scene(&self.interactions) {
                 self.owner = Some(self.last_owner);
             }
         }
@@ -282,7 +300,7 @@ impl Stage {
             }
         }
         self.accept(result.shared, last, roster, world);
-        if self.owner.is_none() && (self.interactions.scripted() || self.story.busy()) {
+        if self.owner.is_none() && controls_scene(&self.interactions) {
             self.owner = Some(last);
         }
         Ok(())
@@ -316,22 +334,8 @@ impl Stage {
             world,
             &mut roster.players[owner.index()].player,
         )?;
-        let ready = self.interactions.prepare_story(&mut self.story);
-        self.story.tick(
-            if ready { FIXED_DT } else { 0. },
-            inputs[owner.index()].0.use_pressed,
-        );
-        self.interactions.sync_cinematic_story(&self.story);
-        for name in self.story.take_completed() {
-            let events = self.interactions.completed_dialogue(&name);
-            self.accept(events, owner, roster, world);
-        }
-        self.hints.sync(&self.interactions);
-        self.transition = self
-            .interactions
-            .take_story_exit(&mut self.story)
-            .or(self.transition.take());
-        if self.transition.is_none() && !self.interactions.scripted() && !self.story.busy() {
+        self.speech_step(roster, world, inputs[owner.index()].0.use_pressed);
+        if self.transition.is_none() && !controls_scene(&self.interactions) && !self.story.busy() {
             let partner = owner.partner();
             if roster.players[partner.index()].stats.alive() {
                 let Some(player) =
@@ -345,6 +349,10 @@ impl Stage {
             }
             let facing = roster.players[owner.index()].player.script_facing;
             for body in &mut roster.players {
+                // A grounded dialogue can interrupt a run beside a drop. Do not
+                // release its stored momentum after several seconds without
+                // movement control. Airborne/scripted motion keeps its physics.
+                if body.player.grounded { body.player.velocity = Vec3::ZERO; }
                 body.yaw = facing;
                 body.pitch = 0.;
                 body.running = false;
@@ -418,6 +426,12 @@ impl Stage {
         )
         .map_or(Color::new(0., 0., 0., 0.), |(c, a)| Color { a, ..c })
     }
+}
+
+fn controls_scene(interactions: &Interactions) -> bool {
+    interactions.scripted()
+        || interactions.duchess.as_ref().is_some_and(|d| d.cinematic())
+        || interactions.school.as_ref().is_some_and(|s| s.cinematic())
 }
 
 fn apply(

@@ -751,11 +751,74 @@ zero combat damage and 100 Sanity, matching the frozen pre-change executable. Th
 single-player machinery and six-scene cinematic checks also pass. Evidence:
 `private/coop-village-before-*.log` and `private/coop-village-after-*.log`.
 
+Subsequent separate-client traversal exposed an incorrect distinction in the shared
+story clock: the two voice-only Cheshire lines froze an airborne player and caused
+an extra reunion. Single-player allows exploration during those lines. Co-op now
+advances ordinary speech alongside movement, pauses attacks/enemies while listening,
+and reserves single-Alice control and reunion for controller-owned cutscenes. Either
+living player can advance ordinary speech; that E press is consumed by dialogue.
+Actual cutscene completion also clears grounded running momentum. Automatic saves
+continue waiting for speech to finish before attempting a checkpoint.
+
+The corrected native traversal passes both first-arrival orders in 22,297 ticks,
+with six cinematic reunions, 35 ticks of observed movement during speech, both
+actual Blade pickups and 100 Sanity for both players. Evidence:
+`private/coop/village-route-4/coop-village/`, build
+`0eb413f6731105a82780dc10d716c793fc04b3d7c3931d11391cbf6e9de9c2ee`.
+Red's final cinematic reunion was visually inspected. The school/world fixture
+passes in `private/coop-network-speech-world.log`; the unchanged 17,790-tick
+single-player route passes in `private/coop-network-speech-singleplayer.log`.
+All 734 Rust tests pass (one pre-existing ignored), recorded in
+`private/coop-network-route-tests4.log`.
+
+Failed development runs remain in `private/coop-network-village-local1.log` through
+`local5.log`. The first attempts exposed driver timing/input differences; later ones
+exposed the speech freeze above. The fifth run reached Pandemonium with both clients,
+but failed its speech-movement evidence assertion because the driver skipped the
+short lines between diagnostic samples. It is not recorded as a passed network test.
+The driver now lets ordinary speech play while continuing movement.
+
+The first public Red-leading run (`private/coop-network-village-internet-red1.log`)
+also found an interactive client bug: the guest fed an unused local input latch,
+which could reject the ninth accumulated button edge. Only the host samples that
+latch. Guests now send their cumulative actions directly through the session,
+without also filling a second queue that is never consumed. The host's bounded
+input validation remains in place.
+The repeat in `private/coop-network-village-internet-red2.log` ended on the
+driver's approach ramp before reaching the earlier failure; it does not verify
+the input fix. The harness now walks that approach through positions recorded by
+the single-player route. Full delayed traversal is still pending. The current
+build `028486987c95dd8d2ef21a4a148622aa8e9644aeb51fa2bfb7a2ba3f7113f210`
+passes all 734 Rust tests (one ignored) in `private/coop-network-route-tests6.log`.
+
 Run the native check in Anode (it needs a graphics context), with an isolated profile:
 
 ```text
 looking-glass.exe --data <base-folder> --coop-village-check --no-audio --profile private/coop/village-route
 ```
+
+The separate-client village harness is `tools/test_coop_village.py`. Run it in
+Anode after building, with `--first blue` and `--first red` in separate runs:
+
+```text
+python tools/test_coop_village.py --data <base-folder> --local --delay-ms 0 --jitter-ms 0 --first blue
+python tools/test_coop_village.py --data <base-folder> --first red --delay-ms 40 --jitter-ms 20
+```
+
+Omit `--local` for the public invite path. Each process has its own profile and
+receives only local navigation goals through `--coop-route-driver <command-file>`.
+Its planner runs against its own observed world; movement, jumps, attacks and
+dialogue inputs still use the normal client/session path. Commands expire after
+three seconds without an updated local file. The driver never writes player
+positions, inventory, health or shared world state. It is explicitly enabled for
+testing and is absent from ordinary Host/Join play.
+
+The harness retains scene captures, route plans and authoritative frame histories
+under `private/coop/village-test-*/`, then removes the invite and closes only its
+own processes. It rejects a death, checkpoint rollback, blocked body, missed scene,
+wrong scene owner, missing personal Blade, divergent matching network frame or
+missing authored transition. A clean traversal alone still does not complete the
+village death/disconnect/checkpoint matrix.
 
 ## Reproducing transport checks
 

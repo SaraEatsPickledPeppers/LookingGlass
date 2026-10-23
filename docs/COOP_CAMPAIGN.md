@@ -30,9 +30,12 @@ school quest-gated exits and complete level traversal remain unverified by that 
 
 Village partial traversal: `--coop-village-check` now reaches the authored exit
 from the unarmed entrance with both native bodies and both first-arrival orders.
-It verifies both real Blade pickups, all six scenes, eight safe reunions and no
-deaths/wipes. Evidence: `private/coop/village-route-2/coop-village/`, build
-`06ad4947fcada8789a50aa239b059306b4453fbd2328cf4459ff1f041dccd5c5`.
+It verifies both real Blade pickups, all six scenes, six safe cinematic reunions,
+continued movement during ordinary speech and no deaths/wipes. Evidence:
+`private/coop/village-route-4/coop-village/`, build
+`0eb413f6731105a82780dc10d716c793fc04b3d7c3931d11391cbf6e9de9c2ee`.
+The former eight-reunion result also treated two voice-only lines as cutscenes;
+that behavior has been corrected to match single-player exploration.
 This is a single-process simulation. The separate-process network, death and
 disconnect requirements above still prevent marking the village row passed.
 

@@ -1,0 +1,252 @@
+"""Drive a complete village visit in two real client processes/profiles.
+
+Each client receives only local test goals, plans from its own view, and sends
+ordinary inputs through the real session. No position, damage or item writes.
+Run in Anode; internet hosting is default. Full death/rejoin matrix is separate.
+"""
+import argparse
+import json
+import os
+from pathlib import Path
+import subprocess
+import time
+import uuid
+
+from test_coop_play import ROOT, read, distance
+
+
+class Pair:
+    def __init__(self, args):
+        self.args = args
+        self.folder = ROOT / 'private' / 'coop' / ('village-test-' + uuid.uuid4().hex)
+        self.folder.mkdir(parents=True)
+        self.invite = self.folder / 'invite.txt'
+        self.processes, self.logs, self.commands, self.reports = {}, {}, {}, {}
+        self.history = {'host': [], 'guest': []}
+        self.captures = set()
+        self.capture_commands = {}
+        self.serial = 0
+        self.heartbeat = 0
+        self.deadline = time.monotonic() + 1500
+        for role in self.history:
+            (self.folder / role).mkdir()
+            self.set(role)
+
+    def set(self, role, goal=None, navigate=False, capture=False, finish=False, epoch=1):
+        self.serial += 1
+        self.commands[role] = dict(id=self.serial, heartbeat=1, epoch=epoch,
+                                  goal=goal, navigate=navigate, attack=True,
+                                  capture=capture, finish=finish)
+
+    def start(self, role):
+        profile = self.folder / role
+        log = (self.folder / (role + '.log')).open('w')
+        self.logs[role] = log
+        args = [str(self.args.exe.resolve()), '--data', str(self.args.data.resolve()), '--map', 'gvillage',
+                '--no-audio', '--profile', str(profile), '--coop-host' if role == 'host' else '--coop-join',
+                str(self.invite), '--coop-route-driver', str(profile / 'route-command.json'),
+                '--coop-delay-ms', str(self.args.delay_ms), '--coop-jitter-ms', str(self.args.jitter_ms)]
+        if role == 'host' and self.args.local:
+            args += ['--coop-local']
+        self.processes[role] = subprocess.Popen(args, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+
+    def pump(self):
+        assert time.monotonic() < self.deadline, 'Village route timed out'
+        self.heartbeat += 1
+        for role, command in self.commands.items():
+            command['heartbeat'] = self.heartbeat
+            target = self.folder / role / 'route-command.json'
+            temp = target.with_suffix('.tmp')
+            temp.write_text(json.dumps(command))
+            try:
+                temp.replace(target)
+            except PermissionError:
+                pass  # Next heartbeat retries; the client neutralises stale input.
+        for role, process in self.processes.items():
+            assert process.poll() in (None, 0), f'{role} exited: {self.folder / (role + ".log")}'
+            report = read(self.folder / role / 'coop-live.json')
+            if not report or report['pid'] != process.pid or not report['playing']:
+                continue
+            self.reports[role] = report
+            frame, stage = report['frame'], report['combat']['stage']
+            driver = report['route_driver']
+            assert driver and not driver['error'], f'{role} driver failed: {driver}'
+            assert all(b['stats']['sanity'] > 0 for b in frame['players']), f'{role}: player died'
+            assert frame['checkpoint_generation'] == 0, 'Unexpected team wipe during clean traversal'
+            if stage['owner'] is None:
+                assert all(driver['clear']), f'{role}: obstructed body'
+            row = {'tick': frame['tick'], 'epoch': frame['epoch'], 'map': report['visit']['map'],
+                   'owner': stage['owner'], 'scene': driver['scene'], 'driver': driver,
+                   'players': [{'feet': b['player']['feet'], 'health': b['stats']['sanity'],
+                       'velocity': b['player']['velocity'], 'grounded': b['player']['grounded'],
+                       'swimming': b['player']['swimming'], 'jumps': b['player']['jumps'],
+                       'collected': b['stats']['collected'], 'warped_at': b['warped_at'],
+                       'spawned_at': b['spawned_at']} for b in frame['players']]}
+            rows = self.history[role]
+            if not rows or (rows[-1]['epoch'], rows[-1]['tick']) != (row['epoch'], row['tick']):
+                rows.append(row)
+        # Capture both views of each actual scene without changing their goals.
+        if len(self.reports) == 2:
+            scene = self.reports['host']['route_driver']['scene']
+            if scene and scene not in self.captures and self.reports['guest']['route_driver']['scene'] == scene:
+                pending = self.capture_commands.setdefault(scene, {})
+                for role in self.commands:
+                    captured = pending.get(role)
+                    if captured and (self.folder / role / f'route-capture-{captured}.png').exists():
+                        continue
+                    if captured == self.commands[role]['id']:
+                        continue
+                    old = self.commands[role]
+                    self.set(role, old['goal'], old['navigate'], capture=True, epoch=old['epoch'])
+                    pending[role] = self.commands[role]['id']
+                if all(role in pending and (self.folder / role / f'route-capture-{pending[role]}.png').exists()
+                       for role in self.commands):
+                    self.captures.add(scene)
+        time.sleep(.05)
+
+    def until(self, predicate, seconds=240):
+        end = time.monotonic() + seconds
+        while not predicate():
+            assert time.monotonic() < end, f'Leg timeout: {self.commands}; last drivers: ' + str({
+                r: (d['frame']['tick'], d['route_driver'], [b['player']['feet'] for b in d['frame']['players']])
+                for r, d in self.reports.items()})
+            self.pump()
+
+    def arrived(self):
+        return len(self.reports) == 2 and all(d['visit']['map'] == 'pandemonium' and d['visit']['epoch'] == 2
+                                             for d in self.reports.values())
+
+    def reached(self, role):
+        report = self.reports.get(role)
+        if not report:
+            return False
+        driver = report['route_driver']
+        return driver['command'] == self.commands[role]['id'] and driver['reached'] and report['combat']['stage']['owner'] is None
+
+    def go(self, goal, navigate=False):
+        if self.arrived():
+            return
+        first = 'host' if self.args.first == 'blue' else 'guest'
+        partner = 'guest' if first == 'host' else 'host'
+        self.set(partner)
+        self.set(first, goal, navigate)
+        self.until(lambda: self.arrived() or self.reached(first))
+        if not self.arrived():
+            self.set(partner, goal, navigate)
+            self.until(lambda: self.arrived() or all(self.reached(r) for r in self.commands))
+        print('PASS network village leg', goal, flush=True)
+
+    def wait(self, seconds):
+        if self.arrived():
+            return
+        for role in self.commands:
+            self.set(role)
+        tick = self.reports['host']['frame']['tick']
+        self.until(lambda: self.arrived() or self.reports['host']['frame']['tick'] >= tick + seconds * 120)
+
+    def run(self):
+        print('Evidence:', self.folder, flush=True)
+        self.pump()
+        self.start('host')
+        self.until(self.invite.exists, 150)
+        self.start('guest')
+        self.until(lambda: len(self.reports) == 2, 120)
+        self.wait(6)
+        for goal in [(-4180,5900,16),(-4192,5416,-52),(-4412,5328,-52),(-4780,5392,-120),(-4968,5424,-120)]: self.go(goal)
+        self.wait(6)
+        # This is a walkable approach, not a running jump. Use the recorded
+        # single-player route's intermediate ground points so delayed steering
+        # does not turn a wide stopping tolerance into an unnecessary water fall.
+        for goal in [(-4994,5398,-120),(-5039,5353,-120),(-5054,5295,-120),(-5085,5245,-107),(-5100,5200,-120)]: self.go(goal)
+        self.go((-5100,4780,-56), True)
+        self.wait(6)
+        for goal in [(-4784,4784,-120),(-4512,4800,-96),(-4288,4808,-136),(-3984,4712,-176),(-3972,4332,-160),(-3960,4056,-224),(-3968,3840,-272),(-3776,3832,-208),(-3544,3856,-136)]: self.go(goal)
+        self.wait(15)
+        for goal in [(-3208,4040,-56),(-2800,3872,-96),(-2808,3520,-96),(-2744,3304,-96),(-2936,3024,128)]: self.go(goal, True)
+        self.wait(8)
+        self.go((-3112,2584,40), True)
+        self.go((-3312,2440,48))
+        self.until(self.arrived, 120)
+        self.verify()
+        for role in self.commands:
+            self.set(role, capture=True, epoch=2)
+        self.until(lambda: all(self.reports[r]['route_driver']['captured'] == self.commands[r]['id'] for r in self.commands), 30)
+        for role in ('guest', 'host'):
+            self.set(role, finish=True, epoch=2)
+            self.until(lambda: self.processes[role].poll() is not None, 30)
+            assert self.processes[role].returncode == 0
+        (self.folder / 'result.json').write_text(json.dumps({'passed': True, 'internet': not self.args.local,
+            'first': self.args.first, 'delay_ms': self.args.delay_ms, 'jitter_ms': self.args.jitter_ms,
+            'scope': 'full village traversal in separate clients; death/rejoin matrix remains separate'}, indent=2))
+        print('PASS two-process village: six scenes, personal Blade pickups, clean traversal and authored network transition.', flush=True)
+
+    def verify(self):
+        expected = {'entry','knife_cat','Torchgnome1_Dialog','Torchgnome2_Dialog','Torchgnome3_Dialog_part2','Torchgnome4_Dialog'}
+        assert self.captures == expected, f'Missing paired scene captures: {expected - self.captures}'
+        for role, rows in self.history.items():
+            owners = {}
+            reunions = set()
+            moving_speech = 0
+            for row in rows:
+                if row['scene'] and row['epoch'] == 1:
+                    owners.setdefault(row['scene'], set()).add(row['owner'])
+                if row['epoch'] == 1 and row['owner'] is None and row['players'][0]['warped_at'] > 0:
+                    warp = row['players'][0]['warped_at']
+                    assert warp == row['players'][1]['warped_at'], f'{role}: players observed different scene handoffs'
+                    # A report may arrive after ordinary movement has resumed.
+                    allowance = 110 + max(0, row['tick'] - warp) * 640 / 120
+                    assert distance(row['players'][0]['feet'], row['players'][1]['feet']) <= allowance
+                    reunions.add(warp)
+            for old, row in zip(rows, rows[1:]):
+                if row['epoch'] == old['epoch'] == 1 and row['driver']['speech'] and old['driver']['speech']:
+                    assert all(a['warped_at'] == b['warped_at'] for a, b in zip(old['players'], row['players'])), 'Voice-only line teleported a player'
+                    moving_speech += any(distance(a['feet'], b['feet']) > 1 for a, b in zip(old['players'], row['players']))
+                if row['epoch'] == old['epoch'] == 1 and row['owner'] is not None and row['owner'] == old['owner']:
+                    partner = 1 if row['owner'] == 'Blue' else 0
+                    if row['players'][partner]['warped_at'] == old['players'][partner]['warped_at']:
+                        assert row['players'][partner]['feet'] == old['players'][partner]['feet'], f'{role}: waiting partner moved in a scene'
+            assert set(owners) == expected, f'{role} did not observe every village scene: {owners}'
+            assert all(owners[s] == {'Blue' if s == 'entry' else self.args.first.title()} for s in expected), owners
+            assert len(reunions) == 6, f'{role}: expected six cinematic handoffs: {reunions}'
+            assert moving_speech > 0, f'{role}: no movement observed during ordinary speech'
+            assert any(r['map'] == 'pandemonium' and r['epoch'] == 2 for r in rows)
+            assert any(r['epoch'] == 1 and all(r['driver']['blade_pickups']) for r in rows), f'{role} missed an actual personal Blade pickup'
+            assert all(b['spawned_at'] == 0 for r in rows for b in r['players']), 'Traversal silently respawned a player'
+        host = {(r['epoch'],r['tick']): r for r in self.history['host']}
+        compared = 0
+        for guest in self.history['guest']:
+            other = host.get((guest['epoch'],guest['tick']))
+            if other:
+                assert other['players'] == guest['players'] and other['owner'] == guest['owner'], 'Authoritative client states disagree'
+                compared += 1
+        assert compared >= 5, f'Only {compared} comparable network frames were observed'
+        print('Compared', compared, 'matching authoritative ticks.', flush=True)
+
+    def close(self):
+        (self.folder / 'history.json').write_text(json.dumps(self.history))
+        (self.folder / 'captures.json').write_text(json.dumps(self.capture_commands, indent=2))
+        for process in self.processes.values():
+            if process.poll() is None:
+                subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'], capture_output=True)
+                process.wait(timeout=10)
+        for log in self.logs.values():
+            log.close()
+        self.invite.unlink(missing_ok=True)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--exe', type=Path, default=ROOT / 'target/debug/looking-glass.exe')
+    parser.add_argument('--data', type=Path, required=True)
+    parser.add_argument('--first', choices=('blue','red'), default='blue')
+    parser.add_argument('--local', action='store_true')
+    parser.add_argument('--delay-ms', type=int, default=40)
+    parser.add_argument('--jitter-ms', type=int, default=20)
+    args = parser.parse_args()
+    if not (0 <= args.delay_ms <= 500 and 0 <= args.jitter_ms <= 500): parser.error('Delay/jitter must be between 0 and 500 ms')
+    pair = Pair(args)
+    try:
+        pair.run()
+    finally:
+        pair.close()

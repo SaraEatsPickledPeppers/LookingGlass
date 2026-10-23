@@ -171,6 +171,7 @@ pub async fn open(assets: &mut Assets, options: &Options, backdrop: &mut Menu, v
                                 travel_check: false,
                                 resume: false,
                                 checkpoint_check: false,
+                                route_driver: None,
                                 conditions: Default::default(),
                             })
                         }
@@ -275,7 +276,7 @@ fn host_launch(visit: &Visit, resume: bool) -> Launch {
     Launch {
         host: true, internet: true, invite_file: None, invite: None, start: Some(visit.clone()),
         drive: false, death_check: None, scene_check: None, travel_check: false, resume,
-        checkpoint_check: false, conditions: Default::default(),
+        checkpoint_check: false, route_driver: None, conditions: Default::default(),
     }
 }
 

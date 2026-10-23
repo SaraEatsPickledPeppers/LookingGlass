@@ -30,6 +30,7 @@ pub struct Launch {
     pub travel_check: bool,
     pub resume: bool,
     pub checkpoint_check: bool,
+    pub route_driver: Option<PathBuf>,
     pub conditions: Conditions,
 }
 pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Result<()> {
@@ -184,8 +185,10 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         let mut fixture_checkpoint_saved = false;
         let mut fixture_checkpoint_wiped = false;
         let mut checkpoint_captured = false;
+        let mut route_driver = launch.route_driver.clone().map(super::route_driver::Driver::new);
         loop {
             let now = Instant::now();
+            if let Some(driver) = &mut route_driver { driver.poll(now); }
             if let Some(setup) = &hosting {
                 if let Status::Failed(reason) = setup.status() { anyhow::bail!("{reason}"); }
             }
@@ -311,7 +314,10 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 keys.run = false;
                 keys.wish = if (2. ..4.).contains(&age) { if launch.host { Vec2::Y } else { Vec2::X } } else { Vec2::ZERO };
                 keys.swim = keys.wish.extend(0.);
-                if launch.travel_check {
+                if let Some(driver) = &mut route_driver {
+                    if let Some(frame) = &display { driver.sample(frame, &arena, &scene.world, local, &mut keys, now); }
+                    yaw = keys.yaw; pitch = keys.pitch;
+                } else if launch.travel_check {
                     let tick = display.as_ref().map_or(0, |f| f.tick);
                     keys.wish = if visit.epoch == 1 && (120..960).contains(&tick) { Vec2::Y } else { Vec2::ZERO };
                     keys.yaw = std::f32::consts::FRAC_PI_2;
@@ -379,8 +385,13 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                     }
                 }
             }
-            local_sequence += 1;
-            local_latch.accept(local_sequence, keys, now)?;
+            // Only the host simulates a local body. A guest sends its counters
+            // to the host; an unused local latch would accumulate every E/jump
+            // until its pending-edge limit ended a long guest session.
+            if launch.host {
+                local_sequence += 1;
+                local_latch.accept(local_sequence, keys, now)?;
+            }
             if let Some(guest) = &mut guest {
                 if guest_send_at.elapsed() >= Duration::from_millis(33) && guest.controls(keys)? { guest_send_at = now; }
             }
@@ -429,7 +440,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         if host.send_frame(network)? { last_sent = frame.tick; }
                     }
                     display = Some(frame);
-                    if checkpoint_pending && !arena.stage.busy() && roster.players.iter().all(|b| b.stats.alive()) {
+                    if checkpoint_pending && !arena.stage.busy() && !arena.stage.story.busy()
+                        && roster.players.iter().all(|b| b.stats.alive()) {
                         checkpoint_pending = false;
                         checkpoint_message = Some((now, match checkpoint_store.save(&visit, roster, &mut arena, &scene.world, &campaign) {
                             Ok(()) => "Co-op checkpoint saved for both players.".into(),
@@ -531,7 +543,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         "pid": std::process::id(), "playing": playing, "frame": frame, "focused": focused,
                         "camera_player": watched, "camera": camera_eye, "camera_target": target,
                         "camera_subject_feet": camera_subject_feet,
-                        "combat": arena.snapshot(), "visit": visit, "completed_visits": if launch.host { Some(campaign.completed()) } else { None } })) {
+                        "combat": arena.snapshot(), "visit": visit, "completed_visits": if launch.host { Some(campaign.completed()) } else { None },
+                        "route_driver": route_driver.as_ref().map(|d| &d.report) })) {
                         let _ = std::fs::write(path, bytes);
                     }
                     report_at = now;
@@ -651,7 +664,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                     break;
                 }
             }
-            if launch.drive && !launch.travel_check && !launch.checkpoint_check && launch.death_check.is_none() && launch.scene_check.is_none() && started_playing.is_some_and(|start| start.elapsed()
+            if let Some(driver) = &mut route_driver { if driver.capture_and_finish(now)? { break; } }
+            if launch.drive && launch.route_driver.is_none() && !launch.travel_check && !launch.checkpoint_check && launch.death_check.is_none() && launch.scene_check.is_none() && started_playing.is_some_and(|start| start.elapsed()
                 >= Duration::from_secs(if launch.host { 12 } else { 10 }
                     + if visit.combat_preview { 4 } else { 0 })) {
                 crate::viewer::save_capture(&crate::preferences::path("coop-screenshot.png"))?;

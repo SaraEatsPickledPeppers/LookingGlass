@@ -358,7 +358,7 @@ impl Collider {
         .then_some((feet, t.normal))
     }
 }
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum Node {
     Leaf {
         bounds: Bounds,
@@ -443,7 +443,7 @@ impl Default for Trace {
         }
     }
 }
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct World {
     pub traversal: crate::traversal::Traversal,
     dynamic: Vec<Collider>,
