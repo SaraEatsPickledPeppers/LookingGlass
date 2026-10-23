@@ -297,6 +297,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
             keys.yaw = (yaw + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
             keys.pitch = pitch;
             keys.jumps += u64::from(pressed(KeyCode::Space));
+            let previous_uses = keys.uses;
             keys.uses += u64::from(pressed(KeyCode::E));
             let click = weapon_buttons.sample([
                 controls.action(&prefs, "Mouse 1", false), controls.action(&prefs, "Mouse 2", false)
@@ -318,7 +319,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 keys.wish = if (2. ..4.).contains(&age) { if launch.host { Vec2::Y } else { Vec2::X } } else { Vec2::ZERO };
                 keys.swim = keys.wish.extend(0.);
                 if let Some(driver) = &mut route_driver {
-                    if let Some(frame) = &display { driver.sample(frame, &arena, &scene.world, local, &mut keys, now); }
+                    if let Some(frame) = &display { driver.sample(frame, &arena, &scene.world, &scene.map, local, &mut keys, now); }
                     yaw = keys.yaw; pitch = keys.pitch;
                 } else if launch.travel_check {
                     let tick = display.as_ref().map_or(0, |f| f.tick);
@@ -387,6 +388,10 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         }
                     }
                 }
+            }
+            if let Some(frame) = &display {
+                keys.classify_rope_use(previous_uses, &frame.players[local.index()].player, &scene.world,
+                    arena.stage.busy() || arena.stage.story.busy());
             }
             // Only the host simulates a local body. A guest sends its counters
             // to the host; an unused local latch would accumulate every E/jump

@@ -164,7 +164,10 @@ impl Arena {
                 character.dismiss_summon();
             }
         }
-        for (character, (movement, _)) in self.characters.iter().zip(&mut inputs) {
+        for ((character, (movement, input)), body) in self.characters.iter().zip(&mut inputs).zip(&roster.players) {
+            if !self.stage.story.busy() {
+                movement.use_pressed |= input.rope_use(&body.player, world);
+            }
             if character.attack_movement_locked() || character.ice_locked() {
                 *movement = Controls::default();
             }

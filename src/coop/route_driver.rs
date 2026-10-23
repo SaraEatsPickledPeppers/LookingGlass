@@ -16,6 +16,12 @@ struct Command {
     heartbeat: u64,
     epoch: u64,
     goal: Option<Vec3>,
+    #[serde(default)]
+    marker: Option<usize>,
+    #[serde(default)]
+    horizontal: bool,
+    #[serde(default)]
+    rope: Option<RopeCommand>,
     navigate: bool,
     attack: bool,
     capture: bool,
@@ -26,7 +32,51 @@ impl Command {
         ensure!(self.id > 0 && self.epoch > 0 && self.heartbeat > 0, "Invalid route command identity");
         ensure!(self.goal.is_none_or(|p| p.is_finite() && p.abs().max_element() < 1_000_000.),
             "Invalid route goal");
+        ensure!(self.goal.is_none() || self.marker.is_none(), "Choose a route goal or a marker");
+        ensure!(self.marker.is_none_or(|i| i < 100_000), "Invalid route marker");
+        if let Some(rope) = &self.rope { rope.validate()?; }
         Ok(())
+    }
+}
+#[derive(Clone, Deserialize)]
+#[serde(tag="action", rename_all="snake_case", deny_unknown_fields)]
+enum RopeCommand {
+    Approach { goal: Vec2 },
+    Climb { rise: f32 },
+    Release { goal: Vec2 },
+}
+impl RopeCommand {
+    fn validate(&self) -> Result<()> {
+        match self {
+            Self::Approach { goal } | Self::Release { goal } => ensure!(goal.is_finite() && goal.abs().max_element() < 1_000_000., "Invalid rope goal"),
+            Self::Climb { rise } => ensure!(rise.is_finite() && rise.abs() <= 1., "Invalid rope climb input"),
+        }
+        Ok(())
+    }
+    fn sample(&self, player: &Player, world: &World, keys: &mut Input, jumped: &mut bool, used: &mut bool) -> (&'static str, bool) {
+        match self {
+            Self::Approach { goal } => {
+                if player.rope.is_some() { return ("holding rope", true); }
+                keys.wish = (*goal - player.feet.truncate()).normalize_or_zero(); keys.run = true;
+                if !*jumped { keys.jumps += 1; *jumped = true; }
+                // One edge per command: an unacknowledged grab must never turn
+                // into a second E press that releases a delayed guest's grip.
+                if !*used && player.rope_prompt(world).is_some() { keys.uses += 1; *used = true; }
+                ("approaching rope", false)
+            }
+            Self::Climb { rise } => {
+                keys.rise = *rise;
+                ("climbing rope", player.rope.is_some())
+            }
+            Self::Release { goal } => {
+                if player.rope.is_some() && !*used { keys.uses += 1; *used = true; }
+                if player.rope.is_none() && player.grounded { return ("landed from rope", true); }
+                // Steer away during the drop, otherwise the automatic nearby
+                // grab can catch the same rope again before a route can plan.
+                keys.wish = (*goal - player.feet.truncate()).normalize_or_zero(); keys.run = true;
+                ("releasing rope", false)
+            }
+        }
     }
 }
 #[derive(Default, Serialize)]
@@ -43,6 +93,7 @@ pub struct Report {
     pub speech: bool,
     pub clear: [bool; 2],
     pub blade_pickups: [bool; 2],
+    pub cards_pickups: [bool; 2],
     pub expected: Option<Vec3>,
     pub plan_remaining: usize,
     pub jumps: u64,
@@ -66,6 +117,7 @@ pub struct Driver {
     step_tick: u64,
     step_at: Instant,
     jumped: bool,
+    rope_used: bool,
     location: Option<(u64, u64, u64)>,
     pub report: Report,
 }
@@ -73,7 +125,7 @@ impl Driver {
     pub fn new(path: PathBuf) -> Self {
         let now = Instant::now();
         Self { path, command: None, modified: None, polled: now, refreshed: now, used: now,
-            worker: None, plan: VecDeque::new(), step_tick: 0, step_at: now, jumped: false,
+            worker: None, plan: VecDeque::new(), step_tick: 0, step_at: now, jumped: false, rope_used: false,
             location: None, report: Report::default() }
     }
     pub fn poll(&mut self, now: Instant) {
@@ -91,7 +143,7 @@ impl Driver {
         match read() {
             Ok(Some((modified, command))) => {
                 if self.command.as_ref().is_none_or(|old| old.id != command.id) {
-                    self.plan.clear(); self.jumped = false; self.location = None;
+                    self.plan.clear(); self.jumped = false; self.rope_used = false; self.location = None;
                     self.report.error = None;
                 }
                 self.report.command = Some(command.id);
@@ -116,10 +168,14 @@ impl Driver {
         self.report.blade_pickups = frame.players.each_ref().map(|b| b.stats.copies(0) > 0
             && arena.pickups.iter().any(|p| matches!(p.kind, crate::inventory::PickupKind::Weapon(0))
                 && b.stats.collected.contains(&p.id)));
-        self.report.scene = arena.stage.interactions.village.as_ref().and_then(|v|v.cinema.scene_id()).map(str::to_owned);
+        self.report.cards_pickups = frame.players.each_ref().map(|b| b.stats.copies(1) > 0
+            && arena.pickups.iter().any(|p| matches!(p.kind, crate::inventory::PickupKind::Weapon(1))
+                && b.stats.collected.contains(&p.id)));
+        self.report.scene = arena.stage.interactions.village.as_ref().and_then(|v|v.cinema.scene_id())
+            .or_else(|| arena.stage.interactions.pandemonium.as_ref().and_then(|p|p.scene_id())).map(str::to_owned);
         self.report.speech = arena.stage.story.busy() && !arena.stage.busy();
     }
-    pub fn sample(&mut self, frame: &Frame, arena: &Arena, world: &World, local: PlayerId, keys: &mut Input, now: Instant) {
+    pub fn sample(&mut self, frame: &Frame, arena: &Arena, world: &World, map: &crate::bsp::Bsp, local: PlayerId, keys: &mut Input, now: Instant) {
         Self::neutral(keys);
         self.report.reached = false;
         self.report.expected = self.plan.front().map(|(_, at)| *at);
@@ -171,6 +227,12 @@ impl Driver {
             self.plan.clear(); self.jumped = false; self.report.phase = "scene";
             return;
         }
+        if let Some(rope) = &command.rope {
+            let (phase, reached) = rope.sample(&body.player, world, keys, &mut self.jumped, &mut self.rope_used);
+            self.report.phase = phase; self.report.reached = reached;
+            if keys.wish.length() > 0. { keys.yaw = keys.wish.y.atan2(keys.wish.x); keys.pitch = 0.; }
+            return;
+        }
         if command.attack && body.stats.copies(0) > 0 {
             let mut targets = arena.npcs.targets();
             if let Some(cast) = &arena.stage.interactions.encounters { targets.extend(cast.targets()); }
@@ -184,10 +246,17 @@ impl Driver {
                 keys.weapon = Some(0); keys.primary = delta.length()<80.; keys.alternate = !keys.primary;
             }
         }
-        let Some(goal) = command.goal else { return; };
+        let goal = if let Some(marker) = command.marker {
+            match map.entities.get(marker).and_then(|e| e.get("origin")).and_then(|s| crate::interaction::vector(s))
+                .filter(|p| p.is_finite() && p.abs().max_element() < 1_000_000.) {
+                Some(goal) => Some(goal),
+                None => { self.report.error = Some(format!("Missing route marker {marker}")); return; }
+            }
+        } else { command.goal };
+        let Some(goal) = goal else { return; };
         let delta = goal-body.player.feet;
         self.report.reached = if command.navigate { delta.length()<42. && body.player.grounded }
-            else { delta.truncate().length()<8. && delta.z.abs()<35. };
+            else { delta.truncate().length()<8. && (command.horizontal || delta.z.abs()<35.) };
         if self.report.reached { self.report.phase="reached"; self.plan.clear(); return; }
         if command.navigate {
             self.report.phase="navigating";
@@ -231,6 +300,10 @@ impl Driver {
         if !keys.primary && !keys.alternate && keys.wish.length()>0. {
             keys.yaw=keys.wish.y.atan2(keys.wish.x); keys.pitch=0.;
         }
+        if arena.stage.interactions.prompt(world, body.player.eye(), super::arena::direction(keys.yaw,keys.pitch)) == Some("E  open door")
+            && now.duration_since(self.used) >= Duration::from_millis(300) {
+            keys.uses += 1; self.used = now;
+        }
     }
     pub fn capture_and_finish(&mut self, now: Instant) -> Result<bool> {
         let Some(command)=self.command.as_ref().filter(|_|self.fresh(now)) else { return Ok(false); };
@@ -239,5 +312,51 @@ impl Driver {
             self.report.captured=Some(command.id);
         }
         Ok(command.finish)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn delayed_rope_acknowledgement_does_not_repeat_grab_or_release_edges() {
+        let mut world = World::fixture(&[]);
+        world.traversal.ropes.push(crate::traversal::Rope { id:crate::entity::Id(1), model:1, enabled:true,
+            origin:Vec3::ZERO, anchor:Vec3::Z*320., length:320. });
+        let mut player = Player::new(vec3(24.,0.,0.));
+        let mut keys = Input::default();
+        let (mut jumped, mut used) = (false,false);
+        let approach = RopeCommand::Approach { goal:Vec2::ZERO };
+        for _ in 0..30 {
+            Driver::neutral(&mut keys);
+            assert!(!approach.sample(&player,&world,&mut keys,&mut jumped,&mut used).1);
+        }
+        assert_eq!((keys.jumps,keys.uses),(1,1));
+        player.rope = Some(crate::movement::RopeGrip { id:crate::entity::Id(1),length:280.,rise:0. });
+        Driver::neutral(&mut keys);
+        assert!(approach.sample(&player,&world,&mut keys,&mut jumped,&mut used).1);
+        assert_eq!(keys.wish,Vec2::ZERO);
+        let release = RopeCommand::Release { goal:Vec2::X*300. }; used=false;
+        for _ in 0..30 { Driver::neutral(&mut keys); release.sample(&player,&world,&mut keys,&mut jumped,&mut used); }
+        assert_eq!(keys.uses,2);
+        player.rope=None; player.grounded=false;
+        Driver::neutral(&mut keys);
+        assert!(!release.sample(&player,&world,&mut keys,&mut jumped,&mut used).1);
+        assert!(keys.run && keys.wish.x>0.);
+        player.grounded=true; Driver::neutral(&mut keys);
+        assert!(release.sample(&player,&world,&mut keys,&mut jumped,&mut used).1);
+        assert_eq!(keys.wish,Vec2::ZERO);
+    }
+    #[test]
+    fn legacy_route_commands_remain_valid_and_rope_inputs_are_bounded() {
+        let base=serde_json::json!({"id":1,"heartbeat":1,"epoch":1,"goal":null,"navigate":false,"attack":true,"capture":false,"finish":false});
+        let old:Command=serde_json::from_value(base.clone()).unwrap(); assert!(old.validate().is_ok());
+        assert!(old.rope.is_none() && old.marker.is_none() && !old.horizontal);
+        for invalid in [serde_json::json!({"action":"climb","rise":2}),serde_json::json!({"action":"release","goal":[1e9,0]})] {
+            let mut input=base.clone(); input["rope"]=invalid;
+            assert!(serde_json::from_value::<Command>(input).unwrap().validate().is_err());
+        }
+        let mut input=base; input["goal"]=serde_json::json!([1,2,3]); input["marker"]=serde_json::json!(598);
+        assert!(serde_json::from_value::<Command>(input).unwrap().validate().is_err());
     }
 }

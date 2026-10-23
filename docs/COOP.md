@@ -123,14 +123,14 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after the rendered Pandemonium route: **39%** (previously 38%). Credited
+Overall estimate after the native and internet Pandemonium routes: **39%** (previously 38%). Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
-9/15 for two-player movement/presentation, paired school supports, dry/swimming arrival placement, a complete delayed village traversal in separate clients and rendered independent Pandemonium rope controls, and 7/20 for native targeting, host-owned
+9/15 for two-player movement/presentation, paired school supports, dry/swimming arrival placement, complete delayed village/Pandemonium traversal in separate clients and rendered independent rope controls, and 7/20 for native targeting, host-owned
 weapons/damage, personal resources, timed respawns and full saved-state team wipes,
 plus 8/20 for shared world replication, ordered contacts, the verified theatre
 ownership/reunion slice, school boarding barriers, visit history and restart/backup
 restoration of shared checkpoints, and native traversal of all six village scenes
-and all four Pandemonium scenes with either player arriving first. Full-campaign verification remains at zero. Standalone
+and all four Pandemonium scenes with either player arriving first (also verified through public internet clients). Full-campaign verification remains at zero. Standalone
 policy tests receive no campaign credit; no campaign-matrix row has passed its full requirements.
 
 Pandemonium now uses each replicated player's own rope grip in co-op, while the
@@ -209,8 +209,9 @@ in `private/coop-pandemonium-sp-render7.log`; the rope ascent capture was inspec
 The final co-op native repeat used the authorized PC fallback while Anode was
 busy; the preceding full native render checks ran in Anode. All error logs are
 empty and all owned game processes closed. The final change only orders multiple
-co-op grip attachments; the single-player one-grip path is unchanged. Pandemonium still needs public separate-client traversal, latency,
-individual death/recovery, saved-checkpoint wipe and disconnect/rejoin coverage.
+co-op grip attachments; the single-player one-grip path is unchanged. The later
+public separate-client traversal evidence follows below. Individual death/recovery,
+saved-checkpoint wipe and disconnect/rejoin coverage remains open.
 
 Run the staged check in Anode after building:
 
@@ -218,6 +219,61 @@ Run the staged check in Anode after building:
 looking-glass.exe --data <base-folder> --coop-pandemonium-check --no-audio --profile private/coop/pandemonium-adapters
 looking-glass.exe --data <base-folder> --coop-pandemonium-route-check --no-audio --profile private/coop/pandemonium-route
 ```
+
+The first public two-process Pandemonium attempt exposed a delayed rope-use race:
+Red's ordinary airborne physics caught the rope before her grab press reached the
+host, so the old toggle interpreted that press as a release. She fell to damaging
+ground and died; this is a failed traversal, retained in
+`private/coop/pandemonium-test-6254d8209f784c2ab361f596a8e0b850/` on build
+`5c1a8e34ba15f14de44cc192876da422cab3ee147bad0851bbf2b7081fcb9b5f`.
+
+Protocol revision 4 separates cumulative grab and release edges according to the
+local player's observed grip and nearby rope. The host consumes each edge once and
+only requests the matching ordinary rope action: a late grab cannot release an
+existing grip, and a late release cannot attach a detached player. Edge counts
+remain bounded and expire under the input watchdog. Dialogue, doors, movement
+locks and single-player controls keep their existing paths. The regression test
+reproduces automatic attachment followed by a delayed encoded grab, then verifies
+an explicit release, duplicate suppression, timeout and counter bounds. All 740
+Rust tests pass (one pre-existing ignored) in
+`private/coop-pandemonium-network-rope-tests2.log`.
+
+The independent-client driver now supports rope controls, horizontal goals and
+local map markers using ordinary inputs. The Pandemonium harness checks shared
+rope descent, minecart boarding, all four scene owners/reunions, personal Cards
+and the authored Fortress transition. Run it in either first-arrival order:
+
+```text
+python tools/test_coop_pandemonium.py --data <base-folder> --first blue --delay-ms 40 --jitter-ms 20
+python tools/test_coop_pandemonium.py --data <base-folder> --first red --delay-ms 40 --jitter-ms 20
+```
+
+The Blue-first repeat passes through the public invite connection with 40 ms delay
+and 20 ms jitter per sender on build
+`ec4ccf71f5a634f1c8c03ccbc6924fa3492e9fac1421dd813cd4937c06118a48`.
+Both clients agree on all four Blue-owned scenes and three reunion ticks, retain
+their actual personal Cards across the Fortress transition, and match complete
+player state at 207 identical authoritative ticks. There are no deaths, respawns
+or checkpoint resets; Blue arrives with 27.134 Sanity and Red with 21.135.
+Shared-rope, landing, boarding-wait and initial Fortress cinematic captures were
+inspected. The last capture is during Fortress's arrival sequence; it does not
+verify that next visit. Both client processes exit normally and the private invite
+is removed. Evidence: `private/coop/pandemonium-test-25726e42ca974a459cf70cd356606c0e/`,
+`private/coop-pandemonium-network-blue2.log`. This run used the authorized local
+desktop fallback while Anode was busy. Pandemonium's death/recovery, saved-wipe,
+consumable/enemy and disconnect/rejoin matrix remains incomplete.
+
+The Red-first repeat also passes on the same build and delay/jitter settings,
+running in Anode. Both clients observe all four Red-owned scenes, three reunions,
+the delayed cart departure and personal Cards carried into Fortress. They agree
+on 89 matching authoritative ticks; Blue arrives with 39.867 Sanity and Red with
+23.468, with no deaths, respawns or checkpoint resets. Both rope views, Red's
+boarding-wait notice and the initial Fortress cinematic view were inspected.
+Both game clients and the test job exit normally (job exit 0), and the invite is
+removed. Evidence: `private/coop/pandemonium-test-a2cf6558bee64719af5fda4834594ca6/`,
+`private/coop-pandemonium-network-red1.log`. Python compilation and all 19 existing
+setup/source-package checks pass. No campaign row is promoted to passed by these
+clean traversals alone.
 
 The native enemy combat foundation now supplies two live targets to each enemy
 and keeps damage, knockback and Will drain separate for Blue and Red. Closest

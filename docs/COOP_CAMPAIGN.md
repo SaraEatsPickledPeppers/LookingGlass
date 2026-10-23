@@ -78,13 +78,33 @@ Evidence: `private/coop/pandemonium-route6/coop-pandemonium/`,
 build `a9b50ed49c886e859e6a0a9cbcaec0d833fd08d799a4e1f74527fa0626da844b`.
 Watched/skipped single-player routes, cinematic pause/save/skip, machinery state,
 school/village world regressions and 736 Rust tests pass. This is still a
-single-process route: the visit's separate-client internet, latency, personal
-death/recovery, saved-checkpoint wipe and disconnect/rejoin checks remain open.
+single-process route; the later separate-client evidence follows below.
+
+The Blue-first public internet repeat passes with 40 ms delay and 20 ms jitter per
+sender on build `ec4ccf71f5a634f1c8c03ccbc6924fa3492e9fac1421dd813cd4937c06118a48`.
+Both players use the same entrance rope, the cart waits for its partner, all four
+Blue-owned scenes and three reunions pass, both collect/retain personal Cards,
+and 207 matching authoritative samples agree. Both arrive in Fortress alive
+(Blue 27.134 / Red 21.135 Sanity) without respawns or checkpoint resets. Rope,
+landing, boarding-wait and initial Fortress cinematic views were inspected; both
+processes exit cleanly. Evidence:
+`private/coop/pandemonium-test-25726e42ca974a459cf70cd356606c0e/`.
+This caught and fixed a delayed grab that otherwise released an automatic rope
+grip. Protocol revision 4 preserves grab/release intent, with bounds/watchdog and
+actual-physics regression coverage; all 740 Rust tests pass.
+The Red-first public repeat also passes on that build/settings in
+`private/coop/pandemonium-test-a2cf6558bee64719af5fda4834594ca6/`, running in Anode:
+four Red-owned scenes, three reunions, delayed boarding, both personal Cards and
+89 matching authoritative ticks. Both arrive alive (Blue 39.867 / Red 23.468),
+without respawns or checkpoint resets. Rope, boarding-wait and initial Fortress
+cinematic views were inspected; both clients and the job exit normally. Personal
+death/recovery, saved-checkpoint wipe, consumable/enemy and disconnect/rejoin
+checks remain open for this visit.
 
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Partial: both arrival orders, deaths/spectator/respawn in both roles, saved-checkpoint wipe and fresh guest rejoin-to-exit pass; consumable/enemy evidence pending; shared boarding N/A |
-| 2 | `pandemonium` | `Initial` | Partial: native normal-start route in both orders, four scenes/three reunions, rendered rope grips, minecart boarding and personal Cards pass; network and death/rejoin matrix pending |
+| 2 | `pandemonium` | `Initial` | Partial: native and delayed public routes in both orders pass, including rope/cart, four scenes/three reunions and personal Cards; death/rejoin/consumable/enemy matrix pending |
 | 3 | `fortress1` | `Initial` | Not run |
 | 4 | `fortress2` | `Initial` | Not run |
 | 5 | `fortress1` | `fortress1_start2` | Not run |

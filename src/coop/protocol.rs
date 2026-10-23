@@ -7,7 +7,7 @@ use macroquad::prelude::{Vec2, Vec3};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
-pub const REVISION: u32 = 3;
+pub const REVISION: u32 = 4;
 pub const INPUT_TIMEOUT: Duration = Duration::from_millis(500);
 const MAX_EDGES: u64 = 8;
 
@@ -103,8 +103,28 @@ pub struct Input {
     /// backpressure. The host consumes each new edge once on its own clock.
     pub jumps: u64,
     pub uses: u64,
+    /// Separate grab/release edges preserve the action the player saw. A late
+    /// grab must not toggle an automatic grip off on the authoritative host.
+    pub rope_edges: [u64; 2],
 }
 impl Input {
+    pub fn classify_rope_use(&mut self, previous_uses: u64, player: &crate::movement::Player,
+        world: &crate::collision::World, talking: bool) {
+        if talking || self.uses == previous_uses { return; }
+        let action = if player.rope.is_some() { Some(1) }
+            else if player.rope_prompt(world) == Some("E grab rope") { Some(0) }
+            else { None };
+        if let Some(action) = action {
+            self.rope_edges[action] += self.uses - previous_uses;
+            self.uses = previous_uses;
+        }
+    }
+    /// Called on the sampled edges, after dialogue and before movement locks.
+    /// This requests normal rope physics; it never supplies a grip or position.
+    pub fn rope_use(&self, player: &crate::movement::Player, world: &crate::collision::World) -> bool {
+        if player.rope.is_some() { self.rope_edges[1] > 0 }
+        else { self.rope_edges[0] > 0 && player.rope_prompt(world) == Some("E grab rope") }
+    }
     pub fn validate(&self) -> Result<()> {
         ensure!(
             self.wish.is_finite()
@@ -166,6 +186,7 @@ pub struct RemoteInput {
     pending_jumps: u64,
     pending_uses: u64,
     pending_attacks: [u64; 2],
+    pending_rope: [u64; 2],
 }
 impl RemoteInput {
     pub fn sequence(&self) -> u64 {
@@ -182,22 +203,26 @@ impl RemoteInput {
         let attacks: [Option<u64>; 2] = std::array::from_fn(|i| {
             input.attack_presses[i].checked_sub(self.last.attack_presses[i])
         });
+        let rope: [Option<u64>; 2] = std::array::from_fn(|i| input.rope_edges[i].checked_sub(self.last.rope_edges[i]));
         ensure!(
             jumps.is_some_and(|n| n <= MAX_EDGES)
                 && uses.is_some_and(|n| n <= MAX_EDGES)
-                && attacks.iter().all(|n| n.is_some_and(|n| n <= MAX_EDGES)),
+                && attacks.iter().all(|n| n.is_some_and(|n| n <= MAX_EDGES))
+                && rope.iter().all(|n| n.is_some_and(|n| n <= MAX_EDGES)),
             "Invalid co-op button sequence."
         );
         ensure!(
             self.pending_jumps + jumps.unwrap() <= MAX_EDGES
                 && self.pending_uses + uses.unwrap() <= MAX_EDGES
-                && (0..2).all(|i| self.pending_attacks[i] + attacks[i].unwrap() <= MAX_EDGES),
+                && (0..2).all(|i| self.pending_attacks[i] + attacks[i].unwrap() <= MAX_EDGES
+                    && self.pending_rope[i] + rope[i].unwrap() <= MAX_EDGES),
             "Too many pending co-op actions."
         );
         self.pending_jumps += jumps.unwrap();
         self.pending_uses += uses.unwrap();
         for i in 0..2 {
             self.pending_attacks[i] += attacks[i].unwrap();
+            self.pending_rope[i] += rope[i].unwrap();
         }
         self.last = input;
         self.sequence = sequence;
@@ -213,6 +238,7 @@ impl RemoteInput {
             self.pending_jumps = 0;
             self.pending_uses = 0;
             self.pending_attacks = [0; 2];
+            self.pending_rope = [0; 2];
             // Preserve the last view, but never keep walking or attacking.
             return (
                 Controls::default(),
@@ -228,6 +254,8 @@ impl RemoteInput {
         self.pending_jumps = self.pending_jumps.saturating_sub(1);
         self.pending_uses = self.pending_uses.saturating_sub(1);
         let mut input = self.last;
+        input.rope_edges = self.pending_rope.map(|n| u64::from(n > 0));
+        for n in &mut self.pending_rope { *n = n.saturating_sub(1); }
         input.primary |= self.pending_attacks[0] > 0;
         input.alternate |= self.pending_attacks[1] > 0;
         for n in &mut self.pending_attacks {
@@ -250,6 +278,63 @@ impl RemoteInput {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn rope_world() -> crate::collision::World {
+        let mut world = crate::collision::World::fixture(&[]);
+        world.traversal.ropes.push(crate::traversal::Rope { id:crate::entity::Id(1), model:1, enabled:true,
+            origin:Vec3::ZERO, anchor:Vec3::Z*320., length:320. });
+        world
+    }
+    #[test]
+    fn delayed_grab_after_automatic_attachment_stays_attached_and_explicit_release_still_works() {
+        let world = rope_world();
+        let mut player = crate::movement::Player::new(Vec3::new(24.,0.,40.));
+        let mut keys = Input { uses:1, ..Default::default() };
+        keys.classify_rope_use(0,&player,&world,false);
+        assert_eq!((keys.uses,keys.rope_edges),(0,[1,0]));
+        // The host's ordinary airborne physics catches the rope while that
+        // press is in flight. Apply the actual encoded/decoded input afterward.
+        player.tick(&world, Controls::default());
+        assert!(player.rope.is_some());
+        let mut latch = RemoteInput::default(); let now = Instant::now();
+        let received:Input = serde_json::from_slice(&serde_json::to_vec(&keys).unwrap()).unwrap();
+        latch.accept(1,received,now).unwrap();
+        let (mut movement,input) = latch.sample(now);
+        movement.use_pressed |= input.rope_use(&player,&world);
+        assert!(!movement.use_pressed);
+        player.tick(&world,movement);
+        assert!(player.rope.is_some(), "A delayed grab released an automatic grip");
+        keys.uses += 1; keys.classify_rope_use(0,&player,&world,false);
+        assert_eq!((keys.uses,keys.rope_edges),(0,[1,1]));
+        latch.accept(2,keys,now).unwrap();
+        let (mut movement,input) = latch.sample(now);
+        movement.use_pressed |= input.rope_use(&player,&world);
+        assert!(movement.use_pressed); player.tick(&world,movement);
+        assert!(player.rope.is_none());
+        assert!(!input.rope_use(&player,&world), "A delayed release cannot become a grab");
+        latch.accept(3,keys,now).unwrap();
+        assert_eq!(latch.sample(now).1.rope_edges,[0,0], "Acknowledged edges replayed");
+    }
+    #[test]
+    fn rope_edges_are_bounded_expire_and_do_not_replace_dialogue_or_other_use_actions() {
+        let now = Instant::now(); let mut latch = RemoteInput::default();
+        let keys = Input { rope_edges:[2,1], ..Default::default() };
+        latch.accept(1,keys,now).unwrap();
+        assert_eq!(latch.sample(now).1.rope_edges,[1,1]);
+        assert_eq!(latch.sample(now).1.rope_edges,[1,0]);
+        assert_eq!(latch.sample(now).1.rope_edges,[0,0]);
+        assert!(latch.accept(2,Input::default(),now).is_err());
+        assert!(latch.accept(2,Input { rope_edges:[11,1],..keys },now).is_err());
+        latch.accept(2,Input { rope_edges:[3,1],..keys },now).unwrap();
+        assert_eq!(latch.sample(now+INPUT_TIMEOUT).1.rope_edges,[0,0]);
+        let world = rope_world();
+        let mut player = crate::movement::Player::new(Vec3::new(24.,0.,40.));
+        let mut talking = Input { uses:1,..Default::default() };
+        talking.classify_rope_use(0,&player,&world,true);
+        assert_eq!((talking.uses,talking.rope_edges),(1,[0,0]));
+        player.feet.x=500.;
+        talking.classify_rope_use(0,&player,&world,false);
+        assert_eq!((talking.uses,talking.rope_edges),(1,[0,0]));
+    }
     #[test]
     fn host_envelope_preserves_integer_world_entity_keys() {
         let map = crate::interaction::tests::fixture();

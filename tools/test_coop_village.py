@@ -16,9 +16,13 @@ from test_coop_play import ROOT, read, distance
 
 
 class Pair:
+    map_name = 'gvillage'
+    next_map = 'pandemonium'
+    evidence_prefix = 'village-test-'
+
     def __init__(self, args):
         self.args = args
-        self.folder = ROOT / 'private' / 'coop' / ('village-test-' + uuid.uuid4().hex)
+        self.folder = ROOT / 'private' / 'coop' / (self.evidence_prefix + uuid.uuid4().hex)
         self.folder.mkdir(parents=True)
         self.invite = self.folder / 'invite.txt'
         self.processes, self.logs, self.commands, self.reports = {}, {}, {}, {}
@@ -36,11 +40,12 @@ class Pair:
             (self.folder / role).mkdir()
             self.set(role)
 
-    def set(self, role, goal=None, navigate=False, capture=False, finish=False, epoch=1):
+    def set(self, role, goal=None, navigate=False, capture=False, finish=False, epoch=1,
+            horizontal=False, rope=None, marker=None):
         self.serial += 1
         self.commands[role] = dict(id=self.serial, heartbeat=1, epoch=epoch,
                                   goal=goal, navigate=navigate, attack=True,
-                                  capture=capture, finish=finish)
+                                  capture=capture, finish=finish, horizontal=horizontal, rope=rope, marker=marker)
 
     def start(self, role):
         assert role not in self.processes or self.processes[role].poll() is not None
@@ -52,7 +57,7 @@ class Pair:
         self.log_paths[role] = self.folder / (role + suffix + '.log')
         log = self.log_paths[role].open('w')
         self.logs[role] = log
-        args = [str(self.args.exe.resolve()), '--data', str(self.args.data.resolve()), '--map', 'gvillage',
+        args = [str(self.args.exe.resolve()), '--data', str(self.args.data.resolve()), '--map', self.map_name,
                 '--no-audio', '--profile', str(profile), '--coop-host' if role == 'host' else '--coop-join',
                 str(self.invite), '--coop-route-driver', str(profile / 'route-command.json'),
                 '--coop-delay-ms', str(self.args.delay_ms), '--coop-jitter-ms', str(self.args.jitter_ms)]
@@ -62,7 +67,7 @@ class Pair:
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
 
     def pump(self):
-        assert time.monotonic() < self.deadline, 'Village route timed out'
+        assert time.monotonic() < self.deadline, self.map_name + ' route timed out'
         self.heartbeat += 1
         for role, command in self.commands.items():
             command['heartbeat'] = self.heartbeat
@@ -98,6 +103,7 @@ class Pair:
                        'stats': b['stats'],
                        'velocity': b['player']['velocity'], 'grounded': b['player']['grounded'],
                        'swimming': b['player']['swimming'], 'jumps': b['player']['jumps'],
+                       'rope': b['player']['rope'],
                        'collected': b['stats']['collected'], 'warped_at': b['warped_at'],
                        'spawned_at': b['spawned_at']} for b in frame['players']]}
             rows = self.history[role]
@@ -115,7 +121,8 @@ class Pair:
                     if captured == self.commands[role]['id']:
                         continue
                     old = self.commands[role]
-                    self.set(role, old['goal'], old['navigate'], capture=True, epoch=old['epoch'])
+                    self.set(role, old['goal'], old['navigate'], capture=True, epoch=old['epoch'],
+                             horizontal=old['horizontal'],rope=old['rope'],marker=old['marker'])
                     pending[role] = self.commands[role]['id']
                 if all(role in pending and (self.folder / role / f'route-capture-{pending[role]}.png').exists()
                        for role in self.commands):
@@ -135,7 +142,7 @@ class Pair:
             self.pump()
 
     def arrived(self):
-        return len(self.reports) == 2 and all(d['visit']['map'] == 'pandemonium' and d['visit']['epoch'] == 2
+        return len(self.reports) == 2 and all(d['visit']['map'] == self.next_map and d['visit']['epoch'] == 2
                                              for d in self.reports.values())
 
     def reached(self, role):
