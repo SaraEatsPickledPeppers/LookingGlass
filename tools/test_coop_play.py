@@ -124,6 +124,8 @@ def run(exe, data, local, combat=False, death=False, delay=0, jitter=0, death_fi
         deadline = time.monotonic() + 120
         while any(p.poll() is None for p in processes):
             assert time.monotonic() < deadline, 'Gameplay test timeout'
+            for role, process in zip(('host', 'guest'), processes):
+                assert process.poll() in (None, 0), (folder / (role + '.log')).read_text()
             for role in ('host', 'guest'):
                 report = read(folder / role / 'coop-live.json')
                 if report and report['playing']:

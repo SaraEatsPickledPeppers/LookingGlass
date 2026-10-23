@@ -165,6 +165,7 @@ pub async fn open(assets: &mut Assets, options: &Options, backdrop: &mut Menu, v
                                 start: None,
                                 drive: false,
                                 death_check: None,
+                                scene_check: None,
                                 conditions: Default::default(),
                             })
                         }
@@ -203,6 +204,7 @@ pub async fn open(assets: &mut Assets, options: &Options, backdrop: &mut Menu, v
                             start: Some(visit.clone()),
                             drive: false,
                             death_check: None,
+                            scene_check: None,
                             conditions: Default::default(),
                         })
                     }

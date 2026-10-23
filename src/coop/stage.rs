@@ -1,0 +1,519 @@
+//! Host-owned shared world, story clock and single-Alice scene ownership.
+use super::{
+    arena::direction,
+    protocol::{Input, Visit},
+    world::{self, Body, Roster},
+    PlayerId,
+};
+use crate::{
+    assets::Assets,
+    bsp::Bsp,
+    collision::World,
+    interaction::coop::{ContactFlow, Contacts, Motion},
+    interaction::{Events, Interactions},
+    movement::{Controls, Player, FIXED_DT},
+    story::Story,
+};
+use anyhow::{ensure, Result};
+use macroquad::prelude::*;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Notice {
+    pub text: String,
+    pub until: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Snapshot {
+    pub world: crate::interaction::Snapshot,
+    pub contacts: Contacts,
+    pub story: crate::story::Snapshot,
+    pub hints: crate::cheshire::Snapshot,
+    pub owner: Option<PlayerId>,
+    pub last_owner: PlayerId,
+    pub transition: Option<(String, Option<String>)>,
+    pub notices: [Option<Notice>; 2],
+}
+
+pub struct Stage {
+    pub interactions: Interactions,
+    pub story: Story,
+    pub hints: crate::cheshire::Hints,
+    pub owner: Option<PlayerId>,
+    pub transition: Option<(String, Option<String>)>,
+    pub notices: [Option<Notice>; 2],
+    contacts: Contacts,
+    last_owner: PlayerId,
+    initial: Option<Snapshot>,
+}
+impl Stage {
+    pub fn load(
+        assets: &mut Assets,
+        map: &Bsp,
+        world: &mut World,
+        visit: &Visit,
+        staged: bool,
+    ) -> Result<Self> {
+        let mut interactions = Interactions::load(map)?;
+        interactions.set_entry(assets, map, &visit.map, visit.entry.as_deref())?;
+        // The staged native guard replaces the authored encounter cast, as in single player.
+        if staged {
+            interactions.encounters = None;
+        }
+        let mut story = Story::load(assets, &visit.map);
+        let hints = crate::cheshire::Hints::load(assets, map, &visit.map)?;
+        if !staged {
+            interactions.entry_story(&mut story);
+        }
+        interactions.sync(world);
+        let owner = (interactions.scripted() || story.busy()).then_some(PlayerId::Blue);
+        let contacts = Contacts::new(&interactions);
+        let mut stage = Self {
+            interactions,
+            story,
+            hints,
+            owner,
+            contacts,
+            transition: None,
+            notices: [None, None],
+            last_owner: PlayerId::Blue,
+            initial: None,
+        };
+        stage.initial = Some(stage.snapshot());
+        Ok(stage)
+    }
+    pub fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            world: self.interactions.snapshot(),
+            contacts: self.contacts.clone(),
+            story: self.story.snapshot(),
+            hints: self.hints.snapshot(),
+            owner: self.owner,
+            last_owner: self.last_owner,
+            transition: self.transition.clone(),
+            notices: self.notices.clone(),
+        }
+    }
+    pub fn restore(&mut self, state: &Snapshot, map: &Bsp, world: &mut World) -> Result<()> {
+        ensure!(
+            state.notices.iter().flatten().all(|n| n.text.len() <= 2048),
+            "Invalid co-op world notice"
+        );
+        if let Some((map, entry)) = &state.transition {
+            Visit {
+                epoch: 1,
+                map: map.clone(),
+                entry: entry.clone(),
+                difficulty: Default::default(),
+                combat_preview: false,
+            }
+            .validate()?;
+        }
+        self.interactions.restore(&state.world, map)?;
+        state.contacts.validate(&self.interactions)?;
+        self.contacts = state.contacts.clone();
+        self.hints.restore(&state.hints)?;
+        self.story.restore(&state.story, &self.hints)?;
+        self.owner = state.owner;
+        self.last_owner = state.last_owner;
+        self.transition = state.transition.clone();
+        self.notices = state.notices.clone();
+        self.interactions.sync(world);
+        Ok(())
+    }
+    pub fn reset(&mut self, map: &Bsp, world: &mut World) -> Result<()> {
+        self.restore(&self.initial.as_ref().unwrap().clone(), map, world)
+    }
+    pub fn busy(&self) -> bool {
+        self.owner.is_some() || self.transition.is_some()
+    }
+    pub fn respawned(&mut self, id: PlayerId) {
+        self.contacts.reset_player(id);
+    }
+
+    fn accept(&mut self, events: Events, id: PlayerId, roster: &mut Roster, world: &World) {
+        apply(
+            &events,
+            id,
+            &mut roster.players,
+            world,
+            roster.tick,
+            &mut self.story,
+            &mut self.transition,
+            &mut self.notices,
+        );
+        if self.owner.is_none() && (self.interactions.scripted() || self.story.busy()) {
+            self.owner = Some(id);
+            self.last_owner = id;
+        }
+    }
+    pub fn before_move(
+        &mut self,
+        roster: &mut Roster,
+        map: &Bsp,
+        world: &mut World,
+        inputs: &[(Controls, Input); 2],
+        dt: f32,
+    ) -> Result<()> {
+        let events = self.interactions.advance_shared(dt);
+        self.accept(events, self.last_owner, roster, world);
+        if self.busy() {
+            return Ok(());
+        }
+        let events = self.interactions.doors_pair(
+            dt,
+            map,
+            world,
+            std::array::from_fn(|i| {
+                let body = &roster.players[i];
+                body.stats.alive().then_some((
+                    &body.player,
+                    direction(inputs[i].1.yaw, inputs[i].1.pitch),
+                    inputs[i].0.use_pressed && body.player.rope_prompt(world).is_none(),
+                ))
+            }),
+        )?;
+        for (id, events) in PlayerId::ALL.into_iter().zip(events) {
+            self.accept(events, id, roster, world);
+        }
+        Ok(())
+    }
+    pub fn contacts(
+        &mut self,
+        roster: &mut Roster,
+        world: &World,
+        before: [Vec3; 2],
+    ) -> Result<()> {
+        let paths = std::array::from_fn(|i| {
+            roster.players[i].stats.alive().then_some(Motion {
+                before: before[i],
+                after: roster.players[i].player.feet,
+            })
+        });
+        let mut last = self.last_owner;
+        let result = self.interactions.triggers_pair_resolve(
+            FIXED_DT,
+            &mut self.contacts,
+            paths,
+            |activation| {
+                last = activation.player;
+                apply(
+                    &activation.events,
+                    activation.player,
+                    &mut roster.players,
+                    world,
+                    roster.tick,
+                    &mut self.story,
+                    &mut self.transition,
+                    &mut self.notices,
+                )
+            },
+        )?;
+        self.last_owner = last;
+        self.accept(result.shared, last, roster, world);
+        if self.owner.is_none() && (self.interactions.scripted() || self.story.busy()) {
+            self.owner = Some(last);
+        }
+        Ok(())
+    }
+    /// Original scene code receives exactly one actor. The other body is frozen
+    /// and omitted from rendering until both can reunite at supported positions.
+    pub fn scene_step(
+        &mut self,
+        roster: &mut Roster,
+        map: &Bsp,
+        world: &mut World,
+        inputs: &[(Controls, Input); 2],
+    ) -> Result<()> {
+        roster.tick += 1;
+        let Some(owner) = self.owner else {
+            return Ok(());
+        };
+        let body = &roster.players[owner.index()];
+        let events = self.interactions.update(
+            FIXED_DT,
+            map,
+            world,
+            &body.player,
+            direction(body.yaw, body.pitch),
+            false,
+        )?;
+        self.accept(events, owner, roster, world);
+        self.interactions.advance_school(
+            FIXED_DT,
+            map,
+            world,
+            &mut roster.players[owner.index()].player,
+        )?;
+        let ready = self.interactions.prepare_story(&mut self.story);
+        self.story.tick(
+            if ready { FIXED_DT } else { 0. },
+            inputs[owner.index()].0.use_pressed,
+        );
+        self.interactions.sync_cinematic_story(&self.story);
+        for name in self.story.take_completed() {
+            let events = self.interactions.completed_dialogue(&name);
+            self.accept(events, owner, roster, world);
+        }
+        self.hints.sync(&self.interactions);
+        self.transition = self
+            .interactions
+            .take_story_exit(&mut self.story)
+            .or(self.transition.take());
+        if self.transition.is_none() && !self.interactions.scripted() && !self.story.busy() {
+            let partner = owner.partner();
+            if roster.players[partner.index()].stats.alive() {
+                let Some(player) =
+                    world::safe_near_with(world, roster.players[owner.index()].player.feet, |at| {
+                        !self.interactions.hazardous(at)
+                    })
+                else {
+                    return Ok(());
+                };
+                roster.players[partner.index()].player = player;
+            }
+            let facing = roster.players[owner.index()].player.script_facing;
+            for body in &mut roster.players {
+                body.yaw = facing;
+                body.pitch = 0.;
+                body.running = false;
+                body.warped_at = roster.tick;
+            }
+            for id in PlayerId::ALL {
+                self.contacts.reset_player(id);
+            }
+            self.owner = None;
+        }
+        Ok(())
+    }
+    pub fn camera(&self, world: &World) -> Option<crate::cinematic::Camera> {
+        if self.owner.is_none() {
+            return None;
+        }
+        let i = &self.interactions;
+        i.camera_after(
+            i.duchess
+                .as_ref()
+                .and_then(|s| s.camera(world))
+                .or_else(|| i.pandemonium.as_ref().and_then(|s| s.camera()))
+                .or_else(|| i.pool.as_ref().and_then(|s| s.camera()))
+                .or_else(|| i.school.as_ref().and_then(|s| s.scene_camera()))
+                .or_else(|| i.school2.as_ref().and_then(|s| s.scene_camera()))
+                .or_else(|| i.beyond.as_ref().and_then(|s| s.scene_camera_in(world)))
+                .or_else(|| {
+                    i.fortress
+                        .as_ref()
+                        .and_then(|s| s.cinema.camera(&s.state.cinema))
+                })
+                .or_else(|| i.village.as_ref().and_then(|s| s.cinema.camera())),
+            world,
+        )
+        .or_else(|| {
+            i.school
+                .as_ref()
+                .and_then(|s| s.return_visit.as_ref())
+                .and_then(|s| s.camera())
+                .map(|(eye, target, _)| crate::cinematic::Camera::look(eye, target))
+        })
+    }
+    pub fn scene_fovy(&self, aspect: f32) -> f32 {
+        self.interactions
+            .beyond
+            .as_ref()
+            .and_then(|b| b.scene_fovy(aspect))
+            .or_else(|| {
+                self.interactions
+                    .levels
+                    .iter()
+                    .find_map(|s| s.ctl.scene_fovy(aspect))
+            })
+            .unwrap_or(75_f32.to_radians())
+    }
+    pub fn fade(&self) -> Color {
+        if self.owner.is_none() {
+            return Color::new(0., 0., 0., 0.);
+        }
+        let i = &self.interactions;
+        i.fade_after(
+            i.village
+                .as_ref()
+                .map(|v| v.cinema.fade())
+                .or_else(|| i.fortress.as_ref().map(|f| f.cinema.fade(&f.state.cinema)))
+                .or_else(|| i.pandemonium.as_ref().map(|p| (p.fade_color(), p.fade())))
+                .or_else(|| i.pool.as_ref().map(|p| p.fade()))
+                .or_else(|| i.beyond.as_ref().map(|b| b.scene_fade()))
+                .or_else(|| i.school.as_ref().map(|s| s.scene_fade()))
+                .or_else(|| i.school2.as_ref().map(|s| s.scene_fade())),
+        )
+        .map_or(Color::new(0., 0., 0., 0.), |(c, a)| Color { a, ..c })
+    }
+}
+
+fn apply(
+    events: &Events,
+    id: PlayerId,
+    players: &mut [Body; 2],
+    world: &World,
+    tick: u64,
+    story: &mut Story,
+    transition: &mut Option<(String, Option<String>)>,
+    notices: &mut [Option<Notice>; 2],
+) -> ContactFlow {
+    let body = &mut players[id.index()];
+    body.stats.damage(events.damage);
+    if let Some(text) = &events.message {
+        notices[id.index()] = Some(Notice {
+            text: text.clone(),
+            until: tick + 360,
+        });
+    }
+    if !body.stats.alive() {
+        notices[id.index()] = None;
+        return ContactFlow::StopPlayer;
+    }
+    let mut flow = ContactFlow::Continue;
+    if let Some((feet, yaw)) = events.teleport {
+        if world.body_clear(feet) {
+            body.player = Player::new(feet);
+            body.yaw = yaw;
+            body.pitch = 0.;
+            body.warped_at = tick;
+        } else {
+            notices[id.index()] = Some(Notice {
+                text: "Teleport destination is obstructed".into(),
+                until: tick + 360,
+            });
+        }
+        flow = ContactFlow::StopPlayer;
+    }
+    for event in &events.story {
+        story.trigger(event);
+    }
+    if events.transition.is_some() {
+        *transition = events.transition.clone();
+    }
+    if story.busy() || transition.is_some() {
+        flow = ContactFlow::StopWorld;
+    }
+    flow
+}
+
+/// Authored school scene, with each player owning the real trigger in turn.
+/// This is a focused scene fixture, not a traversal or campaign completion claim.
+pub fn check(assets: &mut Assets) -> Result<()> {
+    let map = Bsp::parse(&assets.read("maps/skool1.bsp")?)?;
+    let visit = Visit {
+        epoch: 1,
+        map: "skool1".into(),
+        entry: None,
+        difficulty: Default::default(),
+        combat_preview: false,
+    };
+    for first in PlayerId::ALL {
+        let mut world = World::from_bsp(&map)?;
+        let mut stage = Stage::load(assets, &map, &mut world, &visit, false)?;
+        let mut mirror_world = World::from_bsp(&map)?;
+        let mut mirror = Stage::load(assets, &map, &mut mirror_world, &visit, false)?;
+        let (eye, yaw) = crate::interaction::spawn(&map, None);
+        let mut roster = Roster::new(
+            &world,
+            eye,
+            yaw,
+            crate::inventory::Stats::for_level("skool1", None),
+        )?;
+        ensure!(!stage.busy(), "Unexpected school entry scene in fixture");
+        let partner = first.partner().index();
+        let waiting = roster.players[partner].player.feet;
+        let landing = vec3(-2514., 2368., -480.);
+        ensure!(
+            world.body_clear(landing),
+            "Theatre test contact is obstructed"
+        );
+        roster.players[first.index()].player = Player::new(landing);
+        let before = roster.players.each_ref().map(|b| b.player.feet);
+        stage.contacts(&mut roster, &world, before)?;
+        ensure!(
+            stage.owner == Some(first),
+            "The first arriving player did not own the theatre scene"
+        );
+        let mut count = 0;
+        while stage.busy() && count < 120 * 180 {
+            stage.scene_step(&mut roster, &map, &mut world, &Default::default())?;
+            count += 1;
+            if stage.busy() {
+                ensure!(
+                    roster.players[partner].player.feet == waiting,
+                    "Scene moved the waiting partner"
+                );
+            }
+            if count % 120 == 0 || !stage.busy() {
+                let wire = super::protocol::HostMessage::Frame {
+                    frame: stage.snapshot(),
+                };
+                let encoded = super::codec::encode(&serde_json::to_vec(&wire)?)?;
+                let super::protocol::HostMessage::Frame { frame: state } =
+                    serde_json::from_slice::<super::protocol::HostMessage<Snapshot>>(
+                        &super::codec::decode(&encoded)?,
+                    )?
+                else {
+                    anyhow::bail!("Scene wire roundtrip changed message kind");
+                };
+                mirror.restore(&state, &map, &mut mirror_world)?;
+                ensure!(
+                    mirror.owner == stage.owner && mirror.story.busy() == stage.story.busy(),
+                    "Scene replica drifted"
+                );
+                let camera = stage.camera(&world).map(|c| (c.eye, c.target));
+                let copy = mirror.camera(&mirror_world).map(|c| (c.eye, c.target));
+                ensure!(camera == copy, "Replicated scene camera diverged");
+                ensure!(
+                    mirror.interactions.transforms() == stage.interactions.transforms(),
+                    "Scene mover replica diverged"
+                );
+            }
+        }
+        ensure!(
+            !stage.busy() && stage.transition.is_none(),
+            "School theatre did not finish in 180 seconds"
+        );
+        let bodies = &roster.players;
+        ensure!(
+            bodies.iter().all(|b| world.body_clear(b.player.feet)
+                && crate::recovery::supported(&world, b.player.feet)
+                && !stage.interactions.hazardous(b.player.feet)),
+            "Scene reunion was not safe"
+        );
+        let separation = bodies[0].player.feet.distance(bodies[1].player.feet);
+        ensure!(
+            (40. ..=110.).contains(&separation),
+            "Scene did not reunite both players nearby"
+        );
+        ensure!(
+            bodies
+                .iter()
+                .all(|b| b.warped_at == roster.tick && b.spawned_at == 0),
+            "Scene reunion reported a death/respawn"
+        );
+        println!("PASS co-op theatre owner {first:?}: {count} fixed ticks, original camera/story, waiting partner frozen, snapshot replica, safe reunion {separation:.2}");
+        stage.reset(&map, &mut world)?;
+        for b in &mut roster.players {
+            b.stats.damage(10000.);
+        }
+        roster.finish_tick_with(&world, false, |at| !stage.interactions.hazardous(at))?;
+        ensure!(
+            roster.checkpoint_generation == 1 && roster.players.iter().all(|b| b.stats.alive()),
+            "Scene wipe did not restore both bodies"
+        );
+        ensure!(
+            serde_json::to_value(stage.snapshot())?
+                == serde_json::to_value(stage.initial.as_ref().unwrap())?,
+            "Wipe did not restore shared story and world"
+        );
+        println!(
+            "PASS co-op theatre wipe {first:?}: shared world/story/contact checkpoint restored"
+        );
+    }
+    Ok(())
+}

@@ -1228,10 +1228,18 @@ impl Interactions {
         aim: Vec3,
         use_pressed: bool,
     ) -> Result<Events> {
-        let mut events = Events::default();
         if dt <= 0. {
-            return Ok(events);
+            return Ok(Events::default());
         }
+        let mut events = self.advance_shared(dt);
+        self.refresh_door_locks(&[player]);
+        self.update_player(dt, map, world, player, aim, use_pressed, &mut events)?;
+        Ok(events)
+    }
+    /// Presentation and completion outputs belong to the world, not a body.
+    pub fn advance_shared(&mut self, dt: f32) -> Events {
+        let mut events = Events::default();
+        if dt <= 0. || !dt.is_finite() { return events; }
         self.presentation.update(dt);
         if self
             .school
@@ -1258,6 +1266,9 @@ impl Interactions {
                 events.sound = Some(sound.into());
             }
         }
+        events
+    }
+    fn refresh_door_locks(&mut self, players: &[&Player]) {
         if let Some(r) = self.school.as_ref().and_then(|s| s.return_visit.as_ref()) {
             for d in &mut self.doors {
                 if [14, 15].contains(&d.model) {
@@ -1272,13 +1283,16 @@ impl Interactions {
                 }
                 if d.name.starts_with("boojum_door") {
                     d.locked = s.quest.stage == crate::school2_quest::Stage::Battle
-                        && player.feet.x > 1370.;
+                        && !players.is_empty() && players.iter().all(|p| p.feet.x > 1370.);
                     if d.locked {
                         d.target = 0.;
                     }
                 }
             }
         }
+    }
+    fn update_player(&mut self, dt: f32, map: &Bsp, world: &mut World,
+        player: &Player, aim: Vec3, use_pressed: bool, events: &mut Events) -> Result<()> {
         let rope_use = use_pressed
             && self
                 .pandemonium
@@ -1329,7 +1343,7 @@ impl Interactions {
         }
         self.advance_doors(dt, map, &[player])?;
         self.sync(world);
-        Ok(events)
+        Ok(())
     }
     fn use_door(&mut self, world: &World, player: &Player, aim: Vec3, operated: &mut BTreeSet<Id>) -> Events {
         let mut events = Events::default();

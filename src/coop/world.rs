@@ -25,6 +25,8 @@ pub struct Body {
     /// Host tick of the most recent spawn. Presentation must never interpolate
     /// through a death/respawn or checkpoint restore, even over short distances.
     pub spawned_at: u64,
+    /// Teleports and scene reunions also cut visual interpolation, but are not deaths.
+    pub warped_at: u64,
 }
 impl Body {
     fn validate(&self) -> Result<()> {
@@ -60,6 +62,7 @@ impl Frame {
         for body in &self.players {
             body.validate()?;
             ensure!(body.spawned_at <= self.tick, "Co-op spawn is in the future.");
+            ensure!(body.warped_at <= self.tick, "Co-op relocation is in the future.");
         }
         self.lives.validate()
     }
@@ -73,6 +76,27 @@ pub struct Roster {
     checkpoint: [Body; 2],
 }
 impl Roster {
+    /// Real exits carry each player's earned inventory and resources separately.
+    /// A dead partner keeps the same countdown while the next visit loads.
+    pub fn arrive(&self, world: &World, eye: Vec3, yaw: f32, map: &str, entry: Option<&str>) -> Result<Self> {
+        let mut next = Self::new(world, eye, yaw, self.players[0].stats.clone())?;
+        next.tick = self.tick;
+        next.checkpoint_generation = self.checkpoint_generation;
+        next.lives = self.lives.clone();
+        for (body, old) in next.players.iter_mut().zip(&self.players) {
+            body.stats = old.stats.clone();
+            body.stats.ensure_level_weapons(map, entry);
+            body.spawned_at = old.spawned_at;
+            body.warped_at = self.tick;
+        }
+        next.checkpoint = next.players.clone();
+        // Both bodies must be living when restoring this entrance checkpoint.
+        // A partner who was dead during the exit retains their own inventory.
+        for body in &mut next.checkpoint {
+            if !body.stats.alive() { body.stats.set_health(RESPAWN_HEALTH)?; }
+        }
+        Ok(next)
+    }
     pub fn new(world: &World, eye: Vec3, yaw: f32, stats: Stats) -> Result<Self> {
         let blue = Player::spawn(world, eye).context("Alice's entrance is obstructed.")?;
         let red = safe_near(world, blue.feet)
@@ -84,6 +108,7 @@ impl Roster {
             pitch: 0.,
             running: false,
             spawned_at: 0,
+            warped_at: 0,
         });
         Ok(Self {
             checkpoint: players.clone(),
@@ -122,10 +147,14 @@ impl Roster {
             }
         }
     }
+    #[cfg(test)]
     pub fn finish_tick(&mut self, world: &World) -> Result<()> {
+        self.finish_tick_with(world, false, |_| true)
+    }
+    pub fn finish_tick_with(&mut self, world: &World, cinematic: bool, safe: impl Fn(Vec3) -> bool) -> Result<()> {
         let events = self
             .lives
-            .tick(self.players.each_ref().map(|p| p.stats.alive()), false);
+            .tick(self.players.each_ref().map(|p| p.stats.alive()), cinematic);
         if events.contains(&DeathEvent::RestoreCheckpoint) {
             self.checkpoint_generation += 1;
             self.players = self.checkpoint.clone();
@@ -135,8 +164,8 @@ impl Roster {
                 "Co-op checkpoint is obstructed."
             );
             self.lives.checkpoint_restored([true; 2]);
-        } else if let Some((dead, survivor)) = self.lives.pending_spawn() {
-            if let Some(player) = safe_near(world, self.players[survivor.index()].player.feet) {
+        } else if let Some((dead, survivor)) = self.lives.pending_spawn().filter(|_| !cinematic) {
+            if let Some(player) = safe_near_with(world, self.players[survivor.index()].player.feet, safe) {
                 let body = &mut self.players[dead.index()];
                 body.player = player;
                 body.stats.set_health(RESPAWN_HEALTH)?;
@@ -163,6 +192,7 @@ impl Roster {
 /// authoritative frame, health and spawn clock are never changed by rendering.
 pub fn interpolate_body(body: &mut Body, previous: &Body, elapsed: f32) {
     if body.spawned_at == previous.spawned_at
+        && body.warped_at == previous.warped_at
         && body.stats.alive() == previous.stats.alive()
         && body.player.feet.distance(previous.player.feet) < 128.
     {
@@ -173,6 +203,9 @@ pub fn interpolate_body(body: &mut Body, previous: &Body, elapsed: f32) {
 /// Grounded, clear placement close to the survivor, reached without crossing a
 /// wall. Do not spawn on a ledge, in a liquid, on the other body or over a drop.
 pub fn safe_near(world: &World, feet: Vec3) -> Option<Player> {
+    safe_near_with(world, feet, |_| true)
+}
+pub fn safe_near_with(world: &World, feet: Vec3, safe: impl Fn(Vec3) -> bool) -> Option<Player> {
     for radius in [48., 72., 96.] {
         for direction in [
             Vec3::X,
@@ -194,7 +227,7 @@ pub fn safe_near(world: &World, feet: Vec3) -> Option<Player> {
                 continue;
             }
             let landing = candidate - Vec3::Z * (50. * floor.fraction);
-            if !crate::recovery::supported(world, landing) {
+            if !crate::recovery::supported(world, landing) || !safe(landing) {
                 continue;
             }
             return Player::spawn(world, landing + Vec3::Z * EYE_HEIGHT);
@@ -358,5 +391,48 @@ mod tests {
     fn no_safe_neighbor_does_not_place_a_body_over_a_drop() {
         let small = World::fixture(&[(vec3(-20., -20., -100.), vec3(20., 20., 0.))]);
         assert!(safe_near(&small, Vec3::Z * 0.04).is_none());
+    }
+
+    #[test]
+    fn a_scene_holds_pending_respawn_and_hazardous_landings_are_retried() {
+        let world = floor();
+        let mut roster = Roster::new(&world, Vec3::Z * (EYE_HEIGHT + 0.04), 0., Stats::default()).unwrap();
+        roster.players[1].stats.damage(1000.);
+        for _ in 0..1201 {
+            roster.tick += 1;
+            roster.finish_tick_with(&world, false, |_| false).unwrap();
+        }
+        assert_eq!(roster.lives.state(PlayerId::Red), super::super::rules::Life::AwaitingSafeSpawn);
+        for _ in 0..120 {
+            roster.tick += 1;
+            roster.finish_tick_with(&world, true, |_| true).unwrap();
+            assert!(!roster.players[1].stats.alive());
+        }
+        let origin = roster.players[0].player.feet;
+        roster.finish_tick_with(&world, false, |at| at.x < origin.x - 40.).unwrap();
+        assert_eq!(roster.players[1].stats.sanity(), RESPAWN_HEALTH);
+        assert!(roster.players[1].player.feet.x < origin.x - 40.);
+    }
+
+    #[test]
+    fn relocation_snaps_without_reporting_a_new_life_and_exits_keep_individual_stats() {
+        let world = floor();
+        let mut roster = Roster::new(&world, Vec3::Z * (EYE_HEIGHT + 0.04), 0., Stats::default()).unwrap();
+        roster.players[0].stats.set_health(73.).unwrap();
+        roster.players[1].stats.set_health(0.).unwrap();
+        roster.step(&world, Default::default()).unwrap();
+        let old = roster.players[0].clone();
+        let next = roster.arrive(&world, vec3(0., 48., EYE_HEIGHT + 0.04), 1., "skool2", None).unwrap();
+        assert_eq!(next.players[0].stats.sanity(), 73.);
+        assert_eq!(next.players[1].stats.sanity(), 0.);
+        assert_eq!(next.lives.state(PlayerId::Red), roster.lives.state(PlayerId::Red));
+        assert_eq!(next.players[0].spawned_at, old.spawned_at);
+        assert_eq!(next.players[0].warped_at, next.tick);
+        let mut visual = next.players[0].clone();
+        interpolate_body(&mut visual, &old, 0.01);
+        assert_eq!(visual.player.feet, next.players[0].player.feet);
+        let mut invalid = next.frame(2, 0);
+        invalid.players[0].warped_at += 1;
+        assert!(invalid.validate().is_err());
     }
 }

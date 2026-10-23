@@ -22,11 +22,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
+    pub stage: super::stage::Snapshot,
     pub npcs: crate::npc::Snapshot,
     pub characters: [crate::character::Snapshot; 2],
 }
 
 pub struct Arena {
+    pub stage: super::stage::Stage,
     pub characters: [Character; 2],
     pub npcs: Npcs,
     pub pickups: Vec<Pickup>,
@@ -36,7 +38,8 @@ pub struct Arena {
     alive: [bool; 2],
 }
 impl Arena {
-    pub fn load(assets: &mut Assets, map: &Bsp, visit: &Visit, staged: bool) -> Result<Self> {
+    pub fn load(assets: &mut Assets, map: &Bsp, world: &mut World, visit: &Visit, staged: bool) -> Result<Self> {
+        let stage = super::stage::Stage::load(assets, map, world, visit, staged)?;
         let npcs = Npcs::load(
             assets,
             map,
@@ -50,6 +53,7 @@ impl Arena {
         let pickups =
             inventory::pickups_for_visit(map, &visit.map, visit.entry.as_deref(), &catalog);
         Ok(Self {
+            stage,
             npcs,
             initial,
             catalog,
@@ -70,11 +74,13 @@ impl Arena {
     }
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
+            stage: self.stage.snapshot(),
             npcs: self.npcs.snapshot(),
             characters: self.characters.each_ref().map(|c| c.snapshot()),
         }
     }
-    pub fn replicate(&mut self, s: &Snapshot) -> Result<()> {
+    pub fn replicate(&mut self, s: &Snapshot, map: &Bsp, world: &mut World) -> Result<()> {
+        self.stage.restore(&s.stage, map, world)?;
         self.npcs.replicate(&s.npcs)?;
         for (c, state) in self.characters.iter_mut().zip(&s.characters) {
             c.restore(state)?;
@@ -84,15 +90,31 @@ impl Arena {
     pub fn step(
         &mut self,
         roster: &mut Roster,
-        world: &World,
+        map: &Bsp,
+        world: &mut World,
         mut inputs: [(Controls, Input); 2],
     ) -> Result<()> {
+        if self.stage.busy() {
+            self.stage.scene_step(roster, map, world, &inputs)?;
+            return self.finish(roster, map, world, true);
+        }
+        let world_dt = roster.players.iter().fold(FIXED_DT, |dt, b| b.stats.powers.world_dt(dt));
+        self.stage.before_move(roster, map, world, &inputs, world_dt)?;
+        // A delayed shared output may have begun a scene. Its first scene tick
+        // belongs to the next fixed step, never a second world update here.
+        if self.stage.busy() {
+            roster.tick += 1;
+            return self.finish(roster, map, world, true);
+        }
         for (character, (movement, _)) in self.characters.iter().zip(&mut inputs) {
             if character.attack_movement_locked() || character.ice_locked() {
                 *movement = Controls::default();
             }
         }
+        let feet = roster.players.each_ref().map(|b| b.player.feet);
         roster.move_players(world, inputs);
+        self.stage.contacts(roster, world, feet)?;
+        if self.stage.busy() { return self.finish(roster, map, world, true); }
         let before = self.npcs.loot_sources();
         // One clock for the world. Either player's Watch can stop its enemies;
         // each player's own movement, weapon and resource clocks still run.
@@ -192,18 +214,28 @@ impl Arena {
                 world,
             );
         }
+        self.finish(roster, map, world, false)
+    }
+    fn finish(&mut self, roster: &mut Roster, map: &Bsp, world: &mut World, cinematic: bool) -> Result<()> {
         let generation = roster.checkpoint_generation;
-        roster.finish_tick(world)?;
-        if generation != roster.checkpoint_generation {
+        // Restore collision before validating the saved body placements.
+        if roster.players.iter().all(|b| !b.stats.alive()) {
+            self.stage.reset(map, world)?;
             self.npcs.restore(&self.initial)?;
+        }
+        roster.finish_tick_with(world, cinematic, |at| !self.stage.interactions.hazardous(at))?;
+        if generation != roster.checkpoint_generation {
             self.reset_characters(&roster.players);
         } else {
             for (index, (character, body)) in
                 self.characters.iter_mut().zip(&roster.players).enumerate()
             {
                 let alive = body.stats.alive();
-                if alive && !self.alive[index] {
+                if alive && (!self.alive[index] || body.warped_at == roster.tick) {
                     character.reset(&body.player, body.yaw);
+                }
+                if alive && !self.alive[index] {
+                    self.stage.respawned(PlayerId::ALL[index]);
                 }
                 if !alive {
                     character.die();

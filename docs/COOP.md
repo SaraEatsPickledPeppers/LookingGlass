@@ -123,12 +123,13 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after the rendered recovery checks: **25%** (previously 24%). Credited
+Overall estimate after live shared-world and theatre checks: **28%** (previously 25%). Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
 4/15 for two-player movement/presentation, and 6/20 for native targeting, host-owned
-weapons/damage, personal resources and the entrance-checkpoint/respawn slice.
-Scenes/progression and full-campaign verification remain at
-zero. Standalone policy tests receive no campaign credit.
+weapons/damage, personal resources and the entrance-checkpoint/respawn slice,
+plus 3/20 for shared world replication, ordered contacts and the verified theatre
+ownership/reunion slice. Full-campaign verification remains at zero. Standalone
+policy tests receive no campaign credit; every campaign-matrix row remains Not run.
 
 The native enemy combat foundation now supplies two live targets to each enemy
 and keeps damage, knockback and Will drain separate for Blue and Red. Closest
@@ -192,10 +193,10 @@ bodies. Personal contact history can be serialized beside the interaction snapsh
 and cleared for one respawn without rearming shared one-shot events. The original
 single-player save representation is unchanged.
 
-This is a world adapter, not live campaign integration yet. The rendered co-op
-viewer still needs this shared world, controller/mover adapters, scene ownership,
-network replication and checkpoint wiring. No extra completion percentage or
-campaign-matrix credit is assigned merely for adding this interface. Its actual-map
+The rendered co-op viewer now owns this shared world on the host and replicates
+its event history, contacts and story state. Controller/mover adapters and complete
+campaign progression still need integration. No campaign-matrix credit is assigned
+merely for adding this interface. Its actual-map
 check is `--coop-world-check --data <original-base-folder>`; `--world-check` remains
 the single-player regression.
 
@@ -232,10 +233,88 @@ all eight floor supports, both visits' seam crossings at 30/60/144 Hz, and fatal
 reset. Each seam route ends at `y=2845.4404`; evidence is
 `private/coop-world-single-final.log`. Seven source-package tests also pass.
 
-Live integration must also resolve each player's damage/teleport as contacts are
-dispatched, ending an old sweep after death or relocation before later script
-effects. The current ordered contact adapter is not yet wired into that player
-lifecycle or the scene/mover pipeline.
+Live contact dispatch now resolves personal damage/teleport immediately, ending
+that body's old sweep before it can consume a later scene or exit. The partner's
+contacts remain eligible, and teleport cooldowns survive relocation.
+
+### Live world and school theatre integration
+
+`coop::stage` owns shared interactions, contacts, story, hints and the active scene
+owner. Scene ticks advance the original single-Alice controller exactly once,
+freeze the partner and hold respawn timers. Both windows use the replicated
+original camera, dialogue and level art. Completion finds a supported nearby
+position outside hazard volumes before returning control to both players.
+Relocations cut camera/body interpolation without being counted as death respawns.
+An entrance wipe restores shared world/story/contact state before checking body
+placements, together with native NPC and character state.
+
+`--coop-world-check` now also runs the actual theatre for both first-arrival roles:
+5,592 fixed ticks each, frozen waiting partner, camera/mover snapshot agreement,
+48-unit safe reunion and full shared-state reset. The check passes scene state
+through the same compressed host message envelope used on the network.
+Single-player `--world-check` and `--school-check` pass; all 39 initial visit
+records match the retained pre-refactor baseline independently of the registry's
+comparison exemptions. These checks do not establish a completed campaign visit.
+
+The first rendered attempt exposed an envelope problem: the old internally tagged
+message buffered integer entity-map keys in a form that could not be restored.
+Host messages now use an external tag, with a regression covering real interaction
+snapshots. Protocol revision 2 and the exact build identity prevent mixed clients.
+
+The intermittent initial-join failure also reproduced against the retained older
+executable: a valid HTTP upgrade delayed by 50, 200 or 500 ms was aborted every time.
+Windows accepted sockets inherit the listener's properties
+([Microsoft documentation](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-accept)); the bounded
+synchronous upgrade now explicitly selects blocking mode before authentication,
+then returns to nonblocking exchange. The regression forces the inherited mode
+even on other platforms. `tools/test_coop_handshake.py` exercises the production
+listener with delayed bytes without using game assets. Failed pre-fix evidence:
+`private/coop/handshake-test-a241a70853194f21845271a9abdedc0e`.
+
+`tools/test_coop_scene.py --data <original-base-folder> --first blue` starts two
+independent rendered clients near the theatre. The chosen player walks into the
+authored trigger; neither driver starts a scene directly. Use `--first red` for
+the other arrival order, `--local` for loopback, and `--delay-ms` / `--jitter-ms`
+for network conditions. It verifies scene ownership, partner immobilization,
+camera movement, matching authoritative reunion ticks and nearby living bodies,
+and captures the scene and reunion. This is a scene fixture, not a traversal test.
+
+Rendered checks on 2026-10-23 passed with Blue first on loopback and Red first over
+the public TLS tunnel with 40 ms delay plus 0–20 ms jitter per sender. Both windows
+observed the same owner and reunion tick, and a 48-unit separation. Captures were
+inspected; the final presentation uses the original scene field of view/fades and
+suppresses the ordinary gameplay HUD. Evidence under `private/coop/`:
+`scene-test-538e7bf8119543b88d43e770ed292147` (Blue, before final presentation tuning),
+`scene-test-459a4e14b3724b5ba9ebe5769871a9b9` (Red, final presentation).
+The final production-listener regression accepts upgrades at all three delays:
+`handshake-test-1449f00e111d4c608db6c5e3dd843f94`.
+
+The final full Rust suite passes 723 tests (one unrelated ignored test), including
+the real entity-map envelope and delayed-upgrade regressions. Source-package (7),
+portable setup (6) and Windows setup (6) tests also pass. Final headless evidence:
+`private/coop-stage-verified-tests.log` and `private/coop-stage-verified-native.log`.
+A subsequent public recovery attempt did not reach gameplay because the guest
+could not resolve its newly created tunnel address; retain
+`private/coop/play-test-72524584443844d1b1d5ad372ddd5d9c`. The current DNS grace
+period does not guarantee immediate invite availability. That remains an internet
+hosting reliability limitation; the successful theatre run does not erase it.
+The local recovery regression with the same 40/20 ms conditions passed: Red died
+at tick 2,077, returned at tick 3,277 with 25 health and 48-unit separation, then
+both clients restored the checkpoint at tick 4,261. Shared world restoration did
+not change the ten-second timer or spectator/recovery camera behavior. Evidence:
+`private/coop/play-test-d49bd2e45c5d402a9256785059bbf298`.
+The final local Blade-combat regression also passes with the shared world enabled:
+both players attack, both clients see the same defeated guard, Blue remains at
+100 health and Red reaches 64. Evidence:
+`private/coop/play-test-46f596d015874301b65afbe05631577b`.
+All owned game and tunnel processes were gone after testing.
+
+The level-change/load-barrier path is connected and carries each player's own
+resources, inventory and death countdown. Full round-trip campaign state caching,
+shared saves, controller combat, two-body moving supports/boarding, co-op audio,
+and live transition/disconnect coverage remain unfinished. Free-play controller
+updates beyond doors/contacts are not yet integrated; one theatre passing cannot
+stand in for those systems or for the 39-visit campaign matrix.
 
 ## Windowed movement and combat slice (development only)
 
@@ -418,7 +497,9 @@ concurrency and eight workers. Two earlier default-concurrency runs timed out wh
 waiting for an initial transport connection; focused and subsequent full runs passed.
 Caller locations and connection-state failures are now reported for diagnosis. The
 intermittent timeout's cause is not established; retain its private logs rather than
-claiming it was fixed. Single-player and two-player headless school combat checks
+claiming those earlier runs fixed it. The later delayed-upgrade reproduction and
+socket-mode fix are recorded in the live-world section above.
+Single-player and two-player headless school combat checks
 also pass at 30, 60 and 144 Hz.
 
 After combat integration, the ordinary local movement regression also passed:
@@ -428,7 +509,7 @@ processes and the tunnel helper were gone after these checks. Source packaging
 tests (7), portable setup tests (6) and Windows setup tests (6) passed as well.
 
 Still missing from this slice: two-demon targeting, co-op audio, scripted enemy/world
-controllers, shared moving supports, cutscenes, campaign progression/checkpoints,
+controllers, shared moving supports, cutscenes beyond the verified fixture, campaign progression/checkpoints,
 prediction/latency tuning and campaign validation. Do not use the movement or staged
 combat test as evidence of completing any campaign visit.
 

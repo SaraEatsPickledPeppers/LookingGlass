@@ -25,6 +25,7 @@ pub struct Launch {
     pub start: Option<Visit>,
     pub drive: bool,
     pub death_check: Option<PlayerId>,
+    pub scene_check: Option<PlayerId>,
     pub conditions: Conditions,
 }
 pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Result<()> {
@@ -85,18 +86,23 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
             super::menu::capture();
             next_frame().await;
         }
-        let visit = visit.unwrap();
+        let mut visit = visit.unwrap();
         anyhow::ensure!(launch.death_check.is_none() || visit.combat_preview,
             "The co-op death check requires the staged school combat preview.");
+        anyhow::ensure!(launch.scene_check.is_none() || visit.map == "skool1" && visit.entry.is_none()
+            && !visit.combat_preview && launch.death_check.is_none(), "The scene fixture requires the first school visit.");
         clear_background(BLACK);
         ui.toast("Opening Wonderland for two...", screen_height() * 0.5);
         next_frame().await;
         let mut scene = crate::render::Scene::load_for(assets, &visit.map, visit.difficulty)?;
-        let mut arena = super::arena::Arena::load(assets, &scene.map, &visit, visit.combat_preview)?;
+        let mut arena = super::arena::Arena::load(assets, &scene.map, &mut scene.world, &visit, visit.combat_preview)?;
+        let mut level_art = crate::viewer::LevelArt::default();
+        level_art.prepare(assets, &scene, &arena.stage.interactions, false)?;
         let hud = crate::hud::Hud::load(assets)?;
         let mut pickup_art = crate::powerups::Art::load(assets)?;
         let (eye, initial_yaw) = crate::interaction::spawn(&scene.map, visit.entry.as_deref());
         let eye = options.start_at.map_or(eye, |p| p + Vec3::Z * crate::movement::EYE_HEIGHT);
+        let eye = if launch.scene_check.is_some() { vec3(-2440., 2368., -480. + crate::movement::EYE_HEIGHT) } else { eye };
         let mut stats = Stats::for_level(&visit.map, visit.entry.as_deref());
         stats.difficulty = visit.difficulty;
         let mut roster = if launch.host { Some(Roster::new(&scene.world, eye, initial_yaw, stats)?) } else { None };
@@ -131,6 +137,10 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         let mut captured_midpoint = false;
         let mut captured_recovery = [false; 3];
         let mut restored_at = None;
+        let mut pending_visit = None;
+        let mut local_location = None;
+        let mut reunited_at = None;
+        let mut captured_scene = false;
         loop {
             let now = Instant::now();
             if let Some(setup) = &hosting {
@@ -144,10 +154,44 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
             }
             if let Some(guest) = &mut guest {
                 guest.poll(now)?;
+                if let Some(next) = guest.take_visit() { pending_visit = Some(next); }
                 if let Some(mut frame) = guest.take_frame() {
-                    if let Some(combat) = frame.combat.take() { arena.replicate(&combat)?; }
+                    if let Some(combat) = frame.combat.take() { arena.replicate(&combat, &scene.map, &mut scene.world)?; }
                     display = Some(frame);
                 }
+            }
+            if let Some(next) = pending_visit.take() {
+                clear_background(BLACK);
+                ui.toast("Travelling to the next part of Wonderland...", screen_height() * 0.5);
+                next_frame().await;
+                scene = crate::render::Scene::load_for(assets, &next.map, next.difficulty)?;
+                arena = super::arena::Arena::load(assets, &scene.map, &mut scene.world, &next, false)?;
+                level_art = crate::viewer::LevelArt::default();
+                level_art.prepare(assets, &scene, &arena.stage.interactions, false)?;
+                let (eye, facing) = crate::interaction::spawn(&scene.map, next.entry.as_deref());
+                if let Some(old) = roster.take() {
+                    let arrived = old.arrive(&scene.world, eye, facing, &next.map, next.entry.as_deref())?;
+                    arena.reset_characters(&arrived.players);
+                    roster = Some(arrived);
+                }
+                visit = next;
+                if let Some(host) = &mut host { host.loaded(visit.epoch)?; }
+                if let Some(guest) = &mut guest { guest.loaded(visit.epoch)?; }
+                display = roster.as_ref().map(|r| r.frame(visit.epoch, 0));
+                presented = None;
+                camera.reset();
+                camera_subject = None;
+                local_location = None;
+                yaw = facing;
+                pitch = 0.;
+                keys = Input::default();
+                local_latch = RemoteInput::default();
+                accumulator = 0.;
+                last_sent = 0;
+                weapon_buttons.block();
+                // Do not charge the synchronous asset-loading time to movement.
+                next_frame().await;
+                continue;
             }
             let playing = host.as_ref().map_or_else(|| guest.as_ref().unwrap().phase() == Phase::Playing,
                 |h| h.phase() == Phase::Playing);
@@ -159,6 +203,15 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
             if is_quit_requested() || menu && focused && is_key_pressed(KeyCode::Q) { break; }
             if focused && is_key_pressed(KeyCode::F8) {
                 if let Some(invite) = &invite { miniquad::window::clipboard_set(&invite.link()); copied_at = Some(now); }
+            }
+            if let Some(frame) = &display {
+                let body = &frame.players[local.index()];
+                let location = (visit.epoch, body.spawned_at, body.warped_at);
+                if local_location != Some(location) {
+                    yaw = body.yaw;
+                    pitch = body.pitch;
+                    local_location = Some(location);
+                }
             }
             look.update(focused && !menu && !launch.drive && playing, &mut yaw, &mut pitch);
             let flat = vec2(yaw.cos(), yaw.sin());
@@ -197,7 +250,16 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 keys.run = false;
                 keys.wish = if (2. ..4.).contains(&age) { if launch.host { Vec2::Y } else { Vec2::X } } else { Vec2::ZERO };
                 keys.swim = keys.wish.extend(0.);
-                if let Some(victim) = launch.death_check {
+                if let Some(first) = launch.scene_check {
+                    keys.wish = if local == first && age >= 2. && !arena.stage.busy()
+                        && display.as_ref().is_some_and(|f| f.players.iter().all(|b| b.warped_at == 0)) { -Vec2::X } else { Vec2::ZERO };
+                    keys.yaw = std::f32::consts::PI;
+                    keys.pitch = 0.;
+                    keys.swim = keys.wish.extend(0.);
+                    keys.primary = false;
+                    keys.alternate = false;
+                    keys.weapon = None;
+                } else if let Some(victim) = launch.death_check {
                     // Let the real guard inflict damage. No health writes or
                     // synthetic kill commands are used by this scenario.
                     keys.wish = Vec2::ZERO;
@@ -246,7 +308,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 if playing {
                     accumulator += f64::from(elapsed);
                     while accumulator >= f64::from(FIXED_DT) {
-                        arena.step(roster, &scene.world, [local_latch.sample(now), host.controls(now)])?;
+                        arena.step(roster, &scene.map, &mut scene.world, [local_latch.sample(now), host.controls(now)])?;
                         accumulator -= f64::from(FIXED_DT);
                     }
                     let frame = roster.frame(visit.epoch, host.acknowledged_input());
@@ -256,6 +318,10 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         if host.send_frame(network)? { last_sent = frame.tick; }
                     }
                     display = Some(frame);
+                    if let Some((map, entry)) = arena.stage.transition.take() {
+                        host.enter(map, entry, visit.difficulty, now)?;
+                        pending_visit = Some(host.visit().clone());
+                    }
                 } else { accumulator = 0.; }
             }
             clear_background(BLACK);
@@ -268,23 +334,31 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         }
                     }
                 }
-                let watched = world::camera_player(&visual, local);
+                let watched = arena.stage.owner.unwrap_or_else(|| world::camera_player(&visual, local));
                 let watched_body = &visual.players[watched.index()];
                 let camera_subject_feet = watched_body.player.feet;
-                let subject = (watched, watched_body.spawned_at);
+                let subject = (watched, watched_body.spawned_at, watched_body.warped_at);
                 if camera_subject != Some(subject) { camera.reset(); camera_subject = Some(subject); }
-                let (camera_eye, target, show_local) = camera.update(&scene.world, watched_body.player.feet, direction, 180., elapsed);
-                let view = Camera3D { position: camera_eye, target, up: Vec3::Z,
-                    fovy: 60_f32.to_radians(), z_near: 2., z_far: 30000., ..Default::default() };
+                let (follow_eye, follow_target, show_local) = camera.update(&scene.world, watched_body.player.feet, direction, 180., elapsed);
+                let scripted = arena.stage.camera(&scene.world);
+                let (camera_eye, target, up) = scripted.map_or((follow_eye, follow_target, Vec3::Z), |c| (c.eye, c.target, c.up));
+                let view = Camera3D { position: camera_eye, target, up,
+                    fovy: if scripted.is_some() { arena.stage.scene_fovy(screen_width() / screen_height()) } else { 60_f32.to_radians() },
+                    z_near: 2., z_far: 30000., ..Default::default() };
                 set_camera(&view);
                 crate::lighting::select(vec![], camera_eye, &scene.world);
                 crate::render_fx::begin_view(&view, frame.tick as f32 * FIXED_DT, &scene.atmosphere, false);
-                scene.draw(camera_eye, frame.tick as f32 * FIXED_DT, false, false, &[]);
+                arena.stage.interactions.presentation.apply(&mut scene);
+                let transforms = arena.stage.interactions.transforms();
+                scene.draw(camera_eye, frame.tick as f32 * FIXED_DT, false, false, &transforms);
+                level_art.story_pose(&arena.stage.story);
+                level_art.draw(&arena.stage.interactions, &arena.stage.hints, &scene.atmosphere, camera_eye, false);
                 for (index, (character, body)) in arena.characters.iter_mut().zip(&visual.players).enumerate() {
                     character.power_appearance(&body.stats);
                     character.water_appearance(&body.player);
                     character.atmosphere(&scene.atmosphere, camera_eye);
-                    let show_body = (index != watched.index() || show_local)
+                    let show_body = scripted.is_none() && (arena.stage.owner.is_none() || index == watched.index())
+                        && (index != watched.index() || show_local)
                         && camera_eye.distance(body.player.feet + Vec3::Z * 32.) > 48.
                         // Close partners can pass through one another in tight
                         // passages. Show the watched body instead of overlapping skins.
@@ -301,10 +375,17 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 if let Some(loot) = personal.loot.get(&arena.visit_key) {
                     pickup_art.draw(&loot.pickups(&arena.visit_key), personal, &arena.visit_key, &scene.atmosphere, camera_eye, frame.tick as f32 * FIXED_DT);
                 }
-                scene.draw(camera_eye, frame.tick as f32 * FIXED_DT, false, true, &[]);
+                scene.draw(camera_eye, frame.tick as f32 * FIXED_DT, false, true, &transforms);
+                level_art.effects(&arena.stage.interactions, camera_eye, &scene.atmosphere);
                 presented = Some(visual);
                 set_default_camera();
-                hud.draw_coop(personal, &arena.catalog, &controls, &prefs);
+                let fade = arena.stage.fade();
+                if fade.a > 0. { draw_rectangle(0., 0., screen_width(), screen_height(), fade); }
+                if !arena.stage.busy() { hud.draw_coop(personal, &arena.catalog, &controls, &prefs); }
+                arena.stage.story.draw(&controls.label(&prefs, "E"), &ui);
+                if let Some(notice) = &arena.stage.notices[local.index()] {
+                    if notice.until > frame.tick { ui.toast(&notice.text, screen_height() * 0.3); }
+                }
                 ui.toast(&format!("{} Alice / Sanity {:.0}", if launch.host { "Blue" } else { "Red" }, frame.players[local.index()].stats.sanity()), 24.);
                 if !frame.players[local.index()].stats.alive() {
                     let message = match frame.lives.state(local) {
@@ -329,7 +410,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 }
             }
             set_default_camera();
-            ui.toast(if playing { "Co-op combat preview / campaign integration in progress" }
+            ui.toast(if playing { "Co-op preview" }
                 else if started_playing.is_some() { "Your partner left. Share the invite to rejoin." }
                 else { "Waiting for the other player to finish loading..." }, screen_height() - 110.);
             ui.toast(if menu { "Esc: resume / Q: leave co-op" } else if launch.host { "Esc: menu / F8: copy invite" } else { "Esc: menu" }, screen_height() - 50.);
@@ -393,7 +474,21 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 anyhow::ensure!(!started_playing.is_some_and(|start| start.elapsed() > Duration::from_secs(90)),
                     "The staged death/respawn/wipe scenario did not complete.");
             }
-            if launch.drive && launch.death_check.is_none() && started_playing.is_some_and(|start| start.elapsed()
+            if launch.scene_check.is_some() {
+                if !captured_scene && arena.stage.owner.is_some() && started_playing.is_some_and(|at| at.elapsed().as_secs() >= 25) {
+                    crate::viewer::save_capture(&crate::preferences::path("coop-scene.png"))?;
+                    captured_scene = true;
+                }
+                if !arena.stage.busy() && display.as_ref().is_some_and(|f| f.players.iter().all(|b| b.warped_at > 0)) {
+                    reunited_at.get_or_insert(now);
+                }
+                if reunited_at.is_some_and(|at: Instant| at.elapsed() >= Duration::from_secs(if launch.host { 4 } else { 3 })) {
+                    crate::viewer::save_capture(&crate::preferences::path("coop-screenshot.png"))?;
+                    break;
+                }
+                anyhow::ensure!(!started_playing.is_some_and(|at| at.elapsed().as_secs() > 180), "Co-op scene did not reunite both players");
+            }
+            if launch.drive && launch.death_check.is_none() && launch.scene_check.is_none() && started_playing.is_some_and(|start| start.elapsed()
                 >= Duration::from_secs(if launch.host { 12 } else { 10 }
                     + if visit.combat_preview { 4 } else { 0 })) {
                 crate::viewer::save_capture(&crate::preferences::path("coop-screenshot.png"))?;

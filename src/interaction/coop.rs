@@ -44,6 +44,11 @@ impl Contacts {
             trigger.players[id.index()] = Contact::default();
         }
     }
+    fn relocate_player(&mut self, id: PlayerId) {
+        for trigger in &mut self.triggers {
+            trigger.players[id.index()].inside = false;
+        }
+    }
     pub fn validate(&self, world: &Interactions) -> Result<()> {
         ensure!(
             self.triggers.len() == world.triggers.len(),
@@ -77,6 +82,15 @@ pub struct Activation {
     pub events: Events,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ContactFlow {
+    Continue,
+    /// Death or relocation invalidated the rest of this body's old sweep.
+    StopPlayer,
+    /// A shared scene/transition took control of both players.
+    StopWorld,
+}
+
 #[derive(Default)]
 pub struct PairEvents {
     /// Delayed world outputs, produced once before either player's contacts.
@@ -101,12 +115,19 @@ impl Interactions {
             return Ok(events);
         }
         let mut operated = BTreeSet::new();
+        let bodies = players.iter().flatten().map(|p| p.0).collect::<Vec<_>>();
+        self.refresh_door_locks(&bodies);
+        for d in &mut self.doors {
+            if let Some(locked) = self.levels.iter().find_map(|s| s.ctl.door_locked(d.id)) {
+                d.locked = locked;
+                if locked { d.target = 0.; }
+            }
+        }
         for (index, input) in players.iter().enumerate() {
             if let Some((player, aim, true)) = input {
                 events[index].merge(self.use_door(world, player, *aim, &mut operated));
             }
         }
-        let bodies = players.iter().flatten().map(|p| p.0).collect::<Vec<_>>();
         self.advance_doors(dt, map, &bodies)?;
         self.sync(world);
         Ok(events)
@@ -117,6 +138,18 @@ impl Interactions {
         dt: f32,
         contacts: &mut Contacts,
         paths: [Option<Motion>; 2],
+    ) -> Result<PairEvents> {
+        self.triggers_pair_resolve(dt, contacts, paths, |_| ContactFlow::Continue)
+    }
+
+    /// Resolve personal damage/teleport immediately after each authoritative
+    /// dispatch, before a later arrival can consume a shared rule or start a scene.
+    pub fn triggers_pair_resolve(
+        &mut self,
+        dt: f32,
+        contacts: &mut Contacts,
+        paths: [Option<Motion>; 2],
+        mut resolve: impl FnMut(&Activation) -> ContactFlow,
     ) -> Result<PairEvents> {
         contacts.validate(self)?;
         ensure!(
@@ -177,8 +210,9 @@ impl Interactions {
         }
         arrivals.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
         let mut shared_fired = BTreeSet::new();
+        let mut stopped = [false; 2];
         for (_, index, id) in arrivals {
-            if !self.contact_trigger(index) {
+            if stopped[id.index()] || !self.contact_trigger(index) {
                 continue;
             }
             let trigger = &self.triggers[index];
@@ -206,12 +240,21 @@ impl Interactions {
             self.triggers[index].cooldown = old_cooldown;
             let takes_control =
                 self.scripted() || !events.story.is_empty() || events.transition.is_some();
-            result.activations.push(Activation {
+            let relocated = events.teleport.is_some();
+            let activation = Activation {
                 player: id,
                 entity,
                 events,
-            });
-            if takes_control {
+            };
+            let flow = resolve(&activation);
+            result.activations.push(activation);
+            if relocated || flow == ContactFlow::StopPlayer {
+                stopped[id.index()] = true;
+                // Keep portal cooldowns: clearing them can create a teleport
+                // loop when an authored destination overlaps its own volume.
+                contacts.relocate_player(id);
+            }
+            if takes_control || flow == ContactFlow::StopWorld {
                 break;
             }
         }
@@ -415,6 +458,60 @@ mod tests {
             .unwrap();
         assert_eq!(again.activations.len(), 1);
         assert_eq!(again.activations[0].player, PlayerId::Red);
+    }
+
+    #[test]
+    fn fatal_contact_cannot_consume_a_later_shared_exit_for_either_player() {
+        for victim in PlayerId::ALL {
+            let (mut map, _, _) = trigger("trigger_hurt");
+            let mut exit = map.entities[0].clone();
+            exit.insert("classname".into(), "trigger_changelevel".into());
+            exit.insert("origin".into(), "0 200 0".into());
+            exit.insert("map".into(), "skool2".into());
+            map.entities.push(exit);
+            let mut world = Interactions::load(&map).unwrap();
+            let mut contacts = Contacts::new(&world);
+            let mut stats = crate::inventory::Stats::default();
+            stats.set_health(1.).unwrap();
+            let paths = std::array::from_fn(|i| (i == victim.index()).then(|| motion(40., 240.).unwrap()));
+            let events = world.triggers_pair_resolve(0.1, &mut contacts, paths, |activation| {
+                stats.damage(activation.events.damage);
+                if stats.alive() { ContactFlow::Continue } else { ContactFlow::StopPlayer }
+            }).unwrap();
+            assert!(!stats.alive());
+            assert_eq!(events.activations.len(), 1);
+            assert_eq!(world.event_world.snapshot().usage["trigger/1"].count, 0);
+            let partner = std::array::from_fn(|i| (i == victim.partner().index()).then(|| motion(160., 240.).unwrap()));
+            let events = world.triggers_pair(0.1, &mut contacts, partner).unwrap();
+            assert_eq!(events.activations.len(), 1);
+            assert_eq!(events.activations[0].player, victim.partner());
+            assert_eq!(events.activations[0].events.transition, Some(("skool2".into(), None)));
+        }
+    }
+
+    #[test]
+    fn portal_stops_old_sweep_but_keeps_cooldown_and_partners_arrival() {
+        for traveller in PlayerId::ALL {
+            let (mut map, _, _) = trigger("trigger_teleport");
+            let mut exit = map.entities[0].clone();
+            exit.insert("classname".into(), "trigger_changelevel".into());
+            exit.insert("origin".into(), "0 200 0".into());
+            exit.insert("map".into(), "skool2".into());
+            map.entities.push(exit);
+            let mut world = Interactions::load(&map).unwrap();
+            let mut contacts = Contacts::new(&world);
+            let paths = std::array::from_fn(|i| if i == traveller.index() { motion(40., 240.) } else { motion(150., 195.) });
+            let events = world.triggers_pair(0.1, &mut contacts, paths).unwrap();
+            assert_eq!(events.activations.len(), 2);
+            assert_eq!(events.activations[0].player, traveller);
+            assert!(events.activations[0].events.teleport.is_some());
+            assert_eq!(events.activations[1].player, traveller.partner());
+            assert!(events.activations[1].events.transition.is_some());
+            assert!(contacts.triggers[0].players[traveller.index()].cooldown > 0.);
+            // Reappear inside the portal volume: it cannot immediately bounce.
+            let paths = std::array::from_fn(|i| (i == traveller.index()).then(|| motion(100., 100.).unwrap()));
+            assert!(world.triggers_pair(0.01, &mut contacts, paths).unwrap().activations.is_empty());
+        }
     }
 
     #[test]

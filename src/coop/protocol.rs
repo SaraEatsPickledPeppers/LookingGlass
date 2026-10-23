@@ -7,7 +7,7 @@ use macroquad::prelude::{Vec2, Vec3};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
-pub const REVISION: u32 = 1;
+pub const REVISION: u32 = 2;
 pub const INPUT_TIMEOUT: Duration = Duration::from_millis(500);
 const MAX_EDGES: u64 = 8;
 
@@ -141,13 +141,17 @@ pub enum FromGuest {
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(tag = "type", deny_unknown_fields)]
-pub enum FromHost {
+#[serde(deny_unknown_fields)]
+pub enum HostMessage<T> {
     Hello { identity: Identity },
     Enter { visit: Visit },
     Playing { epoch: u64 },
-    Frame { frame: Box<super::world::Frame> },
+    Frame { frame: T },
 }
+// Use an external tag so JSON decodes the typed payload directly. An internal
+// tag buffers through Serde Content, which cannot restore integer entity-map
+// keys in the shared event runtime (although standalone snapshots roundtrip).
+pub type FromHost = HostMessage<Box<super::world::Frame>>;
 
 /// Host-owned latch. Network traffic never advances the simulation clock.
 #[derive(Default)]
@@ -242,6 +246,18 @@ impl RemoteInput {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn host_envelope_preserves_integer_world_entity_keys() {
+        let map = crate::interaction::tests::fixture();
+        let world = crate::interaction::Interactions::load(&map).unwrap();
+        let expected = serde_json::to_value(world.snapshot()).unwrap();
+        let packet = HostMessage::Frame { frame: world.snapshot() };
+        let bytes = super::super::codec::encode(&serde_json::to_vec(&packet).unwrap()).unwrap();
+        let decoded = super::super::codec::decode(&bytes).unwrap();
+        let restored: HostMessage<crate::interaction::Snapshot> = serde_json::from_slice(&decoded).unwrap();
+        let HostMessage::Frame { frame } = restored else { panic!("Changed message kind"); };
+        assert_eq!(serde_json::to_value(frame).unwrap(), expected);
+    }
     #[test]
     fn attacks_survive_a_short_click_but_do_not_replay_or_outlive_input_timeout() {
         let now = Instant::now();

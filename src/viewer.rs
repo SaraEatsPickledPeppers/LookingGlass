@@ -52,7 +52,7 @@ struct Entered {
 /// Art owns GPU resources and may contain map-specific geometry. Replace this
 /// whole group on every kind of level change, including the Tab/console chooser.
 #[derive(Default)]
-struct LevelArt {
+pub(crate) struct LevelArt {
     fortress: Option<crate::fortress::cinema::Art>,
     village: Option<crate::village::cinema::Art>,
     school: Option<crate::school::Art>,
@@ -91,7 +91,7 @@ impl LevelArt {
             })
             .or_else(|| self.levels.iter().flatten().find_map(|a| a.handoff_pose()))
     }
-    fn prepare(
+    pub(crate) fn prepare(
         &mut self,
         assets: &mut Assets,
         scene: &Scene,
@@ -148,7 +148,7 @@ impl LevelArt {
         }
         Ok(())
     }
-    fn story_pose(&mut self, story: &crate::story::Story) {
+    pub(crate) fn story_pose(&mut self, story: &crate::story::Story) {
         if let Some(a) = &mut self.school {
             a.first.story_pose(story);
         }
@@ -177,7 +177,7 @@ impl LevelArt {
             art.story_pose(story);
         }
     }
-    fn draw(
+    pub(crate) fn draw(
         &mut self,
         i: &Interactions,
         hints: &crate::cheshire::Hints,
@@ -229,7 +229,7 @@ impl LevelArt {
         }
     }
     /// Registered controllers' effects, drawn with the particle pass.
-    fn effects(
+    pub(crate) fn effects(
         &mut self,
         i: &Interactions,
         camera: Vec3,
