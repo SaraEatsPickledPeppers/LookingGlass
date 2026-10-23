@@ -398,6 +398,7 @@ fn run() -> Result<()> {
             "--mallet-jack-render-check" => mode = "mallet-jack-render",
             "--weapon-input-check" => mode = "weapon-input",
             "--world-check" => mode = "world",
+            "--coop-world-check" => mode = "coop-world",
             "--school-check" => mode = "school",
             "--footing-check" => mode = "footing",
             "--shelf-preview" => o.shelf_preview = true,
@@ -603,6 +604,9 @@ fn run() -> Result<()> {
     }
     if mode == "events" {
         return event_check::check(&mut assets);
+    }
+    if mode == "coop-world" {
+        return interaction::coop::check(&mut assets);
     }
     if mode == "dice" {
         return dice::check(&mut assets);

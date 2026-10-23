@@ -176,6 +176,67 @@ target/debug/looking-glass.exe --combat-check --data <original-base-folder>
   needs a blue-fabric mask on known clothing textures, preserving skin, apron,
   mouth, hair, and power-up appearances. Never distribute altered original assets.
 
+### Shared world contact adapter
+
+`interaction::coop` separates two players' trigger occupancy/cooldowns from the
+shared event runtime. Both living players can receive hazard damage or use a
+teleporter independently. Simultaneous contacts with a shared trigger fire it once,
+with arrivals ordered by swept contact time, then stable identities for exact ties. Each
+activation retains its player owner for scene/exit handling. Shared delayed events
+advance once even when both players have contacts. The existing event gates and
+one-shot rule history remain authoritative.
+
+Door use shares the single-player implementation. Simultaneous use of the same
+paired leaves toggles them once, and the door's swept arc checks both living
+bodies. Personal contact history can be serialized beside the interaction snapshot
+and cleared for one respawn without rearming shared one-shot events. The original
+single-player save representation is unchanged.
+
+This is a world adapter, not live campaign integration yet. The rendered co-op
+viewer still needs this shared world, controller/mover adapters, scene ownership,
+network replication and checkpoint wiring. No extra completion percentage or
+campaign-matrix credit is assigned merely for adding this interface. Its actual-map
+check is `--coop-world-check --data <original-base-folder>`; `--world-check` remains
+the single-player regression.
+
+The interaction refactor passed 717 Rust tests (one unrelated ignored test).
+Eight new cases cover staggered and simultaneous hazard contacts, independent
+teleports, both first-arrival orders, competing exits in one update, repeatable
+trigger reentry, delayed world time, contact snapshot validation/restoration and
+simultaneous door use with either body blocking its swept arc. These are engine
+checks and do not establish a completed two-player campaign visit.
+
+The actual-school check passed with either Blue or Red opening the door at 30,
+60 and 144 Hz. Both bodies first walk against the closed door for long enough to
+stop, remain blocked for another second, then cross after one use. The authored
+fatal-fall volume damages both independently; a shared snapshot/contact roundtrip
+and resetting Blue's contacts leave Red's cooldown intact. Evidence is in
+`private/coop-world-native.log`.
+
+All 39 initial world snapshot hashes, event signatures and byte lengths match the
+pre-refactor executable. This was compared independently from the `HASH` records
+against `private/coop-world-before-registry.json`: the existing registry comparator
+intentionally skips registered controllers, so its summary alone is insufficient
+for this claim. Evidence is `private/coop-world-after-registry.log`. These are
+single-player initialization/save-format checks, not co-op campaign traversal.
+
+The broad single-player world check exposed an older driver assumption: its steam
+floor route allowed two seconds to walk more than 368 units at 104 units/second.
+Both the saved pre-refactor executable and this revision stop at the same position
+(`y=2637.4326`). The driver now derives its duration from the current walk speed;
+its required endpoint, support and collision assertions are unchanged. Failed
+pre-fix logs remain in `private/coop-world-before-single.log` and
+`private/coop-world-single.log`.
+After that driver correction, `--world-check` passes all three school-door rates,
+all eight floor supports, both visits' seam crossings at 30/60/144 Hz, and fatal-fall
+reset. Each seam route ends at `y=2845.4404`; evidence is
+`private/coop-world-single-final.log`. Seven source-package tests also pass.
+
+Live integration must also resolve each player's damage/teleport as contacts are
+dispatched, ending an old sweep after death or relocation before later script
+effects. The current ordered contact adapter is not yet wired into that player
+lifecycle or the scene/mover pipeline.
+
 ## Windowed movement and combat slice (development only)
 
 The main menu and single-player ESC menu now have a **Co-op** button (keyboard

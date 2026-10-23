@@ -13,6 +13,7 @@ use macroquad::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 type Entity = BTreeMap<String, String>;
 mod exits;
+pub mod coop;
 pub mod friendly;
 mod hooks;
 pub(crate) mod school2_check;
@@ -1322,7 +1323,18 @@ impl Interactions {
                 if let Some(id) = self.gym_entity {
                     events.merge(self.dispatch(Event::Entity(id, Input::Use)));
                 }
-            } else if let Some(index) = self.nearest(world, player.eye(), aim) {
+            } else {
+                events.merge(self.use_door(world, player, aim, &mut BTreeSet::new()));
+            }
+        }
+        self.advance_doors(dt, map, &[player])?;
+        self.sync(world);
+        Ok(events)
+    }
+    fn use_door(&mut self, world: &World, player: &Player, aim: Vec3, operated: &mut BTreeSet<Id>) -> Events {
+        let mut events = Events::default();
+        if let Some(index) = self.nearest(world, player.eye(), aim) {
+            if !operated.contains(&self.doors[index].id) {
                 if self.doors[index].locked
                     || !self.event_world.allowed(
                         &Event::Entity(self.doors[index].id, Input::Use),
@@ -1343,6 +1355,7 @@ impl Interactions {
                         {
                             continue;
                         }
+                        operated.insert(d.id);
                         if open {
                             let local = d.center - d.origin;
                             let plus = d.origin
@@ -1367,6 +1380,9 @@ impl Interactions {
                 }
             }
         }
+        events
+    }
+    fn advance_doors(&mut self, dt: f32, map: &Bsp, players: &[&Player]) -> Result<()> {
         for d in &mut self.doors {
             if !d.enabled || !self.event_world.enabled(d.id) {
                 continue;
@@ -1384,11 +1400,11 @@ impl Interactions {
                     (d.angle + delta * step as f32 / steps as f32).to_radians(),
                 );
                 let next = Collider::model(map, d.model, d.origin, rot, true)?;
-                if next.touches(
+                if players.iter().any(|player| next.touches(
                     player.feet + PLAYER_CENTER,
                     player.feet + PLAYER_CENTER,
                     PLAYER_HALF,
-                ) {
+                )) {
                     clear = false;
                     break;
                 }
@@ -1399,57 +1415,17 @@ impl Interactions {
                 d.collider = collider;
             }
         }
-        self.sync(world);
-        Ok(events)
+        Ok(())
     }
     pub fn triggers(&mut self, dt: f32, before: Vec3, after: Vec3) -> Events {
-        let mut events = Events::default();
         if dt <= 0. || !dt.is_finite() {
-            return events;
+            return Events::default();
         }
-        if let Err(e) = self.event_world.advance(dt as f64, &self.event_facts()) {
-            eprintln!("World event time rejected: {e:#}");
-            events.message = Some(format!("World event failed: {e}"));
-        } else {
-            events.merge(self.apply_outputs());
-        }
-        if let Some(p) = &self.pandemonium {
-            if p.state.cart == crate::pandemonium::Cart::Finished {
-                events.merge(self.dispatch(Event::Signal("pand.cart_done".into())));
-            }
-        }
-        if self.school.as_ref().is_some_and(|s| s.cinematic()) {
-            if self
-                .school
-                .as_ref()
-                .and_then(|s| s.return_visit.as_ref())
-                .is_some_and(|s| s.phase == crate::school_return::Phase::Complete)
-            {
-                events.transition = Some(("potears1".into(), Some("potears1_start1".into())));
-            }
-            return events;
-        }
-        if self.scripted() {
-            return events;
-        }
+        let mut events = self.advance_trigger_clock(dt);
+        if self.school.as_ref().is_some_and(|s| s.cinematic()) || self.scripted() { return events; }
         for index in 0..self.triggers.len() {
+            if !self.contact_trigger(index) { continue; }
             let t = &self.triggers[index];
-            // Pool's final jump owns its exit. Keep the legacy rule identity and
-            // signature for existing saves, but don't let physical contact with
-            // the downstream volume bypass the scene's one-shot transition.
-            if self.pool.is_some()
-                && matches!(&t.kind, TriggerKind::Exit(map, _) if map == "potears2")
-            {
-                continue;
-            }
-            if self.school.as_ref().is_some_and(|s| s.owns_recipe_exit())
-                && matches!(&t.kind, TriggerKind::Exit(map, _) if map == "skool2")
-            {
-                continue;
-            }
-            if t.health > 0. || (t.once && t.fired) {
-                continue;
-            }
             let event = Event::Entity(t.id, Input::Activate);
             if !self.event_world.allowed(&event, &self.event_facts()) {
                 self.triggers[index].inside = false;
@@ -1475,6 +1451,51 @@ impl Interactions {
             }
         }
         events
+    }
+    /// Shared event time and completed-scene outputs advance once, regardless of
+    /// how many bodies are tested for contacts below.
+    fn advance_trigger_clock(&mut self, dt: f32) -> Events {
+        let mut events = Events::default();
+        if let Err(e) = self.event_world.advance(dt as f64, &self.event_facts()) {
+            eprintln!("World event time rejected: {e:#}");
+            events.message = Some(format!("World event failed: {e}"));
+        } else {
+            events.merge(self.apply_outputs());
+        }
+        if let Some(p) = &self.pandemonium {
+            if p.state.cart == crate::pandemonium::Cart::Finished {
+                events.merge(self.dispatch(Event::Signal("pand.cart_done".into())));
+            }
+        }
+        if self.school.as_ref().is_some_and(|s| s.cinematic()) {
+            if self
+                .school
+                .as_ref()
+                .and_then(|s| s.return_visit.as_ref())
+                .is_some_and(|s| s.phase == crate::school_return::Phase::Complete)
+            {
+                events.transition = Some(("potears1".into(), Some("potears1_start1".into())));
+            }
+            return events;
+        }
+        events
+    }
+    fn contact_trigger(&self, index: usize) -> bool {
+        let t = &self.triggers[index];
+        // Pool's final jump owns its exit. Keep the legacy rule identity and
+        // signature for existing saves, but don't let physical contact with
+        // the downstream volume bypass the scene's one-shot transition.
+        if self.pool.is_some()
+            && matches!(&t.kind, TriggerKind::Exit(map, _) if map == "potears2")
+        {
+            return false;
+        }
+        if self.school.as_ref().is_some_and(|s| s.owns_recipe_exit())
+            && matches!(&t.kind, TriggerKind::Exit(map, _) if map == "skool2")
+        {
+            return false;
+        }
+        t.health <= 0. && !(t.once && t.fired)
     }
     fn trigger_effect(&mut self, index: usize) -> Events {
         let mut events = Events::default();
@@ -2493,7 +2514,10 @@ fn check_school_floor(assets: &mut crate::assets::Assets, map: &Bsp) -> Result<(
         for fps in [30, 60, 144] {
             let mut p = Player::spawn(&world, vec3(-3580., 2432., -624. + 48.)).unwrap();
             let mut clock = FixedClock::default();
-            for _ in 0..fps * 2 {
+            // Exercise the same path at the configured walk speed. Two seconds
+            // no longer reaches the far seams after the brisk-walk tuning.
+            let walk_seconds = (400. / crate::movement::WALK_SPEED).ceil() as usize;
+            for _ in 0..fps * walk_seconds {
                 clock.advance(
                     1. / fps as f64,
                     &world,
