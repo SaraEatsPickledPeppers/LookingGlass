@@ -4,6 +4,7 @@ use super::*;
 use crate::coop::PlayerId;
 use anyhow::ensure;
 use serde::{Deserialize, Serialize};
+mod lift_check;
 
 #[derive(Clone, Copy, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -17,6 +18,7 @@ struct Contact {
 struct TriggerContacts {
     id: Id,
     players: [Contact; 2],
+    waiting: Option<PlayerId>,
 }
 
 /// Save/restore this together with the shared interaction snapshot. A respawn
@@ -35,6 +37,7 @@ impl Contacts {
                 .map(|t| TriggerContacts {
                     id: t.id,
                     players: [Contact::default(); 2],
+                    waiting: None,
                 })
                 .collect(),
         }
@@ -42,11 +45,17 @@ impl Contacts {
     pub fn reset_player(&mut self, id: PlayerId) {
         for trigger in &mut self.triggers {
             trigger.players[id.index()] = Contact::default();
+            if trigger.waiting == Some(id) {
+                trigger.waiting = None;
+            }
         }
     }
     fn relocate_player(&mut self, id: PlayerId) {
         for trigger in &mut self.triggers {
             trigger.players[id.index()].inside = false;
+            if trigger.waiting == Some(id) {
+                trigger.waiting = None;
+            }
         }
     }
     pub fn validate(&self, world: &Interactions) -> Result<()> {
@@ -93,6 +102,7 @@ pub enum ContactFlow {
 
 #[derive(Default)]
 pub struct PairEvents {
+    pub waiting: [bool; 2],
     /// Delayed world outputs, produced once before either player's contacts.
     pub shared: Events,
     /// Ordered by swept arrival time, then stable entity/player identity for ties.
@@ -101,6 +111,37 @@ pub struct PairEvents {
 }
 
 impl Interactions {
+    fn boarding_ready(&self, trigger: usize, feet: &[Vec3]) -> Option<bool> {
+        let TriggerKind::Script(thread) = &self.triggers[trigger].kind else {
+            return None;
+        };
+        self.school
+            .as_ref()
+            .and_then(|s| s.boarding_ready(thread, feet))
+    }
+
+    /// The school adapter advances shared machinery once and carries all living
+    /// bodies atomically. Other controllers require their own explicit adapters.
+    pub fn movers_pair(
+        &mut self,
+        dt: f32,
+        map: &Bsp,
+        world: &mut World,
+        players: &mut [&mut Player],
+    ) -> Result<()> {
+        if let Some(school) = &mut self.school {
+            let fixed = self
+                .doors
+                .iter()
+                .filter(|d| d.enabled && self.event_world.enabled(d.id))
+                .map(|d| d.collider.clone())
+                .chain(self.platforms.iter().map(|p| p.2.clone()))
+                .collect::<Vec<_>>();
+            school.advance_players(dt, map, world, players, &fixed)?;
+        }
+        self.sync(world);
+        Ok(())
+    }
     /// Door input and one door-motion step. Controllers/movers keep their own
     /// once-per-world step; this does not call a single-player controller twice.
     pub fn doors_pair(
@@ -120,7 +161,9 @@ impl Interactions {
         for d in &mut self.doors {
             if let Some(locked) = self.levels.iter().find_map(|s| s.ctl.door_locked(d.id)) {
                 d.locked = locked;
-                if locked { d.target = 0.; }
+                if locked {
+                    d.target = 0.;
+                }
             }
         }
         for (index, input) in players.iter().enumerate() {
@@ -211,7 +254,7 @@ impl Interactions {
         arrivals.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
         let mut shared_fired = BTreeSet::new();
         let mut stopped = [false; 2];
-        for (_, index, id) in arrivals {
+        for (_, index, mut id) in arrivals {
             if stopped[id.index()] || !self.contact_trigger(index) {
                 continue;
             }
@@ -227,6 +270,31 @@ impl Interactions {
             let event = Event::Entity(entity, Input::Activate);
             if !self.event_world.allowed(&event, &self.event_facts()) {
                 continue;
+            }
+            let feet = paths
+                .iter()
+                .enumerate()
+                .filter(|(i, p)| p.is_some() && !stopped[*i])
+                .map(|(_, p)| p.unwrap().after)
+                .collect::<Vec<_>>();
+            if let Some(ready) = self.boarding_ready(index, &feet) {
+                let pending = &mut contacts.triggers[index];
+                if pending
+                    .waiting
+                    .is_some_and(|owner| paths[owner.index()].is_none() || stopped[owner.index()])
+                {
+                    pending.waiting = None;
+                }
+                let owner = *pending.waiting.get_or_insert(id);
+                if !ready {
+                    // Retry while the requester's feet remain in the trigger;
+                    // do not consume its one-shot rule or personal cooldown.
+                    pending.players[id.index()].inside = false;
+                    result.waiting[owner.index()] = true;
+                    continue;
+                }
+                pending.waiting = None;
+                id = owner;
             }
             if !personal {
                 shared_fired.insert(index);
@@ -373,6 +441,7 @@ pub fn check(assets: &mut crate::assets::Assets) -> Result<()> {
         "Restoring/resetting one contact changed the partner's cooldown"
     );
     println!("PASS co-op authored school fatal fall: personal damage, snapshot roundtrip and independent respawn reset");
+    lift_check::check(assets, &map)?;
     Ok(())
 }
 
@@ -473,19 +542,31 @@ mod tests {
             let mut contacts = Contacts::new(&world);
             let mut stats = crate::inventory::Stats::default();
             stats.set_health(1.).unwrap();
-            let paths = std::array::from_fn(|i| (i == victim.index()).then(|| motion(40., 240.).unwrap()));
-            let events = world.triggers_pair_resolve(0.1, &mut contacts, paths, |activation| {
-                stats.damage(activation.events.damage);
-                if stats.alive() { ContactFlow::Continue } else { ContactFlow::StopPlayer }
-            }).unwrap();
+            let paths =
+                std::array::from_fn(|i| (i == victim.index()).then(|| motion(40., 240.).unwrap()));
+            let events = world
+                .triggers_pair_resolve(0.1, &mut contacts, paths, |activation| {
+                    stats.damage(activation.events.damage);
+                    if stats.alive() {
+                        ContactFlow::Continue
+                    } else {
+                        ContactFlow::StopPlayer
+                    }
+                })
+                .unwrap();
             assert!(!stats.alive());
             assert_eq!(events.activations.len(), 1);
             assert_eq!(world.event_world.snapshot().usage["trigger/1"].count, 0);
-            let partner = std::array::from_fn(|i| (i == victim.partner().index()).then(|| motion(160., 240.).unwrap()));
+            let partner = std::array::from_fn(|i| {
+                (i == victim.partner().index()).then(|| motion(160., 240.).unwrap())
+            });
             let events = world.triggers_pair(0.1, &mut contacts, partner).unwrap();
             assert_eq!(events.activations.len(), 1);
             assert_eq!(events.activations[0].player, victim.partner());
-            assert_eq!(events.activations[0].events.transition, Some(("skool2".into(), None)));
+            assert_eq!(
+                events.activations[0].events.transition,
+                Some(("skool2".into(), None))
+            );
         }
     }
 
@@ -500,7 +581,13 @@ mod tests {
             map.entities.push(exit);
             let mut world = Interactions::load(&map).unwrap();
             let mut contacts = Contacts::new(&world);
-            let paths = std::array::from_fn(|i| if i == traveller.index() { motion(40., 240.) } else { motion(150., 195.) });
+            let paths = std::array::from_fn(|i| {
+                if i == traveller.index() {
+                    motion(40., 240.)
+                } else {
+                    motion(150., 195.)
+                }
+            });
             let events = world.triggers_pair(0.1, &mut contacts, paths).unwrap();
             assert_eq!(events.activations.len(), 2);
             assert_eq!(events.activations[0].player, traveller);
@@ -509,8 +596,14 @@ mod tests {
             assert!(events.activations[1].events.transition.is_some());
             assert!(contacts.triggers[0].players[traveller.index()].cooldown > 0.);
             // Reappear inside the portal volume: it cannot immediately bounce.
-            let paths = std::array::from_fn(|i| (i == traveller.index()).then(|| motion(100., 100.).unwrap()));
-            assert!(world.triggers_pair(0.01, &mut contacts, paths).unwrap().activations.is_empty());
+            let paths = std::array::from_fn(|i| {
+                (i == traveller.index()).then(|| motion(100., 100.).unwrap())
+            });
+            assert!(world
+                .triggers_pair(0.01, &mut contacts, paths)
+                .unwrap()
+                .activations
+                .is_empty());
         }
     }
 

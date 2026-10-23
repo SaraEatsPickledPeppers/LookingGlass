@@ -65,6 +65,7 @@ mod materials;
 mod menu;
 mod model_detail;
 mod movement;
+mod moving;
 mod movie;
 mod npc;
 mod pandemonium;
@@ -616,6 +617,7 @@ fn run() -> Result<()> {
     }
     if mode == "coop-world" {
         interaction::coop::check(&mut assets)?;
+        school::coop_check::check(&mut assets)?;
         return coop::stage::check(&mut assets);
     }
     if mode == "dice" {

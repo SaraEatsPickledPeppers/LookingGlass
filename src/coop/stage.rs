@@ -157,6 +157,14 @@ impl Stage {
         inputs: &[(Controls, Input); 2],
         dt: f32,
     ) -> Result<()> {
+        if !roster.players[self.last_owner.index()].stats.alive() {
+            if let Some(alive) = PlayerId::ALL
+                .into_iter()
+                .find(|id| roster.players[id.index()].stats.alive())
+            {
+                self.last_owner = alive;
+            }
+        }
         let events = self.interactions.advance_shared(dt);
         self.accept(events, self.last_owner, roster, world);
         if self.busy() {
@@ -177,6 +185,18 @@ impl Stage {
         )?;
         for (id, events) in PlayerId::ALL.into_iter().zip(events) {
             self.accept(events, id, roster, world);
+        }
+        if !self.busy() {
+            let mut bodies = roster
+                .players
+                .iter_mut()
+                .filter(|b| b.stats.alive())
+                .map(|b| &mut b.player)
+                .collect::<Vec<_>>();
+            self.interactions.movers_pair(dt, map, world, &mut bodies)?;
+            if self.interactions.scripted() {
+                self.owner = Some(self.last_owner);
+            }
         }
         Ok(())
     }
@@ -212,6 +232,14 @@ impl Stage {
             },
         )?;
         self.last_owner = last;
+        for id in PlayerId::ALL {
+            if result.waiting[id.index()] {
+                self.notices[id.index()] = Some(Notice {
+                    text: "Waiting for both players to board the lift".into(),
+                    until: roster.tick + 120,
+                });
+            }
+        }
         self.accept(result.shared, last, roster, world);
         if self.owner.is_none() && (self.interactions.scripted() || self.story.busy()) {
             self.owner = Some(last);
@@ -411,6 +439,60 @@ pub fn check(assets: &mut Assets) -> Result<()> {
         difficulty: Default::default(),
         combat_preview: false,
     };
+    for (thread, name, start, top) in crate::school::coop_check::LIFTS {
+        for first in PlayerId::ALL {
+            let mut world = World::from_bsp(&map)?;
+            let mut stage = Stage::load(assets, &map, &mut world, &visit, false)?;
+            let aboard = crate::school::coop_check::riders(
+                stage.interactions.school.as_ref().unwrap(),
+                &world,
+                name,
+                start,
+            )?;
+            let (eye, yaw) = crate::interaction::spawn(&map, None);
+            let mut roster = Roster::new(
+                &world,
+                eye,
+                yaw,
+                crate::inventory::Stats::for_level("skool1", None),
+            )?;
+            roster.players[first.index()].player = aboard[0].clone();
+            let inputs = std::array::from_fn(|_| (Controls::default(), Input::default()));
+            let mut highest = [start.z; 2];
+            for tick in 0..1800 {
+                if tick == 240 {
+                    roster.players[first.partner().index()].player = aboard[1].clone();
+                }
+                stage.before_move(&mut roster, &map, &mut world, &inputs, FIXED_DT)?;
+                let before = roster.players.each_ref().map(|b| b.player.feet);
+                roster.move_players(&world, inputs);
+                stage.contacts(&mut roster, &world, before)?;
+                roster.finish_tick_with(&world, false, |at| !stage.interactions.hazardous(at))?;
+                ensure!(
+                    !stage.busy() && roster.checkpoint_generation == 0,
+                    "Ordinary lift unexpectedly started a scene or wipe"
+                );
+                for (i, b) in roster.players.iter().enumerate() {
+                    ensure!(
+                        b.stats.alive() && world.body_clear(b.player.feet),
+                        "Integrated lift injured/embedded rider {i}"
+                    );
+                    highest[i] = highest[i].max(b.player.feet.z);
+                }
+                if tick < 240 {
+                    ensure!(
+                        roster.players[first.index()].player.feet.distance(start) < 0.1,
+                        "Integrated {thread} left without its partner"
+                    );
+                }
+            }
+            ensure!(
+                highest.iter().all(|h| *h >= top - 1.),
+                "Integrated {thread} did not carry both: {highest:?}"
+            );
+            println!("PASS integrated co-op {name}, first {first:?}: host world clock, boarding notice/contact, ordinary body physics, both reach top");
+        }
+    }
     for first in PlayerId::ALL {
         let mut world = World::from_bsp(&map)?;
         let mut stage = Stage::load(assets, &map, &mut world, &visit, false)?;

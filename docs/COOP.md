@@ -123,12 +123,12 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after live shared-world and theatre checks: **28%** (previously 25%). Credited
+Overall estimate after shared school lift checks: **30%** (previously 28%). Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
-4/15 for two-player movement/presentation, and 6/20 for native targeting, host-owned
+5/15 for two-player movement/presentation and paired school supports, and 6/20 for native targeting, host-owned
 weapons/damage, personal resources and the entrance-checkpoint/respawn slice,
-plus 3/20 for shared world replication, ordered contacts and the verified theatre
-ownership/reunion slice. Full-campaign verification remains at zero. Standalone
+plus 4/20 for shared world replication, ordered contacts, the verified theatre
+ownership/reunion slice and school boarding barriers. Full-campaign verification remains at zero. Standalone
 policy tests receive no campaign credit; every campaign-matrix row remains Not run.
 
 The native enemy combat foundation now supplies two live targets to each enemy
@@ -289,7 +289,7 @@ suppresses the ordinary gameplay HUD. Evidence under `private/coop/`:
 The final production-listener regression accepts upgrades at all three delays:
 `handshake-test-1449f00e111d4c608db6c5e3dd843f94`.
 
-The final full Rust suite passes 723 tests (one unrelated ignored test), including
+At the theatre checkpoint, the full Rust suite passed 723 tests (one unrelated ignored test), including
 the real entity-map envelope and delayed-upgrade regressions. Source-package (7),
 portable setup (6) and Windows setup (6) tests also pass. Final headless evidence:
 `private/coop-stage-verified-tests.log` and `private/coop-stage-verified-native.log`.
@@ -311,10 +311,72 @@ All owned game and tunnel processes were gone after testing.
 
 The level-change/load-barrier path is connected and carries each player's own
 resources, inventory and death countdown. Full round-trip campaign state caching,
-shared saves, controller combat, two-body moving supports/boarding, co-op audio,
+shared saves, controller combat, moving supports beyond the school adapter below, co-op audio,
 and live transition/disconnect coverage remain unfinished. Free-play controller
-updates beyond doors/contacts are not yet integrated; one theatre passing cannot
+updates outside the school remain pending; one theatre passing cannot
 stand in for those systems or for the 39-visit campaign matrix.
+
+## Shared school lifts
+
+The host now advances the school machinery once per world step. A moving support
+plans both living riders' positions before committing either body, its own collider
+or its motion clock. An obstruction above either rider, or a partner below a
+descending support, stops the movement without a partial carry. Jumping bodies
+are not dragged along. The single-player path uses the same helper with one body.
+
+The spiral and ordinary elevator wait for both living players before activation
+and before leaving either endpoint with a passenger. Empty return trips remain
+available. The observatory lift's one-shot contact also waits for both living
+players. Pending requests preserve the first living requester across compressed
+world/contact snapshots; a dead requester yields to the survivor. Waiting does
+not consume the authored trigger or its cooldown. A notice explains the wait.
+The observatory check stages an already-open gate; its complete quest/cutscene
+route is not yet verified in co-op.
+
+`--coop-world-check` now covers all three boarding contacts in both arrival orders,
+with both alive, the waiting partner dead, and the original requester dead. It also
+checks the two ordinary lifts through complete cycles at 30/60/144 Hz, keeping
+both bodies clear before and after physics, preserving rider offsets, restoring
+mid-trip state, holding at both endpoints, returning empty and carrying a sole
+living rider. Obstructions over either rider stop both bodies and the lift clock;
+removing the obstruction resumes travel. The integrated host world loop passes
+both ordinary lifts with Blue first and Red first. Theatre/reunion/wipe checks
+still pass. Evidence: `private/coop-lifts-native4.log`.
+
+The first fixture used an outside spiral position that encounters the landing
+lip near the top. The safety check correctly stopped both riders; the unobstructed
+full-cycle fixture uses the inside position. Earlier fixture setup errors used a
+starting point above the elevator deck and an incorrect assumed body height for
+the temporary ceiling. Their failed logs remain private; they are not counted as
+passing runs.
+
+The full Rust suite passes 726 tests (one unrelated ignored test), including three
+atomic carry regressions. Single-player school state/movers, shelf footing at
+30/60/144 Hz and continuous school traversal pass. All 39 fresh visit records are
+exactly equal to the frozen pre-refactor baseline, including registered controllers.
+Evidence: `private/coop-lifts-tests.log`, `private/coop-lifts-school1.log`,
+`private/coop-lifts-footing1.log`, `private/coop-lifts-school-route1.log`, and
+`private/coop-lifts-registry.json` compared with `private/coop-world-before-registry.json`.
+
+`tools/test_coop_lift.py --data <original-base-folder> --lift elevator --local
+--delay-ms 40 --jitter-ms 20` runs two independent rendered clients on an actual
+lift. It uses the ordinary Host/Join and contact/movement pipeline, with staged
+starting positions and no injected world updates. Wait for the full-cycle check,
+capture each window with F12, then close both windows. Omit `--local` for public
+TLS; `--lift spiral` selects the rotating lift. This fixture verifies the ride;
+arrival-order and obstruction coverage comes from the native checks above.
+
+The delayed loopback elevator check passed on 2026-10-23: both riders reached
+696.03125 and returned, with aligned body/mover snapshots in both clients. Both
+captures were inspected and both processes exited successfully. Evidence:
+`private/coop/lift-test-e98f064766774ad08854c7ba79f3192e`.
+The rotating lift also passed through the public TLS tunnel with 40 ms delay plus
+0–20 ms jitter per sender. Both riders reached 64.03125, completed the return and
+stayed aligned with the shared support in both windows. Captures were inspected
+and both clients exited successfully; no game or tunnel helper remained. Evidence:
+`private/coop/lift-test-3e9dd3b1787b413d8767094b6d70fb16`. This successful connection
+does not remove the previously recorded fresh-hostname DNS limitation.
+Every campaign-matrix row remains **Not run**.
 
 ## Windowed movement and combat slice (development only)
 
@@ -509,7 +571,7 @@ processes and the tunnel helper were gone after these checks. Source packaging
 tests (7), portable setup tests (6) and Windows setup tests (6) passed as well.
 
 Still missing from this slice: two-demon targeting, co-op audio, scripted enemy/world
-controllers, shared moving supports, cutscenes beyond the verified fixture, campaign progression/checkpoints,
+controllers, moving supports beyond the school adapter, cutscenes beyond the verified fixture, campaign progression/checkpoints,
 prediction/latency tuning and campaign validation. Do not use the movement or staged
 combat test as evidence of completing any campaign visit.
 
