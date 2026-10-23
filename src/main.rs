@@ -199,7 +199,8 @@ fn run() -> Result<()> {
         match arg.as_str() {
             "--coop-host" | "--coop-join" => {
                 o.coop = Some(coop::preview::Launch { host: arg == "--coop-host", internet: true,
-                    invite_file: args.next().context("Co-op requires an invite file")?.into(), drive: false });
+                    invite_file: Some(args.next().context("Co-op requires an invite file")?.into()),
+                    invite: None, start: None, drive: false });
             }
             "--coop-local" => o.coop.as_mut().context("Use --coop-host before --coop-local")?.internet = false,
             "--coop-drive" => o.coop.as_mut().context("Choose a co-op role before --coop-drive")?.drive = true,

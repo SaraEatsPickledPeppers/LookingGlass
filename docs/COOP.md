@@ -97,9 +97,9 @@ and exercise slow readers rather than assuming loopback performance represents t
 - New tunnel hostnames initially failed DNS resolution when published too early.
   Hosting now waits for tunnel registration and a 12-second propagation grace.
   This passed repeated public tests; it is not a universal DNS availability guarantee.
-- Main/ESC Host/Join, shared combat and full-campaign integration remain unfinished.
-  These transport probes verify networking; the later rendered movement checks
-  described below exercise two independently controlled Alices.
+- Main/ESC Host/Join now opens the development movement slice. Shared combat
+  and full-campaign integration remain unfinished. These transport probes verify
+  networking; the later rendered checks exercise two independently controlled Alices.
 
 The next session layer (`protocol.rs`, `session.rs`, `hosting.rs`) checks exact source
 and dependency identity plus the mounted game-data fingerprint. Both roles must
@@ -110,8 +110,8 @@ jump/use counts preserve short presses across a busy send queue. An incompatible
 guest releases the slot so the same host can accept a correct build. Host setup,
 helper download and cancellation run off the UI thread.
 
-The development movement viewer now uses these APIs; the main/ESC menus and
-campaign still need integration. The source identity is a compatibility check, not an
+The development movement viewer and main/ESC co-op menus now use these APIs;
+the campaign still needs integration. The source identity is a compatibility check, not an
 attestation that a peer is trustworthy. Guest messages cannot upload world state.
 
 The session changes passed 689 Rust tests (one unrelated ignored test), including
@@ -123,8 +123,8 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after the first rendered movement milestone: **17%**. Credited
-points are 8/10 for foundation/diagnostics, 4/15 for internet session infrastructure,
+Overall estimate after the menu/session milestone: **20%** (previously 17%). Credited
+points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
 4/15 for two-player movement/presentation, and 1/20 for the integrated personal
 health/respawn slice. Scenes/progression and full-campaign verification remain at
 zero. Standalone policy tests receive no campaign credit.
@@ -145,6 +145,48 @@ zero. Standalone policy tests receive no campaign credit.
   mouth, hair, and power-up appearances. Never distribute altered original assets.
 
 ## Windowed movement slice (development only)
+
+The main menu and single-player ESC menu now have a **Co-op** button (keyboard
+shortcut C), with **Host** and **Join**. Host creates an internet invite; Copy
+invite puts the complete link on the clipboard. Join accepts that link with
+Ctrl+V or Paste link. Invalid links stay in the form with an explanation.
+Hosting/connecting can be cancelled. Leaving or a connection error returns to
+the co-op screen. A suspended single-player session stays in memory and can be
+resumed afterward. Hosting currently begins a fresh movement slice at the chapter
+entrance; campaign state transfer remains unfinished.
+
+The connected ESC panel has Resume, Copy invite (host), and Leave co-op. It is
+drawn once per frame, so it does not pause simulation or network updates. An
+incompatible guest releases its slot while the host keeps the invite available.
+`tools/run_coop_pair.ps1 -Data <original-base-folder> -Menu` opens two independent
+main menus to exercise this flow using the public internet connection.
+
+On 2026-10-23, native Anode tests exercised Host from the main menu and Join
+from a paused single-player ESC menu, using the copied public invite. The guest
+left and rejoined using the retained link after moving. With the host's menu
+open, Red moved 105.91 units while Blue stayed still. Ending the host session
+returned the guest to the Join screen. Both game processes exited with code 0;
+no owned game windows or tunnel helper remained.
+
+The single-player quick save stayed byte-for-byte unchanged during co-op.
+After returning to the original school chapter, a newly written quick save
+confirmed the same position, health and inventory. This is evidence for session
+isolation, not for restoring a shared co-op campaign checkpoint.
+
+The first menu pass also checked invalid links, cancelling Host, and rejection
+of an older build followed by a valid join. It exposed two problems, both fixed
+and retested: accumulated gameplay text could alter the retained invite, and a
+Windows reader holding the optional diagnostic file could end gameplay. Text
+input is now cleared at the gameplay/menu boundary; diagnostic writes are best
+effort and the live report is removed on exit. The final public run continued
+through an explicit three-second read-only lock of that diagnostic file.
+Error messages now have their own readable panel.
+
+The menu integration passed 696 Rust tests with one unrelated ignored test.
+After the fixes above, all 28 focused co-op tests and the native public menu flow
+passed. The automated two-window loopback movement check also passed with the
+new menu and diagnostic cleanup in place. Original single-player save files outside the isolated test profile were
+not used or changed.
 
 `--coop-host <private-invite-file>` and `--coop-join <private-invite-file>` now open
 two actual game clients. Hosting uses the public internet tunnel by default;
@@ -201,7 +243,7 @@ unchanged skin/apron/hair/boots, and separate readable overlays. Both processes
 exited successfully and no game windows remained. This final local run validates
 the visual changes after the successful public internet run above.
 
-Still missing from this slice: main/ESC Host/Join routing, combat and enemy selection,
+Still missing from this slice: combat and enemy selection,
 pickup collection, scripted world controllers, shared moving supports, cutscenes,
 campaign progression/checkpoints, prediction/latency tuning and campaign validation.
 Do not use the movement test as evidence of completing any campaign visit.

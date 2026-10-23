@@ -63,6 +63,7 @@ impl Page {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     Resume,
+    Coop,
     Chapters,
     Save(Slot),
     Load(Slot),
@@ -443,6 +444,9 @@ impl Menu {
                 if self.post_game || self.frontend {
                     buttons.pop();
                 }
+                buttons.push(Button::text(
+                    Rect::new(18., 410., 150., 36.), "Co-op", Click::Action(Action::Coop),
+                ));
                 buttons
             }
             Page::Settings => {
@@ -1330,6 +1334,8 @@ impl Menu {
                     }
                     let click = if page == Page::Main && input.ui(KeyCode::Tab) {
                         Some(Click::Action(Action::Chapters))
+                    } else if page == Page::Main && is_key_pressed(KeyCode::C) {
+                        Some(Click::Action(Action::Coop))
                     } else if input.ui(KeyCode::Escape) {
                         Some(Click::Back)
                     } else if page == Page::Quit && is_key_pressed(KeyCode::Y) {

@@ -5,6 +5,7 @@
 pub mod check;
 pub mod hosting;
 pub mod invite;
+pub mod menu;
 pub mod palette;
 pub mod preview;
 pub mod protocol;

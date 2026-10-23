@@ -20,13 +20,20 @@ use std::{
 pub struct Launch {
     pub host: bool,
     pub internet: bool,
-    pub invite_file: PathBuf,
+    pub invite_file: Option<PathBuf>,
+    pub invite: Option<Invite>,
+    pub start: Option<Visit>,
     pub drive: bool,
 }
 pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Result<()> {
     let ui = crate::ui::Ui::load(assets)?;
+    show_mouse(false);
+    let _ = std::fs::remove_file(crate::preferences::path("coop-live.json"));
     let mut hosting = None;
     let result = async {
+        let prefs = crate::preferences::Preferences::load();
+        let mut setup_input = crate::input::Input::default();
+        let mut setup_selected = 0;
         let identity = Identity::current(assets.fingerprint()?);
         let (mut host, mut guest, invite) = if launch.host {
             hosting = Some(Hosting::start(crate::preferences::path("coop"),
@@ -36,19 +43,28 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 if is_quit_requested() || is_key_pressed(KeyCode::Escape) { return Ok(()); }
                 if let Some(ready) = setup.take_ready()? { break ready; }
                 clear_background(BLACK);
-                ui.toast(match setup.status() {
+                super::menu::panel(&ui, "Host co-op");
+                super::menu::text(&ui, match setup.status() {
                     Status::PreparingHelper => "Preparing internet hosting...",
-                    _ => "Creating your invite... Esc to cancel",
-                }, screen_height() * 0.5);
+                    _ => "Creating your invite...",
+                }, 150., 18.);
+                setup_input.update(&prefs, crate::look::window_focused());
+                if super::menu::buttons(&ui, &setup_input, &mut setup_selected, &["Cancel"], 280.).is_some() { return Ok(()); }
+                if crate::look::window_focused() { ui.cursor(); }
+                super::menu::capture();
                 next_frame().await;
             };
-            let visit = Visit { epoch: 1, map: options.map.clone(), entry: options.entry.clone(), difficulty: options.difficulty };
+            let visit = launch.start.clone().unwrap_or_else(|| Visit { epoch: 1, map: options.map.clone(), entry: options.entry.clone(), difficulty: options.difficulty });
             let session = Host::new(peer, identity, visit)?;
-            if let Some(parent) = launch.invite_file.parent() { std::fs::create_dir_all(parent)?; }
-            std::fs::write(&launch.invite_file, invite.link())?;
+            if let Some(path) = &launch.invite_file {
+                if let Some(parent) = path.parent() { std::fs::create_dir_all(parent)?; }
+                std::fs::write(path, invite.link())?;
+            }
             (Some(session), None, Some(invite))
         } else {
-            let invite = Invite::parse(&std::fs::read_to_string(&launch.invite_file).context("The host invite is not ready.")?)?;
+            let invite = if let Some(invite) = &launch.invite { invite.clone() } else {
+                Invite::parse(&std::fs::read_to_string(launch.invite_file.as_ref().context("Paste an invite link first.")?).context("The host invite is not ready.")?)?
+            };
             (None, Some(Guest::new(transport::join(invite, Conditions::default())?, identity, Instant::now())?), None)
         };
         let local = if launch.host { PlayerId::Blue } else { PlayerId::Red };
@@ -59,7 +75,12 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
             session.poll(Instant::now())?;
             visit = session.take_visit();
             clear_background(BLACK);
-            ui.toast("Joining the host... Esc to cancel", screen_height() * 0.5);
+            super::menu::panel(&ui, "Join co-op");
+            super::menu::text(&ui, "Connecting to your friend...", 150., 18.);
+            setup_input.update(&prefs, crate::look::window_focused());
+            if super::menu::buttons(&ui, &setup_input, &mut setup_selected, &["Cancel"], 280.).is_some() { return Ok(()); }
+            if crate::look::window_focused() { ui.cursor(); }
+            super::menu::capture();
             next_frame().await;
         }
         let visit = visit.unwrap();
@@ -81,7 +102,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         let mut yaw = initial_yaw;
         let mut pitch = 0.;
         let mut look = crate::look::MouseLook::default();
-        let prefs = crate::preferences::Preferences::load();
+        look.sensitivity = prefs.sensitivity;
+        look.inverted = prefs.invert_mouse;
         let mut controls = crate::input::Input::default();
         let mut camera = crate::camera::Follow::default();
         let mut local_latch = RemoteInput::default();
@@ -89,6 +111,9 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         let mut local_sequence = 0;
         let mut accumulator = 0_f64;
         let mut menu = false;
+        let mut menu_selected = 0;
+        let mut copied_at: Option<Instant> = None;
+        let mut rejected_guest = String::new();
         let mut last_sent = 0;
         let mut rendered = 0;
         let mut started_playing = None;
@@ -101,7 +126,12 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
             if let Some(setup) = &hosting {
                 if let Status::Failed(reason) = setup.status() { anyhow::bail!("{reason}"); }
             }
-            if let Some(host) = &mut host { host.poll(now)?; }
+            if let Some(host) = &mut host {
+                // A bad/incompatible guest is disconnected by Host::poll.
+                // Keep the host and its invite available for a valid rejoin.
+                if let Err(error) = host.poll(now) { rejected_guest = error.to_string(); }
+                if host.phase() == Phase::Playing { rejected_guest.clear(); }
+            }
             if let Some(guest) = &mut guest {
                 guest.poll(now)?;
                 if let Some(frame) = guest.take_frame() { display = Some(frame); }
@@ -112,10 +142,10 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
             let elapsed = get_frame_time().clamp(0., 0.1);
             let focused = crate::look::window_focused();
             controls.update(&prefs, focused);
-            if focused && controls.ui(KeyCode::Escape) { menu = !menu; }
+            if focused && controls.ui(KeyCode::Escape) { menu = !menu; menu_selected = 0; }
             if is_quit_requested() || menu && focused && is_key_pressed(KeyCode::Q) { break; }
             if focused && is_key_pressed(KeyCode::F8) {
-                if let Some(invite) = &invite { miniquad::window::clipboard_set(&invite.link()); }
+                if let Some(invite) = &invite { miniquad::window::clipboard_set(&invite.link()); copied_at = Some(now); }
             }
             look.update(focused && !menu && !launch.drive && playing, &mut yaw, &mut pitch);
             let flat = vec2(yaw.cos(), yaw.sin());
@@ -211,10 +241,14 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 }
                 if report_at.elapsed() >= Duration::from_millis(200) {
                     let path = crate::preferences::path("coop-live.json");
-                    if let Some(parent) = path.parent() { std::fs::create_dir_all(parent)?; }
-                    std::fs::write(path, serde_json::to_vec(&serde_json::json!({ "role": if launch.host { "host" } else { "guest" },
+                    if let Some(parent) = path.parent() { let _ = std::fs::create_dir_all(parent); }
+                    // Diagnostics are optional. A reader/virus scanner can
+                    // briefly hold this file on Windows; never end gameplay.
+                    if let Ok(bytes) = serde_json::to_vec(&serde_json::json!({ "role": if launch.host { "host" } else { "guest" },
                         "pid": std::process::id(), "playing": playing, "frame": frame, "focused": focused,
-                        "camera_player": watched, "camera": camera_eye }))?)?;
+                        "camera_player": watched, "camera": camera_eye })) {
+                        let _ = std::fs::write(path, bytes);
+                    }
                     report_at = now;
                 }
             }
@@ -223,6 +257,36 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 else if started_playing.is_some() { "Your partner left. Share the invite to rejoin." }
                 else { "Waiting for the other player to finish loading..." }, screen_height() - 110.);
             ui.toast(if menu { "Esc: resume / Q: leave co-op" } else if launch.host { "Esc: menu / F8: copy invite" } else { "Esc: menu" }, screen_height() - 50.);
+            // This panel is part of the current frame, not a nested waiting
+            // loop. Network input, simulation and snapshots continue above it.
+            if menu || !playing {
+                show_mouse(false);
+                super::menu::panel(&ui, if launch.host { "Hosting co-op" } else { "Co-op" });
+                let message = if copied_at.is_some_and(|at| at.elapsed() < Duration::from_secs(4)) {
+                    "Invite copied. Send it to your friend."
+                } else if !rejected_guest.is_empty() { &rejected_guest }
+                else if playing { "Your partner can keep playing while this menu is open." }
+                else if started_playing.is_some() { "Your partner left. They can rejoin with the same invite." }
+                else if launch.host { "Copy your invite and send it to your friend. They choose Join and paste the link." }
+                else { "Waiting for both players to finish loading..." };
+                super::menu::text(&ui, message, 128., 16.);
+                let labels: &[&str] = if playing {
+                    if launch.host { &["Resume", "Copy invite", "Leave co-op"] } else { &["Resume", "Leave co-op"] }
+                } else if launch.host { &["Copy invite", "Leave co-op"] } else { &["Leave co-op"] };
+                menu_selected = menu_selected.min(labels.len() - 1);
+                if let Some(choice) = super::menu::buttons(&ui, &controls, &mut menu_selected, labels, 224.) {
+                    match labels[choice] {
+                        "Resume" => menu = false,
+                        "Copy invite" => {
+                            miniquad::window::clipboard_set(&invite.as_ref().unwrap().link());
+                            copied_at = Some(now);
+                        },
+                        _ => break,
+                    }
+                }
+                if focused { ui.cursor(); }
+                super::menu::capture();
+            }
             if focused && is_key_pressed(KeyCode::F12) {
                 crate::viewer::save_capture(&crate::preferences::path("coop-screenshot.png"))?;
             }
@@ -248,10 +312,14 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
     if let Some(hosting) = hosting {
         hosting.cancel();
         let started = Instant::now();
-        while hosting.status() != Status::Stopped && started.elapsed() < Duration::from_secs(5) {
+        while !matches!(hosting.status(), Status::Stopped | Status::Failed(_)) && started.elapsed() < Duration::from_secs(5) {
             next_frame().await;
         }
-        let _ = std::fs::remove_file(&launch.invite_file);
+        if let Some(path) = &launch.invite_file {
+            let _ = std::fs::remove_file(path);
+        }
     }
+    let _ = std::fs::remove_file(crate::preferences::path("coop-live.json"));
+    show_mouse(true);
     result
 }

@@ -560,7 +560,7 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
         );
         Some(store.read(slot)?)
     } else if saves_enabled && !options.new_game && !options.direct_map && options.frames.is_none() {
-        match start::choose(&mut options, &mut escape_menu, &mut preferences,
+        match start::choose(&mut assets, &mut options, &mut escape_menu, &mut preferences,
             &mut input, &mut audio, &store, &maps).await {
             start::Start::Chapter => { opening_requested = false; None }
             start::Start::NewGame => { opening_requested = true; None }
@@ -906,6 +906,15 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
                 .await;
             use crate::menu::Action;
             match action {
+                Action::Coop => {
+                    let visit = crate::coop::protocol::Visit {
+                        epoch: 1, map: maps[current].clone(), entry: entry_spawn.clone(),
+                        difficulty: stats.difficulty,
+                    };
+                    crate::coop::menu::open(&mut assets, &options, &mut escape_menu, visit).await;
+                    if is_quit_requested() { break; }
+                    escape_menu.open(crate::menu::Page::Main, &preferences, audio.settings);
+                }
                 Action::Resume => {
                     paused = false;
                 }
