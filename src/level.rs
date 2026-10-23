@@ -482,14 +482,7 @@ pub fn targets(slots: &[Slot]) -> Vec<Target> {
 pub fn step_controllers(slots: &mut [Slot], combat: &mut Combat<'_>) -> Feedback {
     let mut total = Feedback::default();
     for slot in slots {
-        let f = slot.ctl.combat(combat);
-        total.damage += f.damage;
-        total.impulse += f.impulse;
-        total.summon_hits.extend(f.summon_hits);
-        total.sounds.extend(f.sounds);
-        total.spatial_sounds.extend(f.spatial_sounds);
-        total.cue_sounds.extend(f.cue_sounds);
-        total.will_drain += f.will_drain;
+        total.append(slot.ctl.combat(combat));
     }
     total
 }
@@ -517,6 +510,8 @@ mod tests {
         fn combat(&mut self, c: &mut Combat<'_>) -> Feedback {
             self.notarget_seen = c.notarget;
             Feedback {
+                players: [crate::combat::PlayerFeedback { damage: self.damage * c.dt,
+                    impulse: Vec3::Y, will_drain: self.damage * c.dt }, Default::default()],
                 damage: self.damage * c.dt,
                 impulse: vec3(1., 0., 0.),
                 sounds: vec!["sound/a.wav"],
@@ -635,6 +630,10 @@ mod tests {
         };
         let f = step_controllers(&mut slots, &mut c);
         assert_eq!(f.damage, 7.5);
+        assert_eq!(f.players[0].damage, 7.5);
+        assert_eq!(f.players[0].impulse, Vec3::Y * 2.);
+        assert_eq!(f.players[0].will_drain, 7.5);
+        assert_eq!(f.players[1].damage, 0.);
         assert_eq!(f.impulse, vec3(2., 0., 0.));
         assert_eq!(f.sounds, ["sound/a.wav", "sound/a.wav"]);
         assert_eq!(f.cue_sounds.len(), 2);

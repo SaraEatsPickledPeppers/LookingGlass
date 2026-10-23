@@ -417,12 +417,7 @@ impl Interactions {
     pub fn levels_step(&mut self, combat: &mut Combat<'_>) -> Feedback {
         let mut out = level::step_controllers(&mut self.levels, combat);
         if let Some(p) = &mut self.pool {
-            let f = p.combat(combat);
-            out.damage += f.damage;
-            out.impulse += f.impulse;
-            out.summon_hits.extend(f.summon_hits);
-            out.sounds.extend(f.sounds);
-            out.spatial_sounds.extend(f.spatial_sounds);
+            out.append(p.combat(combat));
         }
         out
     }

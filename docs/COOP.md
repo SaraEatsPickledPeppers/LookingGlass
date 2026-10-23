@@ -123,11 +123,44 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after the menu/session milestone: **20%** (previously 17%). Credited
+Overall estimate after the combat-foundation checks: **21%** (previously 20%). Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
-4/15 for two-player movement/presentation, and 1/20 for the integrated personal
-health/respawn slice. Scenes/progression and full-campaign verification remain at
+4/15 for two-player movement/presentation, and 2/20 for the integrated personal
+health/respawn slice and verified native targeting/damage foundation. Scenes/progression and full-campaign verification remain at
 zero. Standalone policy tests receive no campaign credit.
+
+The native enemy combat foundation now supplies two live targets to each enemy
+and keeps damage, knockback and Will drain separate for Blue and Red. Closest
+visible selection respects cover, death, invisibility, card-guard sight cones and
+club-guard home limits. An attack retains its valid victim while it finishes;
+ordinary last-seen pursuit continues when both players take cover. Projectiles
+can hit either living body regardless of the enemy's current aim. Clockwork steam
+uses separate hit bits so both players can be hit once by the same attack.
+The live roster is omitted from saved NPC state, preserving the single-player
+save representation. Feedback aggregation preserves both players' results.
+
+Seven new enemy regressions and the existing suite pass: **703 passed, one
+unrelated ignored test**. This is combat foundation evidence, not networked combat
+or campaign completion. `Npcs::update_players` advances a cast once and lets either
+living player reach its ambush triggers; it still needs to be connected to the
+co-op viewer. Host weapon simulation, guest NPC/weapon replication, individual
+pickup presentation, two summoned demons, boss/controller adapters and shared
+world checkpoint restoration remain unfinished. The playable menu still opens
+the movement-only slice. No campaign matrix row is credited by these tests.
+
+The headless `--combat-check` also passes with user-supplied school geometry and
+the actual club-guard animation timings. At each of 30, 60 and 144 Hz, the closer
+Red Alice receives 60 damage during the first 12-second phase and Blue receives
+none. After a guard-state serialization roundtrip and Red's death, the survivor
+Blue receives 84 damage in the next phase and Red receives none. Final position
+and damage agree across all three frame rates. The existing single-player pursuit,
+Blade contact and defeat checks pass alongside this. Reproduce with:
+
+```text
+cargo test --locked
+cargo build --locked
+target/debug/looking-glass.exe --combat-check --data <original-base-folder>
+```
 
 ### Integration constraints found in the existing engine
 

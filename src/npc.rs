@@ -2570,18 +2570,40 @@ impl Npcs {
         }
     }
     pub fn update(&mut self, dt: f32, world: &World, eye: Vec3) -> combat::Feedback {
+        self.player_targets(None);
+        self.update_targets(dt, world, eye, &[eye])
+    }
+    /// The host advances the cast once, with both live bodies available to each
+    /// enemy. A trigger can be reached by either player in that same step.
+    pub fn update_players(&mut self, dt: f32, world: &World, players: [combat::PlayerTarget; 2]) -> combat::Feedback {
+        self.player_targets(Some(players));
+        let eyes: Vec<_> = players.iter().filter(|p| p.alive).map(|p| p.eye).collect();
+        let eye = eyes.first().copied().unwrap_or(players[0].eye);
+        self.update_targets(dt, world, eye, &eyes)
+    }
+    fn player_targets(&mut self, players: Option<[combat::PlayerTarget; 2]>) {
+        for a in &mut self.actors {
+            if let Some(p) = &mut a.resident { p.opponents().players = players; }
+            if let Some(p) = &mut a.clock { p.opponents.players = players; }
+            if let Some(p) = &mut a.imp { p.opponents.players = players; }
+            if let Some(p) = &mut a.chess { p.opponents.players = players; }
+            if let Some(p) = &mut a.ant { p.opponents.players = players; }
+            if let Some(p) = &mut a.guard { p.opponents.players = players; }
+        }
+    }
+    fn update_targets(&mut self, dt: f32, world: &World, eye: Vec3, trigger_eyes: &[Vec3]) -> combat::Feedback {
         let mut _profile = crate::frame_profile::span("npcs");
         if dt <= 0. { _profile.cancel(); }
         if let Some(mut actors) = self.actor_world.take() {
             actors.copy_dynamic_from(world);
-            let result = self.update_cast(dt, &actors, eye);
+            let result = self.update_cast(dt, &actors, eye, trigger_eyes);
             self.actor_world = Some(actors);
             result
         } else {
-            self.update_cast(dt, world, eye)
+            self.update_cast(dt, world, eye, trigger_eyes)
         }
     }
-    fn update_cast(&mut self, dt: f32, world: &World, eye: Vec3) -> combat::Feedback {
+    fn update_cast(&mut self, dt: f32, world: &World, eye: Vec3, trigger_eyes: &[Vec3]) -> combat::Feedback {
         let mut feedback = combat::Feedback::default();
         if let Some(g)=&mut self.garden {g.update(dt,world,eye,&mut self.actors,&self.models);}
         self.companion_routes
@@ -2591,7 +2613,7 @@ impl Npcs {
             });
         if dt.is_finite() && dt > 0. {
             for ambush in &self.resident_ambushes {
-                if !ambush.touches(eye) {
+                if !trigger_eyes.iter().any(|&eye| ambush.touches(eye)) {
                     continue;
                 }
                 for actor in &mut self.actors {
@@ -2620,7 +2642,7 @@ impl Npcs {
                 }
             }
             for ambush in &self.clock_ambushes {
-                if !ambush.touches(eye) {
+                if !trigger_eyes.iter().any(|&eye| ambush.touches(eye)) {
                     continue;
                 }
                 for actor in &mut self.actors {
@@ -2636,7 +2658,7 @@ impl Npcs {
                 }
             }
             for ambush in &self.imp_ambushes {
-                if !ambush.touches(eye) {
+                if !trigger_eyes.iter().any(|&eye| ambush.touches(eye)) {
                     continue;
                 }
                 for actor in &mut self.actors {
@@ -2652,7 +2674,7 @@ impl Npcs {
                 }
             }
             for ambush in &self.chess_ambushes {
-                if ambush.touches(eye) {
+                if trigger_eyes.iter().any(|&eye| ambush.touches(eye)) {
                     for actor in &mut self.actors {
                         if actor
                             .spawn
@@ -2769,23 +2791,20 @@ impl Npcs {
                 continue;
             }
             if let Some(guard) = &mut actor.guard {
-                let events = guard.advance(
+                let mut events = guard.advance(
                     dt,
                     world,
                     eye,
                     self.models[actor.model].data.combat.unwrap(),
                 );
                 actor.yaw = guard.yaw;
-                feedback.summon_hits.extend(events.summon_hits);
-                feedback.damage += events.damage;
-                feedback.impulse += events.impulse;
-                feedback.spatial_sounds.extend(
+                events.spatial_sounds.extend(
                     events
                         .sounds
-                        .into_iter()
+                        .drain(..)
                         .map(|s| (s, guard.target(0).center)),
                 );
-                feedback.spatial_sounds.extend(events.spatial_sounds);
+                feedback.append(events);
             } else if actor.spawn.name == "return_insane2"
                 && !self.pupil_path.is_empty()
                 && actor.greeting <= 0.
@@ -3533,6 +3552,40 @@ pub fn check_combat(assets: &mut Assets) -> Result<()> {
         );
     }
     println!("PASS club guard: alert/walk/attack/pain/death clips and school floor encounter");
+    let mut coop_results = Vec::new();
+    for fps in [30, 60, 144] {
+        let mut guard = Guard::new(vec3(-1888., 2040., -504.), -std::f32::consts::FRAC_PI_2, 1.);
+        let mut players = [eye, eye + Vec3::Y * 80.].map(|eye|
+            combat::PlayerTarget { eye, alive: true, hidden: false });
+        guard.opponents.players = Some(players);
+        let mut red_damage = 0.;
+        for _ in 0..fps * 12 {
+            let f = guard.advance(1. / fps as f32, &world, eye, timing);
+            ensure!(f.damage == 0. && f.players[0].damage == 0., "Co-op guard damaged the wrong player");
+            red_damage += f.players[1].damage;
+        }
+        ensure!(red_damage > 0., "Co-op guard never reached Red Alice");
+        // A restored actor receives the current roster from the host; it must
+        // not retain a dead victim or target the legacy single-player ID.
+        guard = serde_json::from_slice(&serde_json::to_vec(&guard)?)?;
+        guard.validate_save()?;
+        players[1].alive = false;
+        guard.opponents.players = Some(players);
+        let mut blue_damage = 0.;
+        for _ in 0..fps * 12 {
+            let f = guard.advance(1. / fps as f32, &world, eye, timing);
+            ensure!(f.damage == 0. && f.players[1].damage == 0., "Co-op guard hit a dead player");
+            blue_damage += f.players[0].damage;
+        }
+        ensure!(blue_damage > 0., "Co-op guard did not switch to the surviving Alice");
+        coop_results.push((guard.feet, red_damage, blue_damage));
+        println!("PASS co-op school guard {fps} Hz: Red {red_damage}, survivor Blue {blue_damage}, roundtrip");
+    }
+    for result in &coop_results[1..] {
+        ensure!(result.0.distance(coop_results[0].0) < 0.1
+            && result.1 == coop_results[0].1 && result.2 == coop_results[0].2,
+            "Frame-rate-dependent co-op enemy targeting/damage");
+    }
     Ok(())
 }
 

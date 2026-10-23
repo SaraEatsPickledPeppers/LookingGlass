@@ -353,7 +353,7 @@ impl Encounters {
     pub fn update(&mut self, dt: f32, world: &World, eye: Vec3) -> combat::Feedback {
         let mut out = combat::Feedback::default();
         for a in self.actors.iter_mut().filter(|a| a.active && a.enabled) {
-            let f = match &mut a.enemy {
+            let mut f = match &mut a.enemy {
                 Enemy::Guard(g) => g.advance(
                     dt,
                     world,
@@ -363,17 +363,14 @@ impl Encounters {
                 Enemy::Boojum(b) => b.advance(dt, world, eye, self.boojum),
                 Enemy::Ladybug(b) => b.advance(dt, world, eye, self.ladybug.unwrap()),
             };
-            out.summon_hits.extend(f.summon_hits);
-            out.damage += f.damage;
-            out.impulse += f.impulse;
             let origin = match &a.enemy {
                 Enemy::Guard(g) => g.target(0).center,
                 Enemy::Boojum(b) => b.target(0).center,
                 Enemy::Ladybug(b) => b.target(0).center,
             };
-            out.spatial_sounds
-                .extend(f.sounds.into_iter().map(|s| (s, origin)));
-            out.spatial_sounds.extend(f.spatial_sounds);
+            f.spatial_sounds
+                .extend(f.sounds.drain(..).map(|s| (s, origin)));
+            out.append(f);
         }
         out
     }

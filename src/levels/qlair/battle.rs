@@ -583,6 +583,7 @@ impl Queen {
         let bodies = crate::combat::Opponents {
             summon: c.summon,
             demon: false,
+            ..Default::default()
         }
         .bodies(c.player.eye());
         let target = if c.notarget {
