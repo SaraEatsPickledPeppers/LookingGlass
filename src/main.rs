@@ -428,6 +428,7 @@ fn run() -> Result<()> {
             "--coop-world-check" => mode = "coop-world",
             "--coop-campaign-check" => mode = "coop-campaign",
             "--coop-village-check" => mode = "coop-village",
+            "--coop-pandemonium-check" => mode = "coop-pandemonium",
             "--school-check" => mode = "school",
             "--footing-check" => mode = "footing",
             "--shelf-preview" => o.shelf_preview = true,
@@ -1235,6 +1236,15 @@ fn run() -> Result<()> {
         macroquad::Window::from_config(viewer::config(), async move {
             if let Err(e) = fortress::check::render_check(&mut assets).await {
                 eprintln!("Fortress cinema render failed: {e:#}");
+                std::process::exit(1);
+            }
+        });
+        return Ok(());
+    }
+    if mode == "coop-pandemonium" {
+        macroquad::Window::from_config(viewer::config(), async move {
+            if let Err(e) = coop::pandemonium_check::check(&mut assets).await {
+                eprintln!("Co-op Pandemonium check failed: {e:#}");
                 std::process::exit(1);
             }
         });

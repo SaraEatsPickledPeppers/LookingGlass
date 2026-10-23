@@ -68,7 +68,7 @@ impl Stage {
         if !staged {
             interactions.entry_story(&mut story);
         }
-        interactions.sync(world);
+        interactions.sync_coop(world);
         let owner = controls_scene(&interactions).then_some(PlayerId::Blue);
         let contacts = Contacts::new(&interactions);
         let mut stage = Self {
@@ -121,7 +121,7 @@ impl Stage {
         self.last_owner = state.last_owner;
         self.transition = state.transition.clone();
         self.notices = state.notices.clone();
-        self.interactions.sync(world);
+        self.interactions.sync_coop(world);
         Ok(())
     }
     pub fn reset(&mut self, map: &Bsp, world: &mut World) -> Result<()> {
@@ -229,6 +229,13 @@ impl Stage {
         if self.busy() {
             return Ok(());
         }
+        for id in PlayerId::ALL {
+            if roster.players[id.index()].stats.alive() {
+                let events = self.interactions.pandemonium_player(world, &roster.players[id.index()].player);
+                self.accept(events, id, roster, world);
+                if self.busy() { return Ok(()); }
+            }
+        }
         let events = self.interactions.doors_pair(
             dt,
             map,
@@ -294,7 +301,7 @@ impl Stage {
         for id in PlayerId::ALL {
             if result.waiting[id.index()] {
                 self.notices[id.index()] = Some(Notice {
-                    text: "Waiting for both players to board the lift".into(),
+                    text: "Waiting for both players to board".into(),
                     until: roster.tick + 120,
                 });
             }
@@ -318,6 +325,9 @@ impl Stage {
         let Some(owner) = self.owner else {
             return Ok(());
         };
+        // Scene control supersedes traversal for both actors. Do not resume a
+        // grip at its old anchor after the scene moves Alice somewhere else.
+        for body in &mut roster.players { body.player.release_rope(); }
         let body = &roster.players[owner.index()];
         let events = self.interactions.update(
             FIXED_DT,
@@ -335,6 +345,7 @@ impl Stage {
             &mut roster.players[owner.index()].player,
         )?;
         self.speech_step(roster, world, inputs[owner.index()].0.use_pressed);
+        self.interactions.sync_coop(world);
         if self.transition.is_none() && !controls_scene(&self.interactions) && !self.story.busy() {
             let partner = owner.partner();
             if roster.players[partner.index()].stats.alive() {

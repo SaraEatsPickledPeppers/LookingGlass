@@ -70,7 +70,7 @@ consumable and enemy evidence remains open before this row can be marked passed.
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Partial: both arrival orders, deaths/spectator/respawn in both roles, saved-checkpoint wipe and fresh guest rejoin-to-exit pass; consumable/enemy evidence pending; shared boarding N/A |
-| 2 | `pandemonium` | `Initial` | Not run |
+| 2 | `pandemonium` | `Initial` | Partial: staged native checks pass independent rope grips, minecart waiting/ownership/reunion and either-player key pickup in both orders; full route, rope rendering, network and death/rejoin matrix pending |
 | 3 | `fortress1` | `Initial` | Not run |
 | 4 | `fortress2` | `Initial` | Not run |
 | 5 | `fortress1` | `fortress1_start2` | Not run |

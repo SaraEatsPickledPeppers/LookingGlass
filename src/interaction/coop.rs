@@ -111,10 +111,22 @@ pub struct PairEvents {
 }
 
 impl Interactions {
+    /// Co-op grips belong to each replicated Player. The original Pandemonium
+    /// controller keeps its one-body grip for single-player saves and play.
+    pub fn sync_coop(&self, world: &mut World) {
+        self.sync(world);
+        world.traversal.managed_ropes = false;
+    }
+
     fn boarding_ready(&self, trigger: usize, feet: &[Vec3]) -> Option<bool> {
         let TriggerKind::Script(thread) = &self.triggers[trigger].kind else {
             return None;
         };
+        if self.pandemonium.is_some() && thread == "Minecart_Thread" {
+            return Some(!feet.is_empty() && feet.iter().all(|at| {
+                self.triggers[trigger].volume.touches(*at + PLAYER_CENTER, *at + PLAYER_CENTER, PLAYER_HALF)
+            }));
+        }
         self.school
             .as_ref()
             .and_then(|s| s.boarding_ready(thread, feet))
@@ -129,6 +141,11 @@ impl Interactions {
         world: &mut World,
         players: &mut [&mut Player],
     ) -> Result<()> {
+        if let Some(pandemonium) = &mut self.pandemonium {
+            let fixed = self.doors.iter().filter(|d| d.enabled && self.event_world.enabled(d.id))
+                .map(|d| d.collider.clone()).collect::<Vec<_>>();
+            pandemonium.advance_players(dt, map, world, players, &fixed)?;
+        }
         if let Some(village) = &mut self.village {
             let fixed = self.doors.iter().filter(|d| d.enabled && self.event_world.enabled(d.id))
                 .map(|d| d.collider.clone()).collect::<Vec<_>>();
@@ -144,7 +161,7 @@ impl Interactions {
                 .collect::<Vec<_>>();
             school.advance_players(dt, map, world, players, &fixed)?;
         }
-        self.sync(world);
+        self.sync_coop(world);
         Ok(())
     }
     /// Door input and one door-motion step. Controllers/movers keep their own
@@ -177,8 +194,21 @@ impl Interactions {
             }
         }
         self.advance_doors(dt, map, &bodies)?;
-        self.sync(world);
+        self.sync_coop(world);
         Ok(events)
+    }
+
+    /// Personal contacts with a shared quest item must include either player.
+    /// Rope use stays with Player::tick, so neither grip consumes the other's E.
+    pub fn pandemonium_player(&mut self, world: &World, player: &Player) -> Events {
+        let Some(p) = &mut self.pandemonium else { return Events::default(); };
+        let events = p.update(world, player, false);
+        if p.state.leaving {
+            for door in &mut self.doors {
+                if door.name == "t141" { door.enabled = false; }
+            }
+        }
+        events
     }
 
     pub fn triggers_pair(
