@@ -127,6 +127,9 @@ impl Stage {
     pub fn reset(&mut self, map: &Bsp, world: &mut World) -> Result<()> {
         self.restore(&self.initial.as_ref().unwrap().clone(), map, world)
     }
+    pub fn remember_checkpoint(&mut self) {
+        self.initial = Some(self.snapshot());
+    }
     /// World progress survives leaving a visit. Re-entering places both players
     /// at its entrance, so old contact sweeps, notices and the departure request
     /// no longer belong to those bodies. The restored world is the new checkpoint.

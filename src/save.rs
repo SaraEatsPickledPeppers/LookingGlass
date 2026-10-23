@@ -483,7 +483,7 @@ fn read_limited(path: &Path) -> Result<Vec<u8>> {
     ensure!(bytes.len() as u64 <= LIMIT, "Save file is too large");
     Ok(bytes)
 }
-fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
+pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     let temp = path.with_extension(format!("json.{}.tmp", std::process::id()));
     // A per-process temporary file cannot replace the committed save before flush succeeds.
     let result = (|| -> Result<()> {

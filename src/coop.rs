@@ -5,6 +5,7 @@
 pub mod check;
 pub mod arena;
 pub mod campaign;
+pub mod checkpoint;
 mod placement;
 pub(crate) mod codec;
 pub mod hosting;

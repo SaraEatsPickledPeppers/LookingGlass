@@ -1,5 +1,6 @@
 //! Windowed development entry point for shared movement and combat. This
-//! does not claim campaign/controller support and never writes campaign saves.
+//! does not claim full campaign/controller support. Co-op checkpoints are kept
+//! separately from all single-player saves.
 use super::{
     hosting::{Hosting, Status},
     invite::Invite,
@@ -27,6 +28,8 @@ pub struct Launch {
     pub death_check: Option<PlayerId>,
     pub scene_check: Option<PlayerId>,
     pub travel_check: bool,
+    pub resume: bool,
+    pub checkpoint_check: bool,
     pub conditions: Conditions,
 }
 pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Result<()> {
@@ -39,6 +42,9 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         let mut setup_input = crate::input::Input::default();
         let mut setup_selected = 0;
         let identity = Identity::current(assets.fingerprint()?);
+        anyhow::ensure!(!launch.resume || launch.host, "Only the host loads the shared co-op checkpoint");
+        let checkpoint_store = super::checkpoint::Store::current(identity.game_data.clone());
+        let resumed = if launch.resume { Some(checkpoint_store.load()?) } else { None };
         let (mut host, mut guest, invite) = if launch.host {
             hosting = Some(Hosting::start(crate::preferences::path("coop"),
                 PathBuf::from("private/coop/helpers"), launch.internet, launch.conditions)?);
@@ -58,7 +64,10 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 super::menu::capture();
                 next_frame().await;
             };
-            let visit = launch.start.clone().unwrap_or_else(|| Visit { epoch: 1, map: options.map.clone(), entry: options.entry.clone(), difficulty: options.difficulty, combat_preview: options.combat_preview });
+            let mut visit = resumed.as_ref().map(|saved| saved.checkpoint.visit.clone()).or_else(|| launch.start.clone())
+                .unwrap_or_else(|| Visit { epoch: 1, map: options.map.clone(), entry: options.entry.clone(), difficulty: options.difficulty, combat_preview: options.combat_preview });
+            // A resumed file carries gameplay clocks, never a previous network session.
+            visit.epoch = 1;
             let session = Host::new(peer, identity, visit)?;
             if let Some(path) = &launch.invite_file {
                 if let Some(parent) = path.parent() { std::fs::create_dir_all(parent)?; }
@@ -94,11 +103,17 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
             && !visit.combat_preview && launch.death_check.is_none(), "The scene fixture requires the first school visit.");
         anyhow::ensure!(!launch.travel_check || visit.map == "skool1" && !visit.combat_preview
             && launch.death_check.is_none() && launch.scene_check.is_none(), "The travel fixture requires the school.");
+        anyhow::ensure!(!launch.checkpoint_check || !visit.combat_preview && launch.death_check.is_none()
+            && launch.scene_check.is_none() && (launch.travel_check || !launch.host || launch.resume),
+            "The checkpoint fixture requires staged travel or a resumed host");
         clear_background(BLACK);
         ui.toast("Opening Wonderland for two...", screen_height() * 0.5);
         next_frame().await;
         let mut scene = crate::render::Scene::load_for(assets, &visit.map, visit.difficulty)?;
         let mut arena = super::arena::Arena::load(assets, &scene.map, &mut scene.world, &visit, visit.combat_preview)?;
+        if let Some(saved) = &resumed {
+            arena.restore_checkpoint(saved.checkpoint.frame.combat.as_ref().unwrap(), &scene.map, &mut scene.world)?;
+        }
         let mut level_art = crate::viewer::LevelArt::default();
         level_art.prepare(assets, &scene, &arena.stage.interactions, false)?;
         let hud = crate::hud::Hud::load(assets)?;
@@ -108,8 +123,20 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         let eye = if launch.scene_check.is_some() { vec3(-2440., 2368., -480. + crate::movement::EYE_HEIGHT) } else { eye };
         let mut stats = Stats::for_level(&visit.map, visit.entry.as_deref());
         stats.difficulty = visit.difficulty;
-        let mut roster = if launch.host { Some(Roster::new_with(&scene.world, eye, initial_yaw, stats, |at| !arena.stage.interactions.hazardous(at))?) } else { None };
-        if let Some(roster) = &roster { arena.reset_characters(&roster.players); }
+        let mut roster = if let Some(saved) = &resumed {
+            Some(Roster::from_checkpoint(&saved.checkpoint.frame, &scene.world, |at| !arena.stage.interactions.hazardous(at))?)
+        } else if launch.host {
+            Some(Roster::new_with(&scene.world, eye, initial_yaw, stats, |at| !arena.stage.interactions.hazardous(at))?)
+        } else { None };
+        if resumed.is_none() {
+            if let Some(roster) = &roster { arena.reset_characters(&roster.players); }
+        }
+        if launch.checkpoint_check {
+            if let Some(saved) = &resumed {
+                super::checkpoint::verify_restored(&saved.checkpoint, roster.as_ref().unwrap(), &arena)?;
+                println!("PASS co-op checkpoint fixture: both players, characters, world and NPCs restored exactly before simulation");
+            }
+        }
         if let Some(host) = &mut host { host.loaded(visit.epoch)?; }
         if let Some(guest) = &mut guest { guest.loaded(visit.epoch)?; }
         let mut display = roster.as_ref().map(|r| r.frame(visit.epoch, 0));
@@ -141,13 +168,22 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         let mut captured_recovery = [false; 3];
         let mut restored_at = None;
         let mut pending_visit = None;
-        let mut campaign = super::campaign::Campaign::default();
+        let mut campaign = resumed.as_ref().map(|s| s.checkpoint.campaign.clone()).unwrap_or_default();
+        let mut checkpoint_pending = resumed.is_none() && launch.host && !launch.drive && !visit.combat_preview;
+        let mut checkpoint_message = resumed.as_ref().map(|s| (Instant::now(), if s.recovered_backup {
+            "Recovered the previous co-op checkpoint from its backup.".to_owned()
+        } else { "Co-op checkpoint restored for both players.".to_owned() }));
         let mut leaving_visit = None;
         let mut local_location = None;
         let mut reunited_at = None;
         let mut captured_scene = false;
         let mut entered_tick = 0;
         let mut travel_used = false;
+        let mut travel_returned_at = None;
+        let mut travel_captured = false;
+        let mut fixture_checkpoint_saved = false;
+        let mut fixture_checkpoint_wiped = false;
+        let mut checkpoint_captured = false;
         loop {
             let now = Instant::now();
             if let Some(setup) = &hosting {
@@ -199,6 +235,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 arena = next_arena;
                 level_art = next_art;
                 visit = next;
+                checkpoint_pending = launch.host && !launch.drive && !visit.combat_preview;
                 if let Some(host) = &mut host { host.loaded(visit.epoch)?; }
                 if let Some(guest) = &mut guest { guest.loaded(visit.epoch)?; }
                 display = roster.as_ref().map(|r| r.frame(visit.epoch, 0));
@@ -287,6 +324,12 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         keys.uses += 1;
                         travel_used = true;
                     }
+                } else if launch.checkpoint_check {
+                    keys.wish = Vec2::ZERO;
+                    keys.swim = Vec3::ZERO;
+                    keys.primary = false;
+                    keys.alternate = false;
+                    keys.weapon = None;
                 } else if let Some(first) = launch.scene_check {
                     keys.wish = if local == first && age >= 2. && !arena.stage.busy()
                         && display.as_ref().is_some_and(|f| f.players.iter().all(|b| b.warped_at == 0)) { -Vec2::X } else { Vec2::ZERO };
@@ -345,8 +388,39 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 if playing {
                     accumulator += f64::from(elapsed);
                     while accumulator >= f64::from(FIXED_DT) {
+                        let check_wipe = launch.checkpoint_check && resumed.as_ref().is_some_and(|s|
+                            roster.tick >= s.checkpoint.frame.tick + 120) && !fixture_checkpoint_wiped;
+                        if check_wipe {
+                            for body in &mut roster.players { body.stats.damage(10000.); }
+                            anyhow::ensure!(checkpoint_store.save(&visit, roster, &mut arena, &scene.world, &campaign).is_err(),
+                                "A dead team replaced its checkpoint");
+                        }
                         arena.step(roster, &scene.map, &mut scene.world, [local_latch.sample(now), host.controls(now)])?;
+                        if check_wipe {
+                            let saved = resumed.as_ref().unwrap();
+                            super::checkpoint::verify_restored(&saved.checkpoint, roster, &arena)?;
+                            anyhow::ensure!(roster.checkpoint_generation == saved.checkpoint.frame.checkpoint_generation + 1,
+                                "Both deaths failed to restore the saved checkpoint");
+                            std::fs::write(crate::preferences::path("coop-checkpoint-verified.json"), serde_json::to_vec(&serde_json::json!({
+                                "passed": true, "recovered_backup": saved.recovered_backup, "epoch": visit.epoch,
+                                "generation": roster.checkpoint_generation, "completed_visits": campaign.completed()
+                            }))?)?;
+                            println!("PASS co-op checkpoint fixture: team wipe restored saved bodies, resources, character actions, shared world and NPCs exactly");
+                            fixture_checkpoint_wiped = true;
+                        }
                         accumulator -= f64::from(FIXED_DT);
+                    }
+                    if launch.checkpoint_check && launch.travel_check && visit.epoch == 3
+                        && roster.tick >= entered_tick + 120 && !fixture_checkpoint_saved {
+                        // Explicit fixture resources distinguish the two saved inventories.
+                        roster.players[0].stats.set_health(83.)?;
+                        roster.players[1].stats.set_health(47.)?;
+                        roster.players[0].stats.spend_will(5.);
+                        roster.players[1].stats.spend_will(11.);
+                        checkpoint_store.save(&visit, roster, &mut arena, &scene.world, &campaign)?;
+                        checkpoint_store.save(&visit, roster, &mut arena, &scene.world, &campaign)?;
+                        fixture_checkpoint_saved = true;
+                        println!("PASS co-op checkpoint fixture: saved shared visit history and distinct player resources with a good backup");
                     }
                     let frame = roster.frame(visit.epoch, host.acknowledged_input());
                     if frame.tick >= last_sent + 6 {
@@ -355,6 +429,13 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         if host.send_frame(network)? { last_sent = frame.tick; }
                     }
                     display = Some(frame);
+                    if checkpoint_pending && !arena.stage.busy() && roster.players.iter().all(|b| b.stats.alive()) {
+                        checkpoint_pending = false;
+                        checkpoint_message = Some((now, match checkpoint_store.save(&visit, roster, &mut arena, &scene.world, &campaign) {
+                            Ok(()) => "Co-op checkpoint saved for both players.".into(),
+                            Err(error) => format!("Checkpoint was not saved: {error}"),
+                        }));
+                    }
                     // Explicit travel fixture: it requests normal load barriers
                     // without claiming the quest-gated exits were played through.
                     if launch.travel_check && arena.stage.transition.is_none() {
@@ -461,12 +542,17 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 else if started_playing.is_some() { "Your partner left. Share the invite to rejoin." }
                 else { "Waiting for the other player to finish loading..." }, screen_height() - 110.);
             ui.toast(if menu { "Esc: resume / Q: leave co-op" } else if launch.host { "Esc: menu / F8: copy invite" } else { "Esc: menu" }, screen_height() - 50.);
+            if let Some((at, message)) = &checkpoint_message {
+                if !menu && at.elapsed() < Duration::from_secs(6) { ui.toast(message, 90.); }
+            }
             // This panel is part of the current frame, not a nested waiting
             // loop. Network input, simulation and snapshots continue above it.
             if menu || !playing {
                 show_mouse(false);
                 super::menu::panel(&ui, if launch.host { "Hosting co-op" } else { "Co-op" });
-                let message = if copied_at.is_some_and(|at| at.elapsed() < Duration::from_secs(4)) {
+                let message = if let Some((_, text)) = checkpoint_message.as_ref().filter(|(at, _)| at.elapsed() < Duration::from_secs(6)) {
+                    text.as_str()
+                } else if copied_at.is_some_and(|at| at.elapsed() < Duration::from_secs(4)) {
                     "Invite copied. Send it to your friend."
                 } else if !rejected_guest.is_empty() { &rejected_guest }
                 else if playing { "Your partner can keep playing while this menu is open." }
@@ -475,15 +561,24 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 else { "Waiting for both players to finish loading..." };
                 super::menu::text(&ui, message, 128., 16.);
                 let labels: &[&str] = if playing {
-                    if launch.host { &["Resume", "Copy invite", "Leave co-op"] } else { &["Resume", "Leave co-op"] }
-                } else if launch.host { &["Copy invite", "Leave co-op"] } else { &["Leave co-op"] };
+                    if launch.host { &["Resume", "Save checkpoint", "Copy invite", "Leave co-op"] } else { &["Resume", "Leave co-op"] }
+                } else if launch.host { &["Copy invite", "Save checkpoint", "Leave co-op"] } else { &["Leave co-op"] };
                 menu_selected = menu_selected.min(labels.len() - 1);
-                if let Some(choice) = super::menu::buttons(&ui, &controls, &mut menu_selected, labels, 224.) {
+                if let Some(choice) = super::menu::buttons(&ui, &controls, &mut menu_selected, labels, 208.) {
                     match labels[choice] {
                         "Resume" => menu = false,
                         "Copy invite" => {
                             miniquad::window::clipboard_set(&invite.as_ref().unwrap().link());
                             copied_at = Some(now);
+                            checkpoint_message = None;
+                        },
+                        "Save checkpoint" => {
+                            let result = checkpoint_store.save(&visit, roster.as_mut().unwrap(), &mut arena, &scene.world, &campaign);
+                            if result.is_ok() { checkpoint_pending = false; }
+                            checkpoint_message = Some((now, match result {
+                                Ok(()) => "Co-op checkpoint saved for both players.".into(),
+                                Err(error) => format!("Checkpoint was not saved: {error}"),
+                            }));
                         },
                         _ => break,
                     }
@@ -535,7 +630,28 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 }
                 anyhow::ensure!(!started_playing.is_some_and(|at| at.elapsed().as_secs() > 180), "Co-op scene did not reunite both players");
             }
-            if launch.drive && !launch.travel_check && launch.death_check.is_none() && launch.scene_check.is_none() && started_playing.is_some_and(|start| start.elapsed()
+            if launch.travel_check {
+                if visit.epoch == 3 && playing { travel_returned_at.get_or_insert(now); }
+                if travel_returned_at.is_some_and(|at: Instant| at.elapsed() >= Duration::from_secs(5)) && !travel_captured {
+                    crate::viewer::save_capture(&crate::preferences::path("coop-screenshot.png"))?;
+                    travel_captured = true;
+                }
+                if travel_returned_at.is_some_and(|at: Instant| at.elapsed() >= Duration::from_secs(if launch.host { 10 } else { 8 })) {
+                    break;
+                }
+                anyhow::ensure!(!started_playing.is_some_and(|at| at.elapsed().as_secs() > 180), "Co-op travel fixture did not finish");
+            }
+            if launch.checkpoint_check && !launch.travel_check {
+                if started_playing.is_some_and(|at| at.elapsed() >= Duration::from_secs(5)) && !checkpoint_captured {
+                    crate::viewer::save_capture(&crate::preferences::path("coop-screenshot.png"))?;
+                    checkpoint_captured = true;
+                }
+                if started_playing.is_some_and(|at| at.elapsed() >= Duration::from_secs(if launch.host { 10 } else { 8 })) {
+                    anyhow::ensure!(!launch.host || fixture_checkpoint_wiped, "Checkpoint fixture did not verify a team wipe");
+                    break;
+                }
+            }
+            if launch.drive && !launch.travel_check && !launch.checkpoint_check && launch.death_check.is_none() && launch.scene_check.is_none() && started_playing.is_some_and(|start| start.elapsed()
                 >= Duration::from_secs(if launch.host { 12 } else { 10 }
                     + if visit.combat_preview { 4 } else { 0 })) {
                 crate::viewer::save_capture(&crate::preferences::path("coop-screenshot.png"))?;

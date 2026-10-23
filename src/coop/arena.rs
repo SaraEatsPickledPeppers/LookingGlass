@@ -35,6 +35,7 @@ pub struct Arena {
     pub catalog: Catalog,
     pub visit_key: String,
     initial: crate::npc::Snapshot,
+    checkpoint_characters: Option<[crate::character::Snapshot; 2]>,
     alive: [bool; 2],
 }
 impl Arena {
@@ -56,6 +57,7 @@ impl Arena {
             stage,
             npcs,
             initial,
+            checkpoint_characters: None,
             catalog,
             pickups,
             visit_key: crate::save::visit_key(&visit.map, visit.entry.as_deref()),
@@ -86,6 +88,24 @@ impl Arena {
             c.restore(state)?;
         }
         Ok(())
+    }
+    /// Load into a newly constructed arena before exposing any restored state.
+    pub fn restore_checkpoint(&mut self, state: &Snapshot, map: &Bsp, world: &mut World) -> Result<()> {
+        self.stage.restore(&state.stage, map, world)?;
+        anyhow::ensure!(!self.stage.busy() && !self.stage.interactions.scripted() && !self.stage.story.busy(),
+            "Cannot resume a co-op checkpoint during a scene or level transition");
+        self.npcs.restore(&state.npcs)?;
+        for (character, saved) in self.characters.iter_mut().zip(&state.characters) {
+            character.restore(saved)?;
+        }
+        self.alive = [true; 2];
+        self.remember_checkpoint();
+        Ok(())
+    }
+    pub fn remember_checkpoint(&mut self) {
+        self.stage.remember_checkpoint();
+        self.initial = self.npcs.snapshot();
+        self.checkpoint_characters = Some(self.characters.each_ref().map(|c| c.snapshot()));
     }
     pub fn restore_visit(&mut self, state: &super::campaign::VisitState, visit: &Visit, map: &Bsp, world: &mut World) -> Result<()> {
         state.matches(visit)?;
@@ -233,7 +253,14 @@ impl Arena {
         }
         roster.finish_tick_with(world, cinematic, |at| !self.stage.interactions.hazardous(at))?;
         if generation != roster.checkpoint_generation {
-            self.reset_characters(&roster.players);
+            if let Some(saved) = &self.checkpoint_characters {
+                for (character, state) in self.characters.iter_mut().zip(saved) {
+                    character.restore(state)?;
+                }
+                self.alive = [true; 2];
+            } else {
+                self.reset_characters(&roster.players);
+            }
         } else {
             for (index, (character, body)) in
                 self.characters.iter_mut().zip(&roster.players).enumerate()

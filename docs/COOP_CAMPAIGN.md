@@ -22,6 +22,12 @@ entrance wipe placement. Both underwater death roles also pass at the temple and
 first garden entrance. This is preparation for the traversal checks below, not
 completion of a campaign row. Evidence: `private/coop-progression-entrances4.log`.
 
+Persistence-only evidence: the public two-process fixture
+`private/coop/travel-test-0abfe07a7db0413db758682defa42cd9/` passes travel/rejoin,
+save/close/restart, exact shared checkpoint/team-wipe restoration and backup
+recovery with distinct player resources. It uses staged school transitions;
+quest-gated exits and complete level traversal remain unverified.
+
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Not run |

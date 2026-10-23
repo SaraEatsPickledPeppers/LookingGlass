@@ -2,8 +2,8 @@
 
 Run in Anode. The --coop-travel-check fixture requests ordinary load barriers;
 it deliberately does not claim to traverse the quest-gated school exits. With
---reconnect, close/restart the guest on arrival at the return visit. Capture
-each final window with F12 and close both when the verification message appears.
+--reconnect, close/restart the guest on arrival at the return visit. Both clients
+capture their final views and exit themselves; desktop input is unnecessary.
 """
 import argparse
 import json
@@ -34,6 +34,8 @@ def run(args):
                        '--coop-travel-check', '--coop-delay-ms', str(args.delay_ms), '--coop-jitter-ms', str(args.jitter_ms)]
             if role == 'host' and args.local:
                 command.append('--coop-local')
+            if getattr(args, 'checkpoint', False):
+                command.append('--coop-checkpoint-check')
             process = subprocess.Popen(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, creationflags=flags)
             processes.append(process)
             active[role] = process
@@ -89,7 +91,10 @@ def run(args):
             assert max(r['used'] for r in first) > 0, 'Door was never opened through player input'
             assert all(r['used'] == first[-1]['used'] for r in returned), 'Revisit lost the shared door state'
             assert all(r['generation'] == 0 and all(s == 0 for s in r['spawned_at']) for r in rows), 'Travel reported a wipe or respawn'
-            assert all(r['health'] == first[0]['health'] for r in returned), 'Travel changed personal health'
+            if getattr(args, 'checkpoint', False):
+                assert returned[-1]['health'] == [83, 47], 'Checkpoint fixture did not seed distinct resources'
+            else:
+                assert all(r['health'] == first[0]['health'] for r in returned), 'Travel changed personal health'
             assert all(all(new >= old for new, old in zip(r['weapons'][i], first[-1]['weapons'][i]))
                        and set(first[-1]['collected'][i]).issubset(r['collected'][i])
                        for r in returned for i in range(2)), 'Travel lost a personal weapon or pickup entitlement'
@@ -98,13 +103,13 @@ def run(args):
         assert 'cached shared world and NPC state restored exactly' in (folder / 'host.log').read_text(), 'No full restore evidence'
         assert not args.reconnect or disconnected
         (folder / 'ready.json').write_text(json.dumps({'reconnected': disconnected, 'passed': True}))
-        print('Travel validated. Capture and close both game windows to finish.', flush=True)
-        deadline = time.monotonic() + 90
+        print('Travel validated. Waiting for automatic captures and clean client exits.', flush=True)
+        deadline = time.monotonic() + 30
         while any(p.poll() is None for p in active.values()):
-            assert time.monotonic() < deadline, 'Close both windows after inspecting travel'
+            assert time.monotonic() < deadline, 'Travel clients did not finish automatically'
             time.sleep(.1)
         assert all(p.returncode == 0 for p in active.values()), 'Final clients did not exit cleanly'
-        assert all((folder / role / 'coop-screenshot.png').exists() for role in active), 'Capture both clients with F12'
+        assert all((folder / role / 'coop-screenshot.png').exists() for role in active), 'A client did not capture its final view'
         (folder / 'result.json').write_text(json.dumps({'passed': True, 'internet': not args.local,
             'reconnected': disconnected, 'delay_ms': args.delay_ms, 'jitter_ms': args.jitter_ms,
             'scope': 'staged travel/cache/epoch fixture; quest-gated exits and campaign completion not verified'}, indent=2))
@@ -118,6 +123,7 @@ def run(args):
         for log in logs:
             log.close()
         invite.unlink(missing_ok=True)
+    return folder
 
 
 if __name__ == '__main__':

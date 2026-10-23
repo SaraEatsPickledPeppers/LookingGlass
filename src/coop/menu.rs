@@ -49,8 +49,8 @@ impl LinkInput {
     }
 }
 
-/// Starts a fresh co-op visit while retaining a suspended single-player game in
-/// its caller. No campaign save is read, replaced or written by this menu.
+/// Hosts or resumes co-op while retaining the caller's suspended single-player
+/// game. Co-op checkpoints have their own files and never replace its saves.
 pub async fn open(assets: &mut Assets, options: &Options, backdrop: &mut Menu, visit: Visit) {
     let ui = match Ui::load(assets) {
         Ok(ui) => ui,
@@ -63,6 +63,7 @@ pub async fn open(assets: &mut Assets, options: &Options, backdrop: &mut Menu, v
     let mut input = Input::default();
     let mut link = LinkInput::default();
     let mut joining = false;
+    let mut hosting = false;
     let mut selected = 0;
     let mut message = String::new();
     show_mouse(false);
@@ -75,8 +76,9 @@ pub async fn open(assets: &mut Assets, options: &Options, backdrop: &mut Menu, v
         let focused = crate::look::window_focused();
         input.update(&prefs, focused);
         if focused && input.ui(KeyCode::Escape) {
-            if joining {
+            if joining || hosting {
                 joining = false;
+                hosting = false;
                 selected = 0;
                 message.clear();
             } else {
@@ -104,7 +106,7 @@ pub async fn open(assets: &mut Assets, options: &Options, backdrop: &mut Menu, v
             while get_char_pressed().is_some() {}
         }
         backdrop.backdrop();
-        panel(&ui, if joining { "Join co-op" } else { "Co-op" });
+        panel(&ui, if joining { "Join co-op" } else if hosting { "Host co-op" } else { "Co-op" });
         let mut launch = None;
         if joining {
             text(
@@ -167,6 +169,8 @@ pub async fn open(assets: &mut Assets, options: &Options, backdrop: &mut Menu, v
                                 death_check: None,
                                 scene_check: None,
                                 travel_check: false,
+                                resume: false,
+                                checkpoint_check: false,
                                 conditions: Default::default(),
                             })
                         }
@@ -183,6 +187,20 @@ pub async fn open(assets: &mut Assets, options: &Options, backdrop: &mut Menu, v
                     }
                 }
             }
+        } else if hosting {
+            text(&ui, "Continue together from your saved checkpoint,", 120., 17.);
+            text(&ui, "or start again at this chapter's entrance.", 148., 17.);
+            text(&ui, "Continuing creates a new invite for your friend.", 182., 14.);
+            if let Some(choice) = buttons(&ui, &input, &mut selected,
+                &["Continue co-op", "Start chapter", "Back"], 224.) {
+                if choice == 2 {
+                    hosting = false;
+                    selected = 0;
+                    message.clear();
+                } else {
+                    launch = Some(host_launch(&visit, choice == 0));
+                }
+            }
         } else {
             text(&ui, "Play together as blue and red Alice.", 120., 18.);
             text(
@@ -191,24 +209,19 @@ pub async fn open(assets: &mut Assets, options: &Options, backdrop: &mut Menu, v
                 152.,
                 15.,
             );
-            text(&ui, "Hosting begins at this chapter's entrance.", 182., 14.);
+            text(&ui, "The host keeps the shared checkpoint for both players.", 182., 14.);
             if let Some(choice) =
                 buttons(&ui, &input, &mut selected, &["Host", "Join", "Back"], 224.)
             {
                 match choice {
                     0 => {
-                        launch = Some(Launch {
-                            host: true,
-                            internet: true,
-                            invite_file: None,
-                            invite: None,
-                            start: Some(visit.clone()),
-                            drive: false,
-                            death_check: None,
-                            scene_check: None,
-                            travel_check: false,
-                            conditions: Default::default(),
-                        })
+                        if super::checkpoint::Store::available() {
+                            hosting = true;
+                            selected = 0;
+                            message.clear();
+                        } else {
+                            launch = Some(host_launch(&visit, false));
+                        }
                     }
                     1 => {
                         joining = true;
@@ -256,6 +269,14 @@ pub async fn open(assets: &mut Assets, options: &Options, backdrop: &mut Menu, v
         next_frame().await;
     }
     show_mouse(true);
+}
+
+fn host_launch(visit: &Visit, resume: bool) -> Launch {
+    Launch {
+        host: true, internet: true, invite_file: None, invite: None, start: Some(visit.clone()),
+        drive: false, death_check: None, scene_check: None, travel_check: false, resume,
+        checkpoint_check: false, conditions: Default::default(),
+    }
 }
 
 fn paste(link: &mut LinkInput, message: &mut String) {

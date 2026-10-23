@@ -43,6 +43,9 @@ impl Default for Lives {
     }
 }
 impl Lives {
+    pub fn checkpoint_ready(&self) -> bool {
+        !self.restoring_checkpoint && self.states == [Life::Alive; 2]
+    }
     pub fn state(&self, player: PlayerId) -> Life {
         self.states[player.index()]
     }

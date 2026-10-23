@@ -201,10 +201,16 @@ fn run() -> Result<()> {
             "--coop-host" | "--coop-join" => {
                 o.coop = Some(coop::preview::Launch { host: arg == "--coop-host", internet: true,
                     invite_file: Some(args.next().context("Co-op requires an invite file")?.into()),
-                    invite: None, start: None, drive: false, death_check: None, scene_check: None, travel_check: false, conditions: Default::default() });
+                    invite: None, start: None, drive: false, death_check: None, scene_check: None, travel_check: false, resume: false, checkpoint_check: false, conditions: Default::default() });
             }
             "--coop-local" => o.coop.as_mut().context("Use --coop-host before --coop-local")?.internet = false,
             "--coop-drive" => o.coop.as_mut().context("Choose a co-op role before --coop-drive")?.drive = true,
+            "--coop-resume" => o.coop.as_mut().context("Choose a co-op host before --coop-resume")?.resume = true,
+            "--coop-checkpoint-check" => {
+                let launch = o.coop.as_mut().context("Choose a co-op role before --coop-checkpoint-check")?;
+                launch.drive = true;
+                launch.checkpoint_check = true;
+            }
             "--coop-travel-check" => {
                 let launch = o.coop.as_mut().context("Choose a co-op role before --coop-travel-check")?;
                 launch.drive = true;

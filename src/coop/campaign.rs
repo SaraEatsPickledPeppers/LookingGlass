@@ -68,6 +68,18 @@ impl Campaign {
     pub fn completed(&self) -> usize {
         self.completed.len()
     }
+    pub fn validate(&self, difficulty: crate::powerups::Difficulty) -> Result<()> {
+        let known = crate::campaign::visits();
+        ensure!(self.levels.len() <= known.len() && self.completed.len() == self.levels.len(),
+            "Invalid co-op visit history");
+        for (key, state) in &self.levels {
+            state.visit.validate()?;
+            ensure!(known.contains(key) && self.completed.contains(key) && state.key() == *key
+                && state.visit.difficulty == difficulty && !state.visit.combat_preview,
+                "Co-op visit history contains a different campaign or difficulty");
+        }
+        Ok(())
+    }
 }
 
 /// All authored entrances, including separate return visits. This establishes

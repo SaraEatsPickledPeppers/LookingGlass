@@ -78,6 +78,24 @@ pub struct Roster {
     checkpoint: [Body; 2],
 }
 impl Roster {
+    pub fn from_checkpoint(frame: &Frame, world: &World, safe: impl Fn(Vec3) -> bool) -> Result<Self> {
+        frame.validate()?;
+        ensure!(frame.players.iter().all(|b| b.stats.alive())
+            && frame.lives.checkpoint_ready(),
+            "Both players must be alive to save a co-op checkpoint");
+        for body in &frame.players {
+            body.player.validate_world(world)?;
+            ensure!(world.body_clear(body.player.feet) && safe(body.player.feet),
+                "A co-op checkpoint player is obstructed or in a hazard");
+        }
+        Ok(Self {
+            checkpoint: frame.players.clone(), players: frame.players.clone(), lives: Lives::default(),
+            tick: frame.tick, checkpoint_generation: frame.checkpoint_generation,
+        })
+    }
+    pub fn remember_checkpoint(&mut self) {
+        self.checkpoint = self.players.clone();
+    }
     /// Real exits carry each player's earned inventory and resources separately.
     /// A dead partner keeps the same countdown while the next visit loads.
     #[cfg(test)]
@@ -233,6 +251,38 @@ mod tests {
     use super::*;
     fn floor() -> World {
         World::fixture(&[(vec3(-1000., -1000., -100.), vec3(1000., 1000., 0.))])
+    }
+    #[test]
+    fn checkpoint_resume_and_wipe_keep_distinct_resources_and_reject_dead_or_embedded_players() {
+        let world = floor();
+        let mut roster = Roster::new(&world, Vec3::Z * (EYE_HEIGHT + 0.04), 0., Stats::default()).unwrap();
+        for _ in 0..240 { roster.step(&world, Default::default()).unwrap(); }
+        roster.players[0].stats.set_health(83.).unwrap();
+        roster.players[1].stats.set_health(47.).unwrap();
+        roster.players[0].stats.spend_will(5.);
+        roster.players[1].stats.spend_will(11.);
+        let saved = roster.frame(3, 0);
+        let mut resumed = Roster::from_checkpoint(&saved, &world, |_| true).unwrap();
+        assert_eq!(resumed.tick, 240);
+        resumed.players[0].player.feet += Vec3::Y * 200.;
+        for body in &mut resumed.players { body.stats.damage(10000.); }
+        resumed.step(&world, Default::default()).unwrap();
+        assert_eq!(resumed.checkpoint_generation, 1);
+        for (body, expected) in resumed.players.iter().zip(&saved.players) {
+            assert_eq!(serde_json::to_value(&body.stats).unwrap(), serde_json::to_value(&expected.stats).unwrap());
+            assert_eq!(body.player.feet, expected.player.feet);
+            assert_eq!(body.spawned_at, resumed.tick);
+        }
+        let mut invalid = saved.clone();
+        invalid.players[1].stats.damage(10000.);
+        assert!(Roster::from_checkpoint(&invalid, &world, |_| true).is_err());
+        invalid = saved.clone();
+        invalid.players[1].player.feet.z = -50.;
+        assert!(Roster::from_checkpoint(&invalid, &world, |_| true).is_err());
+        assert!(Roster::from_checkpoint(&saved, &world, |_| false).is_err());
+        invalid = saved.clone();
+        invalid.lives.tick([true, false], false);
+        assert!(Roster::from_checkpoint(&invalid, &world, |_| true).is_err());
     }
     #[test]
     fn shared_combat_damage_resolves_before_the_single_death_decision() {

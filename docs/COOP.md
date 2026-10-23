@@ -123,12 +123,13 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after visit-history and entrance checks: **32%** (previously 30%). Credited
+Overall estimate after persistent shared-checkpoint verification: **35%** (previously 32%). Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
-6/15 for two-player movement/presentation, paired school supports and dry/swimming arrival placement, and 6/20 for native targeting, host-owned
-weapons/damage, personal resources and the entrance-checkpoint/respawn slice,
-plus 5/20 for shared world replication, ordered contacts, the verified theatre
-ownership/reunion slice, school boarding barriers and in-session visit history. Full-campaign verification remains at zero. Standalone
+6/15 for two-player movement/presentation, paired school supports and dry/swimming arrival placement, and 7/20 for native targeting, host-owned
+weapons/damage, personal resources, timed respawns and full saved-state team wipes,
+plus 7/20 for shared world replication, ordered contacts, the verified theatre
+ownership/reunion slice, school boarding barriers, visit history and restart/backup
+restoration of shared checkpoints. Full-campaign verification remains at zero. Standalone
 policy tests receive no campaign credit; every campaign-matrix row remains Not run.
 
 The native enemy combat foundation now supplies two live targets to each enemy
@@ -432,10 +433,73 @@ not produce game captures; therefore this is not a completely green harness run
 or proof of clean voluntary exits. Its cleanup removed the owned clients, tunnel
 helper and invite. The earlier loopback run `travel-test-9ec9dd5f7d1c43048b14e2d791f76183`
 also passed gameplay assertions but exceeded its manual inspection deadline.
-Automating final capture/closure without depending on foreground key timing remains
-test-harness work. The full Rust suite passes 730 tests, with one pre-existing
+The subsequent public run `travel-test-b41a73f3337d46a2ada6b94db1d03b3a`
+passed the entire harness on Anode at the same delay/jitter, including guest
+replacement, automatic captures, clean exits and helper/invite cleanup. Both
+final captures were inspected. The fixture captures after five seconds in the
+returned visit, then closes the guest and host itself; it requires no desktop
+input. The full Rust suite at the travel milestone passed 730 tests, with one pre-existing
 ignored test (`private/coop-progression-tests3.log`), including the new slow-load
 barrier regression. No co-op release or full campaign playthrough is claimed.
+
+## Shared co-op checkpoints
+
+The host owns a separate `coop-checkpoint.json` in its settings/profile folder.
+It contains both bodies and individual inventories, character actions/projectiles,
+the shared stage and NPC state, and cached first/return visits. The host's ESC
+menu can save while both players are alive and outside a cutscene/transition.
+Normal sessions also save at the first freely controlled moment of each chapter;
+leaving co-op does not silently replace a manual checkpoint. Explicit development
+fixtures do not autosave into the user's checkpoint.
+
+Continue co-op restores the saved chapter even if another chapter is selected in
+the main menu. Its network epoch starts fresh and a new invite is issued. Red's
+body/resources come from the host; the guest does not need a save file. A team
+wipe restores the same world, NPCs, character actions and two bodies as the saved
+checkpoint, including after restarting both clients. Individual ten-second
+respawns still use nearby placement rather than rolling back the world.
+
+The versioned co-op format is separate from single-player format 12. It checks
+the game-data fingerprint, checksum, campaign/difficulty, living roster and
+structural limits, with a 32 MiB file bound. Scene/character/actor state and body
+placement are validated while constructing the replacement scene. A valid old
+primary becomes `.json.bak` before atomic replacement; a damaged primary never
+replaces that backup. Loading can recover the backup and reports this to the
+host. Saving changes the in-memory wipe checkpoint only after the disk commit
+succeeds. Invites, tokens, source assets and connection identities are not saved.
+
+`tools/test_coop_checkpoint.py --data <original-base-folder>` runs on Anode with
+two independent profiles, a real public invite and 40 ms delay/20 ms jitter per
+sender (`--local` selects loopback). It combines the staged three-visit travel
+fixture with distinct seeded health/Will values, closes both clients, starts a
+new host/guest pair from the save, and forces a team wipe. It then repeats from
+a deliberately damaged primary with a valid backup. Exact-state assertions run
+before resumed simulation and immediately after the wipe; network snapshots,
+clean exits, file preservation and separate single-player sentinels are checked
+by the harness. This is persistence evidence, not a completed campaign visit.
+
+On 2026-10-23, the complete public-invite run
+`travel-test-0abfe07a7db0413db758682defa42cd9` passed all three phases: three-visit
+travel/rejoin/save, fresh-process primary resume/wipe, and fresh-process backup
+resume/wipe. The school door remained opened, two cached visits survived, both
+clients reported health 83/47, and the native assertions restored the complete
+saved players/resources/character/world/NPC state exactly. Dead-team save attempts
+were rejected; primary/backup and single-player sentinels remained unchanged.
+Both final views were inspected, showing Blue and Red correctly with the saved
+health. All clients exited cleanly. Evidence is the folder's `result.json`,
+`resume-result.json`, `backup-result.json`, histories, native logs and captures.
+The full Rust suite passes 733 tests with one pre-existing ignored test
+(`private/coop-checkpoint-tests.log`); the debug build passes
+(`private/coop-checkpoint-build.log`). No campaign-matrix row is promoted by this fixture.
+
+A native Anode menu pass then opened Co-op from the single-player village ESC
+menu, selected Host → Continue co-op, and restored the saved school with health
+83/47 and both cached visits. Clicking Save checkpoint displayed success and
+wrote the fresh session epoch to the co-op file; the single-player quick-save
+sentinel stayed unchanged. Leave co-op returned to the host chooser and the app
+exited with code 0. The same evidence folder contains `menu-result.json`,
+`host/coop-continue-menu.png` and `host/coop-menu.png`. No owned game windows or
+tunnel helpers remained afterward.
 
 ## Windowed movement and combat slice (development only)
 
@@ -445,10 +509,13 @@ invite puts the complete link on the clipboard. Join accepts that link with
 Ctrl+V or Paste link. Invalid links stay in the form with an explanation.
 Hosting/connecting can be cancelled. Leaving or a connection error returns to
 the co-op screen. A suspended single-player session stays in memory and can be
-resumed afterward. Hosting currently begins a fresh movement slice at the chapter
-entrance; campaign state transfer remains unfinished.
+resumed afterward. Host starts at the chapter entrance when there is no co-op
+checkpoint. With a checkpoint, it offers **Continue co-op** or **Start chapter**.
+Continue restores both players and the shared world and creates a new invite;
+the guest joins normally and receives the host's saved Red Alice.
 
-The connected ESC panel has Resume, Copy invite (host), and Leave co-op. It is
+The connected ESC panel has Resume, Save checkpoint (host), Copy invite (host),
+and Leave co-op. It is
 drawn once per frame, so it does not pause simulation or network updates. An
 incompatible guest releases its slot while the host keeps the invite available.
 `tools/run_coop_pair.ps1 -Data <original-base-folder> -Menu` opens two independent
@@ -630,7 +697,7 @@ processes and the tunnel helper were gone after these checks. Source packaging
 tests (7), portable setup tests (6) and Windows setup tests (6) passed as well.
 
 Still missing from this slice: two-demon targeting, co-op audio, scripted enemy/world
-controllers, moving supports beyond the school adapter, cutscenes beyond the verified fixture, campaign progression/checkpoints,
+controllers, moving supports beyond the school adapter, cutscenes beyond the verified fixture, full campaign progression and checkpoint validation,
 prediction/latency tuning and campaign validation. Do not use the movement or staged
 combat test as evidence of completing any campaign visit.
 
