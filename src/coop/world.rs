@@ -46,6 +46,8 @@ pub struct Frame {
     pub acknowledged_input: u64,
     pub players: [Body; 2],
     pub lives: Lives,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub combat: Option<Box<super::arena::Snapshot>>,
 }
 impl Frame {
     pub fn validate(&self) -> Result<()> {
@@ -61,6 +63,7 @@ pub struct Roster {
     pub players: [Body; 2],
     pub lives: Lives,
     pub tick: u64,
+    pub checkpoint_generation: u64,
     checkpoint: [Body; 2],
 }
 impl Roster {
@@ -80,9 +83,16 @@ impl Roster {
             players,
             lives: Default::default(),
             tick: 0,
+            checkpoint_generation: 0,
         })
     }
+    #[cfg(test)]
     pub fn step(&mut self, world: &World, inputs: [(Controls, Input); 2]) -> Result<()> {
+        self.move_players(world, inputs);
+        self.finish_tick(world)
+    }
+    /// Shared combat resolves after movement and before the one death-policy step.
+    pub fn move_players(&mut self, world: &World, inputs: [(Controls, Input); 2]) {
         self.tick += 1;
         for (body, (controls, look)) in self.players.iter_mut().zip(inputs) {
             if !body.stats.alive() {
@@ -104,10 +114,13 @@ impl Roster {
                 body.stats.damage(10000.);
             }
         }
+    }
+    pub fn finish_tick(&mut self, world: &World) -> Result<()> {
         let events = self
             .lives
             .tick(self.players.each_ref().map(|p| p.stats.alive()), false);
         if events.contains(&DeathEvent::RestoreCheckpoint) {
+            self.checkpoint_generation += 1;
             self.players = self.checkpoint.clone();
             ensure!(
                 self.players.iter().all(|p| world.body_clear(p.player.feet)),
@@ -130,6 +143,7 @@ impl Roster {
             acknowledged_input,
             players: self.players.clone(),
             lives: self.lives.clone(),
+            combat: None,
         }
     }
 }
@@ -180,6 +194,62 @@ mod tests {
     use super::*;
     fn floor() -> World {
         World::fixture(&[(vec3(-1000., -1000., -100.), vec3(1000., 1000., 0.))])
+    }
+    #[test]
+    fn shared_combat_damage_resolves_before_the_single_death_decision() {
+        let world = floor();
+        let mut roster =
+            Roster::new(&world, Vec3::Z * (EYE_HEIGHT + 0.04), 0., Stats::default()).unwrap();
+        roster.move_players(&world, Default::default());
+        for body in &mut roster.players {
+            body.stats.damage(1000.);
+        }
+        roster.finish_tick(&world).unwrap();
+        assert_eq!(roster.tick, 1);
+        assert_eq!(roster.checkpoint_generation, 1);
+        assert!(roster
+            .players
+            .iter()
+            .all(|p| p.stats.alive() && p.stats.sanity() == 100.));
+    }
+    #[test]
+    fn a_shared_consumable_remains_available_to_each_player_once() {
+        let world = floor();
+        let item = crate::inventory::Pickup {
+            id: "coop:health".into(),
+            model: "p_h1".into(),
+            origin: Vec3::ZERO,
+            kind: crate::inventory::PickupKind::Sanity,
+            amount: 10.,
+        };
+        let mut players = [Stats::default(), Stats::default()];
+        for p in &mut players {
+            p.set_health(20.).unwrap();
+        }
+        assert_eq!(
+            crate::inventory::collect(
+                &mut players[0],
+                std::slice::from_ref(&item),
+                Vec3::ZERO,
+                &world
+            )
+            .len(),
+            1
+        );
+        assert_eq!(players[1].sanity(), 20.);
+        assert_eq!(
+            crate::inventory::collect(
+                &mut players[1],
+                std::slice::from_ref(&item),
+                Vec3::ZERO,
+                &world
+            )
+            .len(),
+            1
+        );
+        assert!(crate::inventory::collect(&mut players[0], &[item], Vec3::ZERO, &world).is_empty());
+        assert_eq!(players[0].sanity(), 30.);
+        assert_eq!(players[1].sanity(), 30.);
     }
     #[test]
     fn two_bodies_share_the_host_clock_but_keep_separate_motion_and_health() {

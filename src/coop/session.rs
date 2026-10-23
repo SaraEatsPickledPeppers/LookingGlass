@@ -91,9 +91,9 @@ impl Host {
             "Host snapshot belongs to another visit."
         );
         frame.validate()?;
-        self.peer.send(serde_json::to_vec(&FromHost::Frame {
+        self.peer.send(super::codec::encode(&serde_json::to_vec(&FromHost::Frame {
             frame: Box::new(frame),
-        })?)
+        })?)?)
     }
 
     pub fn poll(&mut self, now: Instant) -> Result<()> {
@@ -235,6 +235,7 @@ impl Host {
             map,
             entry,
             difficulty,
+            combat_preview: false,
         };
         visit.validate()?;
         self.visit = visit;
@@ -351,7 +352,8 @@ impl Guest {
                 bytes.len() <= MAX_STATE,
                 "Host session message exceeds its limit."
             );
-            let message: FromHost = serde_json::from_slice(&bytes)
+            let decoded = super::codec::decode(&bytes)?;
+            let message: FromHost = serde_json::from_slice(&decoded)
                 .map_err(|_| anyhow::anyhow!("The host sent an invalid session message."))?;
             match message {
                 FromHost::Hello { identity } => {
@@ -459,6 +461,7 @@ mod tests {
             map: "gvillage".into(),
             entry: None,
             difficulty: Default::default(),
+            combat_preview: false,
         }
     }
     fn pair() -> (Host, Guest, super::super::invite::Invite) {

@@ -1,13 +1,15 @@
 # Interactive, two-process development launcher. Each player has separate settings.
-# Campaign co-op is unfinished; this currently opens the movement test.
+# Campaign co-op is unfinished; this opens the movement/combat preview.
 param(
     [Parameter(Mandatory = $true)][string]$Data,
     [string]$Map = 'skool1',
     [switch]$Local,
-    [switch]$Menu
+    [switch]$Menu,
+    [switch]$Combat
 )
 $ErrorActionPreference = 'Stop'
 if ($Menu -and $Local) { throw 'The in-game Host menu creates internet invites. Omit -Local when using -Menu.' }
+if ($Combat -and ($Menu -or $Map -ne 'skool1')) { throw 'The staged combat test uses skool1. Omit -Menu and use the default map with -Combat.' }
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $executable = Join-Path $projectRoot 'target\debug\looking-glass.exe'
 if (-not (Test-Path -LiteralPath $executable)) {
@@ -34,6 +36,7 @@ try {
         $arguments = @('--data', $dataPath, '--profile', $profile, '--no-audio')
         if (-not $Menu) { $arguments += @('--map', $Map, $roleFlag, $inviteFile) }
         if ($Local -and $role -eq 'host') { $arguments += '--coop-local' }
+        if ($Combat -and $role -eq 'host') { $arguments += '--combat-preview' }
         # These are native Windows arguments, not shell source. Paths cannot
         # contain a quotation mark; reject it in the user-supplied map too.
         if ($arguments | Where-Object { $_.Contains('"') }) { throw 'An argument contains an invalid quotation mark.' }
@@ -48,7 +51,7 @@ try {
         Write-Host 'Two clients are open: Blue is the host; Red is the guest.'
     }
     Write-Host 'Focus a window to control that Alice. ESC opens its menu; Q leaves co-op.'
-    Write-Host 'This is a movement test. Campaign co-op remains unfinished.'
+    Write-Host 'This is a movement/combat preview. Campaign co-op remains unfinished.'
     Write-Host "Profiles and diagnostics: $sessionFolder"
     while (@($owned | Where-Object { -not $_.HasExited }).Count -gt 0) {
         Start-Sleep -Milliseconds 200

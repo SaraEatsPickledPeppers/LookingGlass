@@ -533,12 +533,23 @@ fn exchange<S: Read + Write>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[track_caller]
     fn wait_for(mut done: impl FnMut() -> bool) {
         let started = Instant::now();
         while !done() {
             assert!(started.elapsed() < Duration::from_secs(5));
             thread::sleep(Duration::from_millis(5));
         }
+    }
+    #[track_caller]
+    fn wait_connected(host: &Peer, guest: &Peer) {
+        wait_for(|| {
+            let h = host.state();
+            let g = guest.state();
+            assert!(!matches!(h, State::Disconnected(_) | State::Stopped), "Host: {h:?}, guest: {g:?}");
+            assert!(!matches!(g, State::Disconnected(_) | State::Stopped), "Host: {h:?}, guest: {g:?}");
+            h == State::Connected && g == State::Connected
+        });
     }
     #[test]
     fn separate_endpoints_exchange_delayed_packets_and_reconnect_to_same_host() {
@@ -548,7 +559,7 @@ mod tests {
         };
         let (host, invite) = host(delay).unwrap();
         let guest = join(invite.clone(), delay).unwrap();
-        wait_for(|| host.state() == State::Connected && guest.state() == State::Connected);
+        wait_connected(&host, &guest);
         let started = Instant::now();
         assert!(guest.send(b"input".to_vec()).unwrap());
         wait_for(|| {
@@ -594,7 +605,7 @@ mod tests {
     fn ignored_updates_and_slow_readers_have_bounded_backpressure() {
         let (host, invite) = host(Conditions::default()).unwrap();
         let guest = join(invite, Conditions::default()).unwrap();
-        wait_for(|| guest.state() == State::Connected && host.state() == State::Connected);
+        wait_connected(&host, &guest);
         let started = Instant::now();
         loop {
             if matches!(guest.state(), State::Disconnected(_)) {
@@ -610,7 +621,7 @@ mod tests {
     fn a_render_stall_applies_backpressure_without_losing_a_normal_burst() {
         let (host, invite) = host(Conditions::default()).unwrap();
         let guest = join(invite, Conditions::default()).unwrap();
-        wait_for(|| guest.state() == State::Connected && host.state() == State::Connected);
+        wait_connected(&host, &guest);
         for n in 0..8_u8 {
             wait_for(|| host.send(vec![n]).unwrap());
         }

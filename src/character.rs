@@ -1114,6 +1114,14 @@ impl Character {
     pub fn draw(&mut self, feet: Vec3, fullbright: bool) {
         self.draw_ghost(feet, fullbright, false);
     }
+    /// Interpolated feet must carry the held toy with them. World projectiles
+    /// keep their authoritative positions; this offset lasts only for drawing.
+    pub fn draw_replica(&mut self, feet: Vec3, simulated_feet: Vec3, fullbright: bool) {
+        let anchors = self.anchors;
+        for anchor in &mut self.anchors { anchor.translation += feet - simulated_feet; }
+        self.draw_ghost(feet, fullbright, false);
+        self.anchors = anchors;
+    }
     fn draw_body(&mut self, feet: Vec3, fullbright: bool, ghost: bool) {
         let feet = feet + Vec3::Z * self.animator.offset;
         let pose = self

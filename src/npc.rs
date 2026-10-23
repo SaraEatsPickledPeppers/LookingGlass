@@ -1924,6 +1924,22 @@ impl Npcs {
             garden: self.garden.as_ref().map(|g|g.saved.clone()),
         }
     }
+    /// Same-build network state. Keep loaded model indices and render caches;
+    /// save restoration performs legacy migration and clears effects, so it is
+    /// deliberately not used for every incoming network frame.
+    pub fn replicate(&mut self, s: &Snapshot) -> Result<()> {
+        s.validate_replica(&self.actors)?;
+        if let Some(g) = &self.garden { g.validate(s.garden.as_ref())?; }
+        else { ensure!(s.garden.is_none(), "Unexpected co-op garden state"); }
+        for (a, b) in self.actors.iter_mut().zip(&s.actors) {
+            let model = a.model;
+            *a = b.clone();
+            a.model = model;
+        }
+        if let (Some(g), Some(saved)) = (&mut self.garden, &s.garden) { g.saved = saved.clone(); }
+        self.greetings = s.greetings;
+        Ok(())
+    }
     pub fn restore(&mut self, s: &Snapshot) -> Result<()> {
         if let Some(g) = &self.garden { g.validate(s.garden.as_ref())?; }
         self.card_art.clear();
@@ -3404,6 +3420,22 @@ pub struct Snapshot {
     greetings: u64,
 }
 impl Snapshot {
+    fn validate_replica(&self, local: &[Actor]) -> Result<()> {
+        ensure!(self.actors.len() <= 4096 && self.actors.len() == local.len(), "Co-op cast changed");
+        for (a, b) in local.iter().zip(&self.actors) {
+            ensure!(a.spawn == b.spawn && a.guard.is_some() == b.guard.is_some()
+                && a.resident.is_some() == b.resident.is_some() && a.ant.is_some() == b.ant.is_some()
+                && a.chess.is_some() == b.chess.is_some() && a.imp.is_some() == b.imp.is_some()
+                && a.clock.is_some() == b.clock.is_some() && a.guide.is_some() == b.guide.is_some(),
+                "Co-op actor identity changed");
+            b.validate_save()?;
+            if let (Some(a), Some(b)) = (&a.guard, &b.guard) {
+                ensure!(a.ranged == b.ranged && a.scale == b.scale, "Co-op guard type changed");
+            }
+            if let (Some(a), Some(b)) = (&a.resident, &b.resident) { b.matches(a)?; }
+        }
+        Ok(())
+    }
     /// The cast-identity half of `Npcs::restore` without loading any model: every saved actor
     /// must still be an authored placement of this visit (the identity old saves rely on), keep
     /// valid timers, and every current placement must be saved unless it is a difficulty
@@ -4180,6 +4212,20 @@ mod tests {
             footing: None,
             falling: 0.,
         }
+    }
+    #[test]
+    fn coop_replicas_require_exact_cast_and_valid_state_but_use_local_model_indices() {
+        let local = actor();
+        let mut replica = Snapshot { actors: vec![local.clone()], ..Default::default() };
+        replica.actors[0].model = usize::MAX; // Never used: replicate preserves the loaded index.
+        replica.validate_replica(std::slice::from_ref(&local)).unwrap();
+        replica.actors[0].spawn.name = "different".into();
+        assert!(replica.validate_replica(std::slice::from_ref(&local)).is_err());
+        replica.actors[0] = local.clone();
+        replica.actors[0].time = -1.;
+        assert!(replica.validate_replica(std::slice::from_ref(&local)).is_err());
+        replica.actors.clear();
+        assert!(replica.validate_replica(&[local]).is_err());
     }
     fn map(entities: Vec<Entity>) -> Bsp {
         Bsp {

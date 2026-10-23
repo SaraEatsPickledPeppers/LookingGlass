@@ -59,6 +59,8 @@ pub struct Visit {
     pub map: String,
     pub entry: Option<String>,
     pub difficulty: Difficulty,
+    #[serde(default)]
+    pub combat_preview: bool,
 }
 impl Visit {
     pub fn validate(&self) -> Result<()> {
@@ -76,6 +78,10 @@ impl Visit {
                     .all(|b| b.is_ascii_alphanumeric() || b"_-.".contains(&b))),
             "The host selected an invalid level entrance."
         );
+        ensure!(
+            !self.combat_preview || self.map == "skool1" && self.entry.is_none(),
+            "The combat fixture requires the school entrance."
+        );
         Ok(())
     }
 }
@@ -91,6 +97,7 @@ pub struct Input {
     pub run: bool,
     pub primary: bool,
     pub alternate: bool,
+    pub attack_presses: [u64; 2],
     pub weapon: Option<u8>,
     /// Cumulative edges survive a short press between network sends and queue
     /// backpressure. The host consumes each new edge once on its own clock.
@@ -150,6 +157,7 @@ pub struct RemoteInput {
     received: Option<Instant>,
     pending_jumps: u64,
     pending_uses: u64,
+    pending_attacks: [u64; 2],
 }
 impl RemoteInput {
     pub fn sequence(&self) -> u64 {
@@ -163,17 +171,26 @@ impl RemoteInput {
         input.validate()?;
         let jumps = input.jumps.checked_sub(self.last.jumps);
         let uses = input.uses.checked_sub(self.last.uses);
+        let attacks: [Option<u64>; 2] = std::array::from_fn(|i| {
+            input.attack_presses[i].checked_sub(self.last.attack_presses[i])
+        });
         ensure!(
-            jumps.is_some_and(|n| n <= MAX_EDGES) && uses.is_some_and(|n| n <= MAX_EDGES),
+            jumps.is_some_and(|n| n <= MAX_EDGES)
+                && uses.is_some_and(|n| n <= MAX_EDGES)
+                && attacks.iter().all(|n| n.is_some_and(|n| n <= MAX_EDGES)),
             "Invalid co-op button sequence."
         );
         ensure!(
             self.pending_jumps + jumps.unwrap() <= MAX_EDGES
-                && self.pending_uses + uses.unwrap() <= MAX_EDGES,
+                && self.pending_uses + uses.unwrap() <= MAX_EDGES
+                && (0..2).all(|i| self.pending_attacks[i] + attacks[i].unwrap() <= MAX_EDGES),
             "Too many pending co-op actions."
         );
         self.pending_jumps += jumps.unwrap();
         self.pending_uses += uses.unwrap();
+        for i in 0..2 {
+            self.pending_attacks[i] += attacks[i].unwrap();
+        }
         self.last = input;
         self.sequence = sequence;
         self.received = Some(now);
@@ -187,6 +204,7 @@ impl RemoteInput {
         {
             self.pending_jumps = 0;
             self.pending_uses = 0;
+            self.pending_attacks = [0; 2];
             // Preserve the last view, but never keep walking or attacking.
             return (
                 Controls::default(),
@@ -201,6 +219,12 @@ impl RemoteInput {
         let use_pressed = self.pending_uses > 0;
         self.pending_jumps = self.pending_jumps.saturating_sub(1);
         self.pending_uses = self.pending_uses.saturating_sub(1);
+        let mut input = self.last;
+        input.primary |= self.pending_attacks[0] > 0;
+        input.alternate |= self.pending_attacks[1] > 0;
+        for n in &mut self.pending_attacks {
+            *n = n.saturating_sub(1);
+        }
         (
             Controls {
                 wish: self.last.wish,
@@ -210,7 +234,7 @@ impl RemoteInput {
                 jump,
                 use_pressed,
             },
-            self.last,
+            input,
         )
     }
 }
@@ -218,6 +242,40 @@ impl RemoteInput {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn attacks_survive_a_short_click_but_do_not_replay_or_outlive_input_timeout() {
+        let now = Instant::now();
+        let mut latch = RemoteInput::default();
+        let input = Input {
+            attack_presses: [1, 1],
+            ..Default::default()
+        };
+        latch.accept(1, input, now).unwrap();
+        let (_, sampled) = latch.sample(now);
+        assert!(sampled.primary && sampled.alternate);
+        latch.accept(1, input, now).unwrap();
+        let (_, sampled) = latch.sample(now);
+        assert!(!sampled.primary && !sampled.alternate);
+        latch
+            .accept(
+                2,
+                Input {
+                    primary: true,
+                    attack_presses: [2, 1],
+                    ..input
+                },
+                now,
+            )
+            .unwrap();
+        assert!(latch.sample(now).1.primary);
+        assert!(latch.sample(now).1.primary);
+        let (_, sampled) = latch.sample(now + INPUT_TIMEOUT);
+        assert!(!sampled.primary && !sampled.alternate);
+        assert!(
+            latch.accept(3, input, now).is_err(),
+            "Counters cannot roll backwards"
+        );
+    }
     #[test]
     fn controls_cannot_grant_speed_or_upload_world_state() {
         assert!(Input {
@@ -333,6 +391,7 @@ mod tests {
             map: "gvillage".into(),
             entry: None,
             difficulty: Difficulty::Normal,
+            combat_preview: false,
         };
         visit.validate().unwrap();
         visit.map = "../../outside".into();

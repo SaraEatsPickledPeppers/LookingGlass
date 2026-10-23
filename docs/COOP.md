@@ -97,8 +97,8 @@ and exercise slow readers rather than assuming loopback performance represents t
 - New tunnel hostnames initially failed DNS resolution when published too early.
   Hosting now waits for tunnel registration and a 12-second propagation grace.
   This passed repeated public tests; it is not a universal DNS availability guarantee.
-- Main/ESC Host/Join now opens the development movement slice. Shared combat
-  and full-campaign integration remain unfinished. These transport probes verify
+- Main/ESC Host/Join now opens the development movement/combat slice. Full-campaign
+  integration remains unfinished. These transport probes verify
   networking; the later rendered checks exercise two independently controlled Alices.
 
 The next session layer (`protocol.rs`, `session.rs`, `hosting.rs`) checks exact source
@@ -123,10 +123,11 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after the combat-foundation checks: **21%** (previously 20%). Credited
+Overall estimate after the rendered combat checks: **24%** (previously 21%). Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
-4/15 for two-player movement/presentation, and 2/20 for the integrated personal
-health/respawn slice and verified native targeting/damage foundation. Scenes/progression and full-campaign verification remain at
+4/15 for two-player movement/presentation, and 5/20 for native targeting, host-owned
+weapons/damage, personal resources and the entrance-checkpoint/respawn slice.
+Scenes/progression and full-campaign verification remain at
 zero. Standalone policy tests receive no campaign credit.
 
 The native enemy combat foundation now supplies two live targets to each enemy
@@ -139,14 +140,12 @@ uses separate hit bits so both players can be hit once by the same attack.
 The live roster is omitted from saved NPC state, preserving the single-player
 save representation. Feedback aggregation preserves both players' results.
 
-Seven new enemy regressions and the existing suite pass: **703 passed, one
-unrelated ignored test**. This is combat foundation evidence, not networked combat
-or campaign completion. `Npcs::update_players` advances a cast once and lets either
-living player reach its ambush triggers; it still needs to be connected to the
-co-op viewer. Host weapon simulation, guest NPC/weapon replication, individual
-pickup presentation, two summoned demons, boss/controller adapters and shared
-world checkpoint restoration remain unfinished. The playable menu still opens
-the movement-only slice. No campaign matrix row is credited by these tests.
+The combat-foundation revision passed **703 tests, one unrelated ignored test**.
+`Npcs::update_players` advances a cast once and lets either living player reach its
+ambush triggers. The current viewer integration adds host-owned weapon simulation,
+guest NPC/weapon replication and individual pickup presentation, as described below.
+Two summoned demons, boss/controller adapters and shared world checkpoint restoration
+remain unfinished. No campaign matrix row is credited by these tests.
 
 The headless `--combat-check` also passes with user-supplied school geometry and
 the actual club-guard animation timings. At each of 30, 60 and 144 Hz, the closer
@@ -177,7 +176,7 @@ target/debug/looking-glass.exe --combat-check --data <original-base-folder>
   needs a blue-fabric mask on known clothing textures, preserving skin, apron,
   mouth, hair, and power-up appearances. Never distribute altered original assets.
 
-## Windowed movement slice (development only)
+## Windowed movement and combat slice (development only)
 
 The main menu and single-player ESC menu now have a **Co-op** button (keyboard
 shortcut C), with **Host** and **Join**. Host creates an internet invite; Copy
@@ -276,10 +275,62 @@ unchanged skin/apron/hair/boots, and separate readable overlays. Both processes
 exited successfully and no game windows remained. This final local run validates
 the visual changes after the successful public internet run above.
 
-Still missing from this slice: combat and enemy selection,
-pickup collection, scripted world controllers, shared moving supports, cutscenes,
-campaign progression/checkpoints, prediction/latency tuning and campaign validation.
-Do not use the movement test as evidence of completing any campaign visit.
+The native combat pipeline now advances both real weapon implementations and a
+single enemy cast on the host. Guest controls can select owned toys and attack;
+cumulative button counters preserve short clicks across network send intervals.
+Damage, Will, map pickups and enemy essence drops are personal. Each window draws
+its own HUD and remaining pickups, and receives the same enemy and weapon state.
+Death decisions run once after both players' combat damage resolves. A wipe resets
+this slice's entrance bodies, native NPCs and character state; this remains separate
+from a complete campaign checkpoint.
+
+Combat snapshots include full animation poses, compressed with bounded zlib packets.
+Both compressed and decoded size are capped at 8 MiB; truncated, oversized and trailing
+data are rejected. Incoming NPC state must match the loaded cast; model indices stay
+local. Character restoration currently uses the save validation/presentation path,
+so smoother guest animation and effect continuity still need work.
+
+Add `--combat` to `tools/test_coop_play.py` to exercise a staged school guard using
+both players' actual Blade attacks. Only the host receives `--combat-preview`; the
+visit handshake tells the guest to load the matching encounter. The harness checks
+personal damage during the fight (essence can heal it afterward), attacks by both
+players, shared defeat, matching positions, separate initial cameras and clean exits.
+For an interactive staged fight, add `-Combat` to `tools/run_coop_pair.ps1` with
+the default school map and without `-Menu`.
+
+On 2026-10-23, the rendered staged fight passed both loopback and public internet
+tests using two independent processes/profiles and compressed combat snapshots.
+Blue remained at 100 health, Red reached 64, both performed two real Blade attacks,
+and both clients saw the same guard defeated. Public guest input reached sequence
+411; final body positions matched within one unit. Both processes exited successfully
+and the owned helper stopped. Captures were visually inspected. Private evidence:
+`play-test-b1505039eeb04cfea0d87a16c5c75d09` (local) and
+`play-test-ebe842687f2340568aee5b2d0941cc30` (internet), under `private/coop/`.
+
+Earlier unsuccessful runs are retained too: one fighter could not reach the guard,
+then both fighters interrupted it before it dealt damage. The final driver waits
+for the guard's approach before attacking. The camera assertion also now accounts
+for the school back wall retracting two separate camera arms to nearby origins.
+These test corrections are not evidence of a change to normal enemy difficulty.
+
+The full Rust suite passed 708 tests (one unrelated ignored test) at both default
+concurrency and eight workers. Two earlier default-concurrency runs timed out while
+waiting for an initial transport connection; focused and subsequent full runs passed.
+Caller locations and connection-state failures are now reported for diagnosis. The
+intermittent timeout's cause is not established; retain its private logs rather than
+claiming it was fixed. Single-player and two-player headless school combat checks
+also pass at 30, 60 and 144 Hz.
+
+After combat integration, the ordinary local movement regression also passed:
+Blue moved 208.07 units and Red 112.97, with matching body positions and independent
+cameras. Evidence is `play-test-98a3ab7d87454f7bb2cba07530c75ec1`. All owned game
+processes and the tunnel helper were gone after these checks. Source packaging
+tests (7), portable setup tests (6) and Windows setup tests (6) passed as well.
+
+Still missing from this slice: two-demon targeting, co-op audio, scripted enemy/world
+controllers, shared moving supports, cutscenes, campaign progression/checkpoints,
+prediction/latency tuning and campaign validation. Do not use the movement or staged
+combat test as evidence of completing any campaign visit.
 
 ## Reproducing transport checks
 

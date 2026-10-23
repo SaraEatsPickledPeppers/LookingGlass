@@ -28,6 +28,7 @@ pub async fn choose(
         {
             Action::Coop => {
                 let visit = crate::coop::protocol::Visit {
+                    combat_preview: false,
                     epoch: 1, map: "gvillage".into(), entry: None,
                     difficulty: options.difficulty,
                 };

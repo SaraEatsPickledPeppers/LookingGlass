@@ -910,6 +910,7 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
                     let visit = crate::coop::protocol::Visit {
                         epoch: 1, map: maps[current].clone(), entry: entry_spawn.clone(),
                         difficulty: stats.difficulty,
+                        combat_preview: false,
                     };
                     crate::coop::menu::open(&mut assets, &options, &mut escape_menu, visit).await;
                     if is_quit_requested() { break; }
