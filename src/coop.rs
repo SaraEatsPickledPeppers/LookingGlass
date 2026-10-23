@@ -22,6 +22,7 @@ pub mod world;
 pub mod stage;
 pub mod village_check;
 pub mod pandemonium_check;
+pub mod pandemonium_route;
 pub mod route_driver;
 
 #[derive(

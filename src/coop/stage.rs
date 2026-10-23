@@ -406,6 +406,23 @@ impl Stage {
                 .map(|(eye, target, _)| crate::cinematic::Camera::look(eye, target))
         })
     }
+    pub fn draw_transforms(&self, world: &World) -> Vec<(usize, Vec3, Quat)> {
+        let mut transforms = self.interactions.transforms();
+        // The rope mesh already contains its deformed world points. A stable
+        // local origin also avoids choosing either player's swing as its owner.
+        transforms.retain(|t| !world.traversal.ropes.iter().any(|r| r.model == t.0));
+        transforms.extend(world.traversal.ropes.iter().map(|r| (r.model, r.origin, Quat::IDENTITY)));
+        transforms
+    }
+    pub fn rope_hands(&self, world: &World, bodies: &[Body; 2], characters: &[crate::character::Character; 2]) -> Vec<(usize, crate::rope::Grip)> {
+        bodies.iter().zip(characters).filter(|(b, _)| b.stats.alive()).filter_map(|(b, character)| {
+            let grip = b.player.rope.as_ref()?;
+            let rope = world.traversal.rope(grip.id)?;
+            let physical = b.player.feet + Vec3::Z * 40.;
+            Some((rope.model, crate::rope::Grip { physical,
+                hand: character.replica_rope_hand(b.player.feet).unwrap_or(physical) }))
+        }).collect()
+    }
     pub fn scene_fovy(&self, aspect: f32) -> f32 {
         self.interactions
             .beyond

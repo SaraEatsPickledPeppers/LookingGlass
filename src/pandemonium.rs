@@ -554,6 +554,10 @@ impl Pandemonium {
                 e.message = Some("Key secured / return to the Gnome's house".into());
             }
             "alice_leave" => {
+                if !self.state.leaving && !self.state.cinema.return_done {
+                    self.state.cinema.start(Beat::Return);
+                    self.state.grip = None;
+                }
                 self.state.leaving = true;
                 e.message = Some("The Gnome is waiting / enter his house".into());
             }

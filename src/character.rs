@@ -1122,6 +1122,21 @@ impl Character {
         self.draw_ghost(feet, fullbright, false);
         self.anchors = anchors;
     }
+    /// Co-op ropes follow the raised supporting hand in the displayed pose,
+    /// including the same feet interpolation and root offset as the skin.
+    pub fn replica_rope_hand(&self, feet: Vec3) -> Option<Vec3> {
+        if self.animator.motion != Motion::Rope { return None; }
+        let pose = self.skeleton.global_pose(&self.actions.pose);
+        let rotation = Quat::from_rotation_z(self.facing);
+        [["Bip01 L Finger1", "Bip01 L Finger2"], ["Bip01 R Finger1", "Bip01 R Finger2"]]
+            .into_iter().filter_map(|names| {
+            let finger = |name| self.skeleton.bones.iter()
+                .position(|b| b.name == name)
+                .map(|i| pose[i].translation);
+            let palm = (finger(names[0])? + finger(names[1])?) * 0.5;
+            Some(feet + Vec3::Z * self.animator.offset + rotation * (palm * self.scale))
+        }).max_by(|a, b| a.z.total_cmp(&b.z))
+    }
     fn draw_body(&mut self, feet: Vec3, fullbright: bool, ghost: bool) {
         let feet = feet + Vec3::Z * self.animator.offset;
         let pose = self

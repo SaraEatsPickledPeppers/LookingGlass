@@ -67,10 +67,24 @@ Both enter Pandemonium alive (Blue 100 / Red 92 Sanity), without a respawn or wi
 Both final views were inspected and all owned processes/helpers closed. Per-visit
 consumable and enemy evidence remains open before this row can be marked passed.
 
+Pandemonium partial traversal: the normal-start native two-body route now reaches
+the authored Fortress exit with either player first. Both runs verify all four
+scene owners, three safe reunions, personal Cards and no deaths/wipes; both finish
+at 60.934 Sanity in 33,993 ticks. The Gnome return scene's original trigger now
+starts its existing timeline. Shared-rope hand attachments and reunion captures
+were inspected; staged grab/climb/release and minecart boarding checks also pass.
+Evidence: `private/coop/pandemonium-route6/coop-pandemonium/`,
+`private/coop-pandemonium-route6.log`, `private/coop-pandemonium-rope-native8.log`,
+build `a9b50ed49c886e859e6a0a9cbcaec0d833fd08d799a4e1f74527fa0626da844b`.
+Watched/skipped single-player routes, cinematic pause/save/skip, machinery state,
+school/village world regressions and 736 Rust tests pass. This is still a
+single-process route: the visit's separate-client internet, latency, personal
+death/recovery, saved-checkpoint wipe and disconnect/rejoin checks remain open.
+
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Partial: both arrival orders, deaths/spectator/respawn in both roles, saved-checkpoint wipe and fresh guest rejoin-to-exit pass; consumable/enemy evidence pending; shared boarding N/A |
-| 2 | `pandemonium` | `Initial` | Partial: staged native checks pass independent rope grips, minecart waiting/ownership/reunion and either-player key pickup in both orders; full route, rope rendering, network and death/rejoin matrix pending |
+| 2 | `pandemonium` | `Initial` | Partial: native normal-start route in both orders, four scenes/three reunions, rendered rope grips, minecart boarding and personal Cards pass; network and death/rejoin matrix pending |
 | 3 | `fortress1` | `Initial` | Not run |
 | 4 | `fortress2` | `Initial` | Not run |
 | 5 | `fortress1` | `fortress1_start2` | Not run |

@@ -123,14 +123,14 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after the Pandemonium rope/machinery adapters: **38%** (previously 37%). Credited
+Overall estimate after the rendered Pandemonium route: **39%** (previously 38%). Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
-8/15 for two-player movement/presentation, paired school supports, dry/swimming arrival placement, a complete delayed village traversal in separate clients and staged independent Pandemonium rope controls, and 7/20 for native targeting, host-owned
+9/15 for two-player movement/presentation, paired school supports, dry/swimming arrival placement, a complete delayed village traversal in separate clients and rendered independent Pandemonium rope controls, and 7/20 for native targeting, host-owned
 weapons/damage, personal resources, timed respawns and full saved-state team wipes,
 plus 8/20 for shared world replication, ordered contacts, the verified theatre
 ownership/reunion slice, school boarding barriers, visit history and restart/backup
 restoration of shared checkpoints, and native traversal of all six village scenes
-with either player arriving first. Full-campaign verification remains at zero. Standalone
+and all four Pandemonium scenes with either player arriving first. Full-campaign verification remains at zero. Standalone
 policy tests receive no campaign credit; no campaign-matrix row has passed its full requirements.
 
 Pandemonium now uses each replicated player's own rope grip in co-op, while the
@@ -147,9 +147,8 @@ grips, personal release, a two-second boarding wait, requester retention, one
 complete minecart ride, safe reunion and the partner collecting the key. Evidence:
 `private/coop-pandemonium-adapters1.log`, build
 `d5443db066562bb26284db40f43d3e55a91805ade8aac6f787de61f0dea6e5aa`.
-These checks use the real host arena with explicitly staged starting positions;
+These first checks use the real host arena with explicitly staged starting positions;
 they do not establish a full route, rendered rope fidelity or separate-client play.
-The co-op renderer still needs rope deformation from the replicated grips.
 
 The original watched and skipped single-player Pandemonium routes, state/save
 checks and the school/village co-op world regressions also pass. The watched route
@@ -158,13 +157,66 @@ Evidence: `private/coop-pandemonium-singleplayer1.log`,
 `private/coop-pandemonium-singleplayer-skip1.log`,
 `private/coop-pandemonium-singleplayer-state1.log` and
 `private/coop-pandemonium-world1.log`. All 734 Rust tests pass (one pre-existing
-ignored test). Next requirements are the full co-op normal-start route, rope
-presentation, public separate-client play and the visit's death/rejoin matrix.
+ignored test). The newer route and presentation evidence follows below.
+
+The co-op renderer now deforms each rope through the players' animated supporting
+hands. Its loose tail follows the physical grip, so a hand-placement animation
+cannot inject velocity into the strand. Dynamic mesh indices follow the added
+hand rings. The two players retain independent checked pendulums; this is not a
+coupled two-person load solver. Unit coverage checks player-order independence,
+exact hand contacts, finite geometry, pause, either player's release and the
+invariance of tail physics under animated hand movement. Attachments are ordered
+by body height and samples follow that path, so crossing radial lengths while
+swinging cannot place the tail above the lower player. Single-player continues
+using its original physical grip and rope shape.
+
+`--coop-pandemonium-route-check` now passes from the normal entrance to the
+authored Fortress exit with both first-arrival orders, using ordinary inputs and
+no position/resource/world writes. Both runs take 33,993 ticks, retain a personal
+Cards pickup each and finish at 60.934 Sanity each without a death or checkpoint
+rollback. Each first player owns all four scenes (warning, minecart, Gnome return,
+airship), with three safe paired reunions before the outgoing transition. The
+original return trigger previously only set a progression flag: it now starts the
+existing return cinematic, which the single-player route also explicitly checks.
+This result is a single-process two-body simulation, not a network traversal.
+
+Evidence: `private/coop/pandemonium-route6/coop-pandemonium/` and
+`private/coop-pandemonium-route6.log`, build
+`a9b50ed49c886e859e6a0a9cbcaec0d833fd08d799a4e1f74527fa0626da844b`.
+The staged adapters repeat successfully on that build in
+`private/coop-pandemonium-rope-native8.log`, with rope/cart captures under
+`private/coop/pandemonium-rope8/coop-pandemonium/`. The shared-rope and return-reunion
+captures were inspected. The accelerated checks advance the tail every simulation
+tick rather than only when drawing an occasional frame.
+
+Earlier failed routes remain under `private/coop/pandemonium-route1` through
+`pandemonium-route4`: respectively an incorrect height goal on the sloping return
+street, excessive waiting on damaging ground, the disconnected return cutscene,
+and a portal check that did not allow time for the restored scene. The driver now
+follows horizontal goals on that street, moves both players through the hazard
+together and waits for the first portal arrival's scene/reunion. These fixes do
+not change movement speed, level damage or the requested first-arrival policy.
+
+All 736 Rust tests pass (one pre-existing ignored). The watched/skipped
+single-player routes, cinematic pause/save/skip checks, machinery state checks
+and school/village co-op world regressions pass on the preceding
+`b5b78ca663f3e3c6fa94aa526cdf5479b95b2a09a1cbbf89cc39eea1ba005b3d` build, in
+`private/coop-pandemonium-sp7-{route,skip,cinematic,state,world}.log`. The watched
+route takes 26,897 ticks and finishes at 47.334 Sanity; the skipped route takes
+25,529 ticks and finishes at 32.334 Sanity. Both retain nine jumps, 13 throws and
+one portal. The native single-player machinery/cast/rope render checks also pass
+in `private/coop-pandemonium-sp-render7.log`; the rope ascent capture was inspected.
+The final co-op native repeat used the authorized PC fallback while Anode was
+busy; the preceding full native render checks ran in Anode. All error logs are
+empty and all owned game processes closed. The final change only orders multiple
+co-op grip attachments; the single-player one-grip path is unchanged. Pandemonium still needs public separate-client traversal, latency,
+individual death/recovery, saved-checkpoint wipe and disconnect/rejoin coverage.
 
 Run the staged check in Anode after building:
 
 ```text
 looking-glass.exe --data <base-folder> --coop-pandemonium-check --no-audio --profile private/coop/pandemonium-adapters
+looking-glass.exe --data <base-folder> --coop-pandemonium-route-check --no-audio --profile private/coop/pandemonium-route
 ```
 
 The native enemy combat foundation now supplies two live targets to each enemy

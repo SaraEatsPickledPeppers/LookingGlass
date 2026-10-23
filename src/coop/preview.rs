@@ -492,7 +492,9 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 crate::lighting::select(vec![], camera_eye, &scene.world);
                 crate::render_fx::begin_view(&view, frame.tick as f32 * FIXED_DT, &scene.atmosphere, false);
                 arena.stage.interactions.presentation.apply(&mut scene);
-                let transforms = arena.stage.interactions.transforms();
+                let transforms = arena.stage.draw_transforms(&scene.world);
+                let hands = arena.stage.rope_hands(&scene.world, &visual.players, &arena.characters);
+                scene.update_ropes_many(elapsed, &hands, &transforms);
                 scene.draw(camera_eye, frame.tick as f32 * FIXED_DT, false, false, &transforms);
                 level_art.story_pose(&arena.stage.story);
                 level_art.draw(&arena.stage.interactions, &arena.stage.hints, &scene.atmosphere, camera_eye, false);
