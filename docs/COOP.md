@@ -1907,6 +1907,29 @@ The updated full route takes that fresh reward, splits the Mallet approach at
 the lower stair, and attempts a slow descent onto the lower library shelf.
 Those changes still need a complete repeat. Overall progress remains 42%.
 
+## Repeating a school section from a normal checkpoint
+
+For diagnosis, the school route accepts `--checkpoint-stops balcony bridge descent`.
+At either stop it holds both clients' movement inputs for up to three minutes.
+Use the host's ESC menu to **Save checkpoint**, retain a byte-for-byte copy of
+that profile's `coop-checkpoint.json`, and resume the menu. Create an empty
+`continue-balcony`, `continue-bridge` or `continue-descent` file in the printed evidence folder to
+continue the route. The option is off for unattended full-route tests.
+
+The saved section can then be repeated with:
+
+```text
+python tools/test_coop_school_resume.py --data <base> --checkpoint <saved-file> --resume-point balcony --first red --rejoin
+```
+
+Use `--resume-point bridge` before crossing the books, or `--resume-point descent`
+for a checkpoint taken after the recipe reunion.
+The fixture copies the original save unchanged into a fresh host profile, uses
+the game's normal resume path, and checks that both clients retain their
+positions, personal resources and school progress. It records the checkpoint's
+SHA-256 and source tick. It never edits health, positions or world state, and a
+successful segment does not count as a full entrance-to-exit campaign pass.
+
 ## Reproducing transport checks
 
 Build with `cargo build --locked`, then run:

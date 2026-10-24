@@ -38,6 +38,10 @@ struct Command {
     /// Only anticipates steering; it never changes the received body or physics.
     #[serde(default)]
     input_lead: f32,
+    /// Optional analogue-input cap for narrow test-route landings. This scales
+    /// ordinary movement input only; authoritative movement stays unchanged.
+    #[serde(default)]
+    speed_limit: Option<f32>,
     navigate: bool,
     attack: bool,
     capture: bool,
@@ -47,6 +51,11 @@ impl Command {
     fn validate(&self) -> Result<()> {
         ensure!(self.id > 0 && self.epoch > 0 && self.heartbeat > 0, "Invalid route command identity");
         ensure!(self.input_lead.is_finite() && (0. ..=1.5).contains(&self.input_lead), "Invalid input lead");
+        if let Some(speed) = self.speed_limit {
+            ensure!(speed.is_finite() && (1. ..=320.).contains(&speed)
+                && !self.navigate && self.rope.is_none() && self.runup.is_none(),
+                "Invalid route input speed limit");
+        }
         ensure!(self.goal.is_none_or(|p| p.is_finite() && p.abs().max_element() < 1_000_000.),
             "Invalid route goal");
         ensure!(self.goal.is_none() || self.marker.is_none(), "Choose a route goal or a marker");
@@ -464,6 +473,10 @@ impl Driver {
             let steering = delta.truncate() - body.player.velocity.truncate()
                 * command.input_lead;
             keys.wish=steering.normalize_or_zero()*(steering.length()/48.).min(1.);
+            if let Some(speed) = command.speed_limit {
+                let full = if command.run { 320. } else { crate::movement::WALK_SPEED };
+                keys.wish *= (speed/full).min(1.);
+            }
             keys.swim=keys.wish.extend(0.);
             keys.run=command.run;
             if let Some(runup) = command.runup.as_ref().filter(|r|
@@ -540,6 +553,15 @@ mod tests {
         let old:Command=serde_json::from_value(base.clone()).unwrap(); assert!(old.validate().is_ok());
         assert!(old.rope.is_none() && old.marker.is_none() && !old.horizontal && !old.run && !old.jump);
         assert!(old.use_aim.is_none() && !old.watch_dialogue && old.beyond_step.is_none());
+        assert!(old.speed_limit.is_none());
+        for speed in [0.,321.] {
+            let mut input=base.clone(); input["speed_limit"]=speed.into();
+            assert!(serde_json::from_value::<Command>(input).unwrap().validate().is_err());
+        }
+        let mut limited=base.clone(); limited["speed_limit"]=220.into();
+        assert!(serde_json::from_value::<Command>(limited.clone()).unwrap().validate().is_ok());
+        limited["navigate"]=true.into();
+        assert!(serde_json::from_value::<Command>(limited).unwrap().validate().is_err());
         for step in [0,16] {
             let mut input=base.clone(); input["beyond_step"]=step.into();
             assert!(serde_json::from_value::<Command>(input).unwrap().validate().is_err());

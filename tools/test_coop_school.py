@@ -28,9 +28,11 @@ class SchoolPair(PandemoniumPair):
         (self.folder/'fixture-source.py').write_bytes(source)
         self.evidence['fixture_sha256'] = hashlib.sha256(source).hexdigest()
 
-    def set(self,role,*args,**kwargs):
+    def set(self,role,*args,runup=None,speed_limit=None,**kwargs):
         super().set(role,*args,**kwargs)
         self.commands[role]['input_lead'] = min(1.5,.05+2*(self.args.delay_ms+self.args.jitter_ms)/1000) if role == 'guest' else 0
+        self.commands[role]['runup'] = runup
+        self.commands[role]['speed_limit'] = speed_limit
 
     def school(self,role='host'):
         return self.reports[role]['combat']['stage']['world']['school']
@@ -143,6 +145,47 @@ class SchoolPair(PandemoniumPair):
         self.legs([((-2304,2624,-342),True),((-2304,2544,-352),False),
                    ((-2272,2464,-256),True)])
 
+    def checkpoint_stop(self,label):
+        if label not in getattr(self.args,'checkpoint_stops',[]):
+            return
+        for role in self.commands:
+            self.set(role)
+        self.wait(.5)
+        (self.folder/f'ready-for-{label}.json').write_text(json.dumps(dict(
+            tick=self.reports['host']['frame']['tick'],build=self.build)))
+        print(f'Ready for ordinary menu checkpoint at {label}; create continue-{label} to proceed.',flush=True)
+        self.until(lambda: (self.folder/f'continue-{label}').exists(),180)
+
+    def balcony_gap(self):
+        # A short running approach followed by feedback steering is less brittle
+        # than replaying a timed sequence of sideways inputs across this gap.
+        for role in (self.first,self.partner):
+            # The delayed guest aims farther back while braking; its pending
+            # southward inputs still carry it toward the centre of the shelf.
+            goal = (-1664,3040 if role == 'host' else 3072,-256)
+            index = 0 if role == 'host' else 1
+            jumps = self.bodies()[index]['player']['jumps']
+            self.set(role,goal,run=True,jump=True,runup=dict(millis=200,wish=[0,-1]))
+            # Air steering takes time to shed running speed. Include braking
+            # time as well as network delivery when aiming at this short ledge.
+            self.commands[role]['input_lead'] += .30
+            self.until(lambda: self.bodies()[index]['player']['jumps'] > jumps
+                       and not self.bodies()[index]['player']['grounded']
+                       and self.bodies()[index]['player']['velocity'][2] < 0,8)
+            # Release run before touchdown: grounded acceleration is much
+            # stronger and a delayed running correction can cross the ledge.
+            self.set(role,goal)
+            def landed():
+                body = self.bodies()[index]['player']
+                return (body['jumps'] > jumps and body['grounded'] and
+                        abs(body['feet'][2]-goal[2]) < 20 and distance(body['feet'],goal) < 45)
+            self.until(landed,20)
+            self.set(role)
+            self.wait(.5)
+            assert landed(), f'{role}: did not remain on the balcony landing'
+        self.capture_pair('balcony-gap')
+        self.secure()
+
     def theatre_healing(self):
         self.until(lambda: all(next(g for g in r['route_driver']['guards']
                                    if g['name'] == 'play_guard1')['health'] == 0
@@ -183,8 +226,13 @@ class SchoolPair(PandemoniumPair):
         # visit uses the fresh theatre reward above for ordinary healing.
         self.legs([((-2274,2334,-256),False),((-2272,2440,-256),False),
                    ((-2304,2544,-352),True),((-2304,2624,-342),True),((-2304,2800,-256),True),
-                   ((-2304,3248,-256),False),((-1664,3248,-256),False),
-                   ((-1664,3008,-256),True),((-1480,3008,-256),True),
+                   ((-2304,3248,-256),False),((-1664,3248,-256),False)])
+        self.checkpoint_stop('balcony')
+        self.balcony_gap()
+        self.library_route()
+
+    def library_route(self):
+        self.legs([((-1480,3008,-256),True),
                    ((-208,3008,-256),False),((-208,3456,-256),False),
                    ((-208,3968,-256),False),((208,3968,-288),False),
                    ((208,3520,-288),False),((700,3520,-264),True),
@@ -201,15 +249,44 @@ class SchoolPair(PandemoniumPair):
                    ((-64,3520,704),False),((-160,3520,704),False)])
         self.wait(8.5)
         self.capture_pair('flying-books-bridge')
+        self.checkpoint_stop('bridge')
+        self.book_bridge()
+
+    def book_jump(self,approach,goal):
+        self.go(approach)
+        for role in (self.first,self.partner):
+            index = 0 if role == 'host' else 1
+            jumps = self.bodies()[index]['player']['jumps']
+            self.set(role,goal,run=True,jump=True,speed_limit=220)
+            def landed():
+                p = self.bodies()[index]['player']
+                return (p['jumps'] > jumps and p['grounded'] and
+                        abs(p['feet'][2]-goal[2]) < 5 and distance(p['feet'],goal) < 60)
+            self.until(landed,15)
+            self.set(role,goal)
+            self.until(lambda: self.reached(role),10)
+            self.set(role)
+            self.wait(.5)
+            assert landed(), f'{role}: left the book after landing'
+        self.capture_pair('book-landing-'+str(goal[1]))
+
+    def book_bridge(self):
         # The first book joins this landing with a four-unit step. Walk onto it
         # directly; a jump search from this narrow edge can spend its entire
         # search budget exploring the shelves below the bridge.
-        self.legs([((-150,3396,708),False),((-40,3186,724),True),((136,3014,716),True),
-                   ((224,2796,716),True),((204,2450,704),True)])
+        self.go((-150,3396,708))
+        self.book_jump((-130,3334,708),(-40,3186,724))
+        self.book_jump((20,3158,724),(136,3014,716))
+        self.book_jump((160,2990,716),(224,2796,716))
+        self.legs([((204,2450,704),True)])
         self.wait(4)
         self.capture_pair('recipe-reunion')
         if self.args.rejoin:
             self.rejoin_guest()
+        self.checkpoint_stop('descent')
+        self.descent()
+
+    def descent(self):
         self.legs([((104,2736,624),True),((0,2824,564),True),((-32,2780,384),True)])
         self.lower_library_landing()
         self.legs([((200,2776,-288),True)])
@@ -279,6 +356,8 @@ if __name__ == '__main__':
     parser.add_argument('--first',choices=('blue','red'),default='red')
     parser.add_argument('--local',action='store_true')
     parser.add_argument('--rejoin',action='store_true')
+    parser.add_argument('--checkpoint-stops',nargs='*',choices=('balcony','bridge','descent'),default=[],
+                        help='Hold neutral inputs for up to 180 seconds for a normal menu checkpoint; create continue-<stop> in the evidence folder to resume')
     parser.add_argument('--delay-ms',type=int,default=40)
     parser.add_argument('--jitter-ms',type=int,default=20)
     args = parser.parse_args()

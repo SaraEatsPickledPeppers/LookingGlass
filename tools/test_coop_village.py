@@ -73,6 +73,8 @@ class Pair:
             args += ['--start-at', ' '.join(map(str, self.start_at))]
         if role == 'host' and self.args.local:
             args += ['--coop-local']
+        if role == 'host' and getattr(self, 'resume_checkpoint', False):
+            args += ['--coop-resume']
         self.processes[role] = subprocess.Popen(args, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
 

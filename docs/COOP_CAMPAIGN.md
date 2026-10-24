@@ -433,6 +433,27 @@ The upper guard's reward expires before reaching it after the theatre, so this
 fixture uses the fresh theatre-floor reward without changing item lifetimes.
 Full clean traversal and both first-arrival orders remain open; 5/39 rows pass.
 
+Checkpoint-based school diagnosis now uses an ordinary host-menu save from
+`private/coop/school-route-29377935da334bbda58fa3d525d4be26/`: tick 30,631,
+Blue/Red Sanity 96/90, SHA-256
+`d231c8614579512f1a331be2d84a38c040a16c804159b61617050aba844adfad`.
+The saved file was copied unchanged into fresh profiles and loaded through the
+normal resume path. In `private/coop/school-resume-42df416b6dc243c18361b6a78e8bea4c/`,
+both clients retain positions, personal resources and puzzle progress; both clear
+the balcony gap and repeat the two lifts' waiting/ride checks. The balcony landing
+was visually inspected. All 5,907 comparable sent/restored states and 58 coincident
+full school reports match. That resumed run still fails on the second-to-third
+book jump, where Red falls and dies; it gives no descent, exit or full-route credit.
+Its `partial-audit.json` records the limited scope. The preceding full repeat and
+three shorter balcony probes remain recorded as failures, not successful routes.
+
+The opt-in local route controller now accepts a bounded analogue input speed cap
+for the next book-jump repeat. This does not change player physics or network
+authority. Build `bd57c4843ded26e3102c046a2f3f0c3e485a5006e11e4160623f6a033d08e285`
+passes 746 Rust tests (one existing ignored test) and the optimized build. Its
+new book sequence still requires rendered verification; the campaign count is
+unchanged.
+
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Passed (combined evidence above): both arrival orders, all scenes/reunions, nearest-visible guard damage in both roles, individual health/Blade pickups, matching encounter/player states, both death/spectator/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit; shared boarding N/A |
