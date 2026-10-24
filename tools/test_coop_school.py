@@ -86,13 +86,49 @@ class SchoolPair(PandemoniumPair):
         self.wait(.4)
         assert abs(self.bodies()[index]['player']['feet'][2]-endpoint[2]) < 2
 
-    def go(self,goal=None,navigate=False,marker=None,horizontal=False,together=False):
+    def clear_departure(self,goal):
+        index = 0 if self.first == 'host' else 1
+        a,b = [body['player'] for body in self.bodies()]
+        leader,partner = (a,b) if index == 0 else (b,a)
+        if not (leader['grounded'] and partner['grounded']):
+            return
+        start,other = leader['feet'],partner['feet']
+        delta = [goal[i]-start[i] for i in range(2)]
+        length = distance(goal[:2],start[:2])
+        if length < 8 or abs(start[2]-other[2]) >= 56:
+            return
+        offset = [other[i]-start[i] for i in range(2)]
+        along = sum(d*p for d,p in zip(delta,offset))/length
+        across_squared = sum(p*p for p in offset)-along*along
+        if 0 < along < min(length+36,96) and across_squared < 36*36:
+            # A scene may safely reunite the pair in single file. The waiting
+            # player can step aside using normal input before the leader walks
+            # onward; the route controller must not push through their body.
+            self.set(self.first)
+            self.wait(.4)
+            self.move_aside(self.partner)
+            self.evidence.setdefault('departure_clearances',[]).append(dict(
+                goal=goal,tick=self.reports['host']['frame']['tick']))
+
+    def go(self,goal=None,navigate=False,marker=None,horizontal=False,together=False,fight=True):
         assert not together and marker is None, 'School paired endpoints require an explicit ordinary route goal'
         if self.arrived():
             return
         self.set(self.partner)
-        self.set(self.first,goal,navigate,horizontal=horizontal)
-        self.until(lambda: self.arrived() or self.reached(self.first))
+        first_index = 0 if self.first == 'host' else 1
+        for _ in range(4):
+            self.clear_departure(goal)
+            warped = self.bodies()[first_index]['warped_at']
+            self.set(self.first,goal,navigate,horizontal=horizontal)
+            self.until(lambda: self.arrived() or self.reached(self.first) or (
+                self.bodies()[first_index]['warped_at'] > warped and
+                all(r['combat']['stage']['owner'] is None for r in self.reports.values())))
+            if self.arrived() or self.reached(self.first):
+                break
+            self.set(self.first)
+            self.wait(.4)
+        else:
+            raise AssertionError('Too many scene handoffs on one school leg')
         if self.arrived():
             return
         # Freeze the leader before choosing a second supported endpoint. Both
@@ -103,27 +139,34 @@ class SchoolPair(PandemoniumPair):
         # lets successive enemy hits push Alice off a narrow landing before
         # the partner follows. These remain ordinary movement/attack inputs.
         self.set(self.first,goal,horizontal=horizontal)
-        self.secure(keep_movement=True)
+        if fight:
+            self.secure(keep_movement=True)
         if self.arrived():
             return
         self.until(lambda:self.reached(self.first),20)
-        self.set(self.first)
-        self.wait(.4)
+        self.hold(.4)
         first_index = 0 if self.first == 'host' else 1
         partner_index = 1-first_index
         def leader_at_goal(report):
             player = report['frame']['players'][first_index]['player']
             return (player['grounded'] and distance(player['feet'][:2],goal[:2]) < 42 and
                     (horizontal or abs(player['feet'][2]-goal[2]) < 35))
-        assert all(leader_at_goal(r) for r in self.reports.values()), 'Leader left the requested route landing'
+        self.until(lambda:all(leader_at_goal(r) for r in self.reports.values()),20)
+        rejected = []
         for attempt in range(8):
             self.set(self.partner)
-            self.until(lambda:self.arrived() or self.bodies()[first_index]['player']['grounded'],15)
+            # A projectile already in flight can arrive after secure() has
+            # finished. Keep ordinary steering toward the requested landing
+            # while the partner follows, and return there before replanning.
+            self.clear_departure(goal)
+            self.set(self.first,goal,horizontal=horizontal)
+            self.until(lambda:self.arrived() or self.reached(self.first),20)
             if self.arrived():
                 return
             anchor = self.bodies()[first_index]['player']['feet']
             start = self.bodies()[partner_index]['player']['feet']
             candidates = self.reports['host']['route_driver']['neighbors'][first_index]
+            candidates = [p for p in candidates if all(distance(p,old) > 8 for old in rejected)]
             assert candidates, f'No supported paired endpoint near {anchor}; route must move the leader onward'
             endpoint = min(candidates,key=lambda p: distance(p,start))
             assert 47.9 <= distance(endpoint[:2],anchor[:2]) <= 48.1 and abs(endpoint[2]-anchor[2]) <= 18.1
@@ -135,10 +178,30 @@ class SchoolPair(PandemoniumPair):
             # supported position instead of walking into their occupied slot.
             for planned in (navigate,False):
                 self.set(self.partner,endpoint,planned,horizontal=False)
-                self.until(lambda:self.arrived() or displaced() or self.reached(self.partner))
+                best = distance(self.bodies()[partner_index]['player']['feet'],endpoint)
+                progress_tick = self.reports['host']['frame']['tick']
+                def approached():
+                    nonlocal best,progress_tick
+                    if self.arrived() or displaced() or self.reached(self.partner):
+                        return True
+                    remaining = distance(self.bodies()[partner_index]['player']['feet'],endpoint)
+                    if remaining < best-2:
+                        best = remaining
+                        progress_tick = self.reports['host']['frame']['tick']
+                    return not planned and self.reports['host']['frame']['tick']-progress_tick >= 480
+                self.until(approached)
                 if self.arrived():
                     return
                 if displaced():
+                    break
+                if not self.reached(self.partner):
+                    # A safe endpoint beside the leader can be behind a
+                    # bookcase from the partner's approach. Try a different
+                    # supported endpoint after four seconds without progress.
+                    rejected.append(endpoint)
+                    self.evidence.setdefault('blocked_pair_approaches',[]).append(dict(
+                        goal=goal,endpoint=endpoint,feet=self.bodies()[partner_index]['player']['feet'],
+                        tick=self.reports['host']['frame']['tick']))
                     break
             self.set(self.partner)
             self.wait(.4)
@@ -150,7 +213,7 @@ class SchoolPair(PandemoniumPair):
             # A late walking input can carry the guest past an endpoint that
             # was reached in its previous report. Correct from the settled
             # position, retaining the same final distance/height checks.
-            if not displaced() and settled:
+            if not displaced() and settled and all(leader_at_goal(r) for r in self.reports.values()):
                 break
         else:
             raise AssertionError('Pair did not settle at a safe endpoint after eight attempts')
@@ -215,8 +278,9 @@ class SchoolPair(PandemoniumPair):
             for goal,navigate in role_goals:
                 self.set(role,goal,navigate)
                 self.until(lambda:self.reached(role))
+                self.secure(keep_movement=True)
+                self.until(lambda:self.reached(role),20)
                 self.set(role)
-                self.secure()
                 self.evidence.setdefault('passage_stops',[]).append(dict(role=role,goal=goal,
                     feet=self.bodies()[0 if role == 'host' else 1]['player']['feet'],
                     tick=self.reports['host']['frame']['tick']))
@@ -394,7 +458,7 @@ class SchoolPair(PandemoniumPair):
                                for r in self.reports.values()),20)
         drops = self.bodies()[0]['stats']['loot']['skool1$first']['drops']
         reward = next(d for d in drops if d['id'] == 3000019)
-        self.go(reward['origin'])
+        self.go(reward['origin'],fight=False)
         self.move_aside(self.first)
         self.set(self.partner,reward['origin'])
         self.until(lambda:self.reached(self.partner),20)
@@ -402,6 +466,10 @@ class SchoolPair(PandemoniumPair):
         self.capture_pair('theatre-earned-healing')
 
     def theatre(self,upstairs=True):
+        # The entrance spawns the pair in single file. Clear the waiting
+        # player's supported spot before asking the leader to walk north;
+        # otherwise the Blue-first route walks directly into Red's body.
+        self.move_aside(self.partner)
         self.legs([((-1888,2290,-512),False),((-2340,2368,-480),True)])
         self.set(self.partner)
         self.set(self.first,(-2560,2368,-480))
@@ -409,18 +477,22 @@ class SchoolPair(PandemoniumPair):
         self.until(lambda: all(r['combat']['stage']['owner'] is None for r in self.reports.values()),120)
         self.capture_pair('theatre-reunion')
         # The original scene lands both players on the lower theatre floor.
-        # Align with the stair opening before walking east, instead of spending
-        # a minute sliding diagonally along its vertical side wall.
-        # Complete the stairs before waiting for the upper guard: their side
-        # blocks Blade throws from this low alignment point.
-        self.go((-3336,2368,-672))
+        # Align with the stair opening, collect the fresh nearby reward and
+        # walk both players through the stairs before waiting on combat. The
+        # guard on the side stair is visible but these fixed firing positions
+        # strike its lip; defeating that optional guard is not a route gate.
+        # Attacks stay enabled throughout the ordinary climb.
+        self.go((-3336,2368,-672),fight=False)
         self.theatre_healing()
         if not upstairs:
             return
-        self.go((-3336,2368,-672))
-        self.legs([((-2560,2368,-480),False),((-2340,2368,-480),True),
-                   ((-2256,2544,-480),False),((-2304,2624,-342),True),
-                   ((-2304,2800,-256),True)])
+        self.go((-3336,2368,-672),fight=False)
+        for goal,navigate in [((-2560,2368,-480),False),((-2340,2368,-480),True)]:
+            self.go(goal,navigate,fight=False)
+        # The switchback has no supported side-by-side stopping point. Finish
+        # it and clear the landing before the second player takes the stairs.
+        self.passage([((-2256,2544,-480),False),((-2304,2624,-342),True),
+                      ((-2304,2800,-256),True)])
         self.capture_pair('theatre-and-shelf-reunion')
 
     def route(self):
@@ -468,8 +540,10 @@ class SchoolPair(PandemoniumPair):
         departure = tuple(self.bodies()[0 if self.first == 'host' else 1]['player']['feet'])
         self.passage([(departure,False),((272,4160,64),False),((700,4096,64),False)],
                      after_reunion=[((700,4096,64),False)])
-        self.legs([((884,4056,64),False),
-                   ((0,4096,64),False),((0,3500,64),False)])
+        self.legs([((884,4056,64),False),((0,4096,64),False)])
+        # The bookcase blocks a diagonal approach to the supported spots west
+        # of this landing. Clear the straight corridor before the partner follows.
+        self.passage([((0,3500,64),False)])
         self.checkpoint_stop('library')
         self.upper_library_route()
 

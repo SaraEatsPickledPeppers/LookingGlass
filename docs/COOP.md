@@ -2307,3 +2307,51 @@ public connection with 40/20 ms delay/jitter for the two-client tests. No images
 were opened during this suite. A separate empty-data failure probe correctly
 returned failure and stopped before the next case; its report is
 `private/coop/regression-suite-f99df7c54fc845f6956a6dc8d8722730/summary.json`.
+
+### Full-school fixture with player contact
+
+The first-school controller now moves the waiting player aside when they block
+the leader's nearby departure path, including after an original scene reunion.
+It uses the existing supported stopping points and ordinary local inputs. The
+theatre switchback is traversed one player at a time because its intermediate
+steps have no safe side-by-side stopping point. Attacks remain enabled while
+climbing past the optional side-stair guard; the fixture no longer waits for a
+kill from fixed positions where the Blade strikes the stair edge.
+
+The full Blue-first attempt on `ced2c8cb...` in
+`private/coop/school-route-5092902e7c634403a90a9070a618064e` passes the entrance,
+theatre, original shelf scene/reunion, stair switchback, both personal Mallet
+pickups and the balcony jump. It stops in the lower library when a late enemy
+hit moves the waiting leader away from the requested waypoint. Both clients
+agree on 6,796 sent/restored states and ten coincident full reports; health is
+86/100, with no death, respawn or checkpoint restore. This is failed-route
+evidence and receives no complete campaign-row credit.
+
+The controller now keeps steering toward the requested landing while the
+partner follows and returns there before replanning after a displacement.
+The final height, position and support checks remain unchanged. The follow-up
+starts from the unchanged ordinary balcony checkpoint with SHA-256
+`59378fe503dfe6982064471df5ea2d3d90acc108a5d00ae533c4f372bc9e35b2`.
+
+That repeat passes the corrected combat waypoint, lower library, shared spiral
+lift and its narrow exit. It exposes a separate approach problem at the upper
+bookcase: an endpoint supported beside the leader can be unreachable directly
+from the partner's side. Straight approaches now record four seconds without
+progress, reject that candidate and try another supported spot, retaining the
+existing attempt limit and final checks. The bookcase corridor itself is now
+traversed in single file, with the leader stepping aside after clearing it.
+Passage movement remains aimed at each waypoint until nearby combat finishes.
+
+The final repeat on the same frozen game build passes from the unchanged
+spiral-lift checkpoint through the upper library, second paired lift, all three
+book jumps, recipe handoff, fresh guest reconnect, shelf descent and authored
+exit into `skool2_start1` (epoch 2). Evidence:
+`private/coop/school-resume-adaa2520042b4a3b89c4028334de4514`.
+All four remaining scenes belong to Blue, with the partner frozen until their
+handoffs. Both clients arrive alive at 12/77 Sanity, without death, respawn or
+checkpoint rollback; 6,058 sent/restored states and 60 full reports agree.
+Two departure clearances use ordinary movement. The final fixture SHA-256 is
+`9c04515e642f73ac2bafc0a93027feb2a23f79c0b71f7a1ccbcbde9d012c5e7a`.
+No images were opened during these repeats. This completes the resumed segment;
+both complete entrance-to-exit arrival orders remain open, and overall progress
+remains about 42%.
