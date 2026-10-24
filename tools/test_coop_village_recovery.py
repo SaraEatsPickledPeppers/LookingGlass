@@ -16,6 +16,7 @@ from test_coop_village import Pair
 class Recovery(Pair):
     death_goal = (-3155, 2670, -384)
     death_navigate = False
+    survivor_navigate = False
 
     def __init__(self, args):
         super().__init__(args)
@@ -70,9 +71,9 @@ class Recovery(Pair):
         self.until(lambda: all(r['frame']['players'][index]['stats']['sanity'] <= 0
                                for r in self.reports.values()), 90)
         self.set(victim)
-        # A known supported stretch provides a moving spectator
-        # subject. It is ordinary slow walking, not a camera/position write.
-        self.set(partner, self.survivor_goal(index))
+        # Ordinary movement provides a moving spectator subject. Some maps need
+        # their normal jump planner to cross a gap on this route.
+        self.set(partner, self.survivor_goal(index), navigate=self.survivor_navigate)
         dead_at = self.reports['host']['frame']['tick']
         self.until(lambda: self.reports['host']['frame']['tick'] >= dead_at + 180)
         self.capture_pair(f'{victim}-spectating')
@@ -114,12 +115,16 @@ class Recovery(Pair):
                 assert spawned['camera_player'] == ('Blue' if index == 0 else 'Red')
                 assert distance(spawned['camera_target'][:2], body['feet'][:2]) < 1
                 assert max(distance(p, followed[0]) for p in followed) > 10, 'Spectator did not follow the moving partner'
-            for actual, old in zip(spawned['players'], before['players']):
+            # The ordinary approach/fight can collect a real item. Preservation
+            # starts at death, not at the earlier movement command: otherwise a
+            # legitimate pickup would be mistaken for a respawn inventory bug.
+            for actual, old in zip(spawned['players'], dead[0]['players']):
                 for field in ('owned', 'collected'):
                     assert actual['stats'][field] == old['stats'][field], f'Death changed personal {field}'
             assert spawned['players'][1-index]['health'] == before['players'][1-index]['stats']['sanity']
             results[role] = {'death_tick': death_tick, 'spawn_tick': body['spawned_at'],
-                             'health': body['health'], 'separation': separation}
+                             'health': body['health'], 'separation': separation,
+                             'collected_at_death': dead[0]['players'][index]['stats']['collected']}
         assert results['host']['death_tick'] == results['guest']['death_tick']
         assert results['host']['spawn_tick'] == results['guest']['spawn_tick']
         self.evidence[victim + '_recovery'] = results

@@ -105,7 +105,8 @@ pub struct Report {
     pub jumps: u64,
     /// Read-only encounter diagnostics. Selection exists only on the host;
     /// guests restore enemy presentation without running another AI simulation.
-    pub guards: Vec<GuardReport>,
+    pub guards: Vec<EnemyReport<crate::combat::State>>,
+    pub boojums: Vec<EnemyReport<crate::boojum::State>>,
     pub network_states: VecDeque<NetworkState>,
 }
 #[derive(Serialize)]
@@ -115,12 +116,13 @@ pub struct NetworkState {
     sha256: String,
 }
 #[derive(Serialize)]
-pub struct GuardReport {
+pub struct EnemyReport<S> {
+    id: usize,
     name: String,
     active: bool,
     feet: Vec3,
     health: f32,
-    state: crate::combat::State,
+    state: S,
     selected_player: Option<usize>,
     distance: [f32; 2],
     line_of_sight: [bool; 2],
@@ -216,14 +218,31 @@ impl Driver {
             .or_else(|| arena.stage.interactions.pandemonium.as_ref().and_then(|p|p.scene_id()))
             .or_else(|| arena.stage.interactions.fortress.as_ref().and_then(|f|f.state.cinema.scene_id())).map(str::to_owned);
         self.report.speech = arena.stage.story.busy() && !arena.stage.busy();
-        self.report.guards = arena.stage.interactions.encounters.iter().flat_map(|cast| &cast.actors)
-            .filter_map(|actor| {
+        self.report.guards = arena.stage.interactions.encounters.iter().flat_map(|cast| &cast.actors).enumerate()
+            .filter_map(|(index, actor)| {
                 let crate::encounters::Enemy::Guard(guard) = &actor.enemy else { return None; };
                 let center = guard.target(0).center;
-                Some(GuardReport {
+                Some(EnemyReport {
+                    id: crate::encounters::BASE + index,
                     name: actor.name.clone(), active: actor.active && actor.enabled,
                     feet: guard.feet, health: guard.health, state: guard.state,
                     selected_player: guard.opponents.selected_player,
+                    distance: frame.players.each_ref().map(|b| center.distance(b.player.eye())),
+                    line_of_sight: frame.players.each_ref().map(|b| {
+                        let trace = world.sweep(center, b.player.eye(), Vec3::splat(0.5));
+                        b.stats.alive() && !b.stats.ignores_alice() && !trace.start_solid && trace.fraction >= 1.
+                    }),
+                })
+            }).collect();
+        self.report.boojums = arena.stage.interactions.encounters.iter().flat_map(|cast| &cast.actors).enumerate()
+            .filter_map(|(index, actor)| {
+                let crate::encounters::Enemy::Boojum(boojum) = &actor.enemy else { return None; };
+                let center = boojum.target(0).center;
+                Some(EnemyReport {
+                    id: crate::encounters::BASE + index,
+                    name: actor.name.clone(), active: actor.active && actor.enabled,
+                    feet: boojum.feet, health: boojum.health, state: boojum.state,
+                    selected_player: boojum.opponents.selected_player,
                     distance: frame.players.each_ref().map(|b| center.distance(b.player.eye())),
                     line_of_sight: frame.players.each_ref().map(|b| {
                         let trace = world.sweep(center, b.player.eye(), Vec3::splat(0.5));

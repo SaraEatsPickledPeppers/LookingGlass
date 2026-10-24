@@ -33,7 +33,7 @@ class FortressPair(PandemoniumPair):
             if self.history[role]:
                 self.history[role][-1]['fortress'] = report['combat']['stage']['world']['fortress']
 
-    def arrival_and_portal(self):
+    def arrival_to_courtyard(self):
         self.until(lambda: all(self.fortress(r)['cinema']['arrival_done'] and
                               self.reports[r]['combat']['stage']['owner'] is None
                               for r in self.reports), 120)
@@ -42,12 +42,18 @@ class FortressPair(PandemoniumPair):
         for goal in [(-3500,2140,0),(-3600,2430,0),(-3500,2550,48),
                      (-3450,2600,48),(-3380,2700,0),(-3230,2730,0),(-3230,3050,0)]:
             self.go(goal, True)
-        warps = [b['warped_at'] for b in self.bodies()]
+
+    def portal(self, role):
+        index = 0 if role == 'host' else 1
+        warp = self.bodies()[index]['warped_at']
+        self.set(role, (-3098,3068,0), horizontal=True)
+        self.until(lambda: self.bodies()[index]['warped_at'] != warp, 30)
+        self.set(role)
+
+    def arrival_and_portal(self):
+        self.arrival_to_courtyard()
         for role in (self.first, self.partner):
-            index = 0 if role == 'host' else 1
-            self.set(role, (-3098,3068,0), horizontal=True)
-            self.until(lambda: self.bodies()[index]['warped_at'] != warps[index], 30)
-            self.set(role)
+            self.portal(role)
         self.wait(1)
         self.capture_pair('both-through-portal')
         print('PASS network Fortress arrival and independent portal contacts.', flush=True)

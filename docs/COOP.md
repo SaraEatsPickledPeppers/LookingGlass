@@ -123,7 +123,7 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after completing the village and Pandemonium verification rows: **about 40%** (previously 39%). Credited
+Overall estimate after completing the village, Pandemonium and first Fortress verification rows: **about 41%** (previously 40%). Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
 9/15 for two-player movement/presentation, paired school supports, dry/swimming arrival placement, complete delayed village/Pandemonium traversal in separate clients and rendered independent rope controls, and 7/20 for native targeting, host-owned
 weapons/damage, personal resources, timed respawns and full saved-state team wipes,
@@ -131,9 +131,10 @@ plus 8/20 for shared world replication, ordered contacts, the verified theatre
 ownership/reunion slice, school boarding barriers, visit history and restart/backup
 restoration of shared checkpoints, and native traversal of all six village scenes
 and all four Pandemonium scenes with either player arriving first (also verified through public internet clients).
-Full-campaign verification now earns 40/39 points (about 1.03/20), for the village's
-and Pandemonium's complete combined evidence. Total credited points are about 40.03,
-rounded to 40%. Standalone policy tests receive no campaign credit; 37 visits remain open.
+Full-campaign verification now earns 60/39 points (about 1.54/20), for the village,
+Pandemonium and first Fortress visit's complete combined evidence. Total credited
+points are about 40.54, rounded to 41%. Standalone policy tests receive no campaign
+credit; 36 visits remain open.
 
 Pandemonium now uses each replicated player's own rope grip in co-op, while the
 single-player controller and saved grip remain unchanged. The host advances its
@@ -1296,9 +1297,86 @@ The guest exits and rejoins in a fresh process near the final doorway (ticks
 scene/machinery progress. Both finish alive at 85/80 Sanity with their Blade and
 Cards, no respawn and no wipe. The sloping-walkway view and both final views were
 inspected. Both clients and the helper close normally and the invite is removed.
-This verifies the first visit's Blue-leading traversal/rejoin, not the next level,
-the opposite arrival order, focused targeting/consumables, map-specific recovery
-or the later Fortress return visit. The campaign row therefore remains partial.
+The Red-leading route also passes on the same build and delay/jitter settings:
+`private/coop/fortress-test-3cf5044c3af64e3e97ed3ef09d70f751/`.
+It observes the same original arrival/reunion, independent portal contacts,
+completed split and authored exit. All 3,870 comparable sent/restored states and
+93 coincident full reports agree. Both arrive alive at 100 Sanity with their
+weapons, without a respawn or wipe. The Red sloping-walkway and final arrival
+views were inspected; clients/helper exit normally and the invite is removed.
+These routes verify both first-visit orders and Blue-leading rejoin. Targeting,
+consumables and recovery are checked separately below; the next level and later
+Fortress return visit remain separate requirements.
+
+The focused Fortress checks use the same independent profiles, public invite and
+ordinary input driver:
+
+```text
+python tools/test_coop_fortress_combat.py --data C:\Alice\base --first red
+python tools/test_coop_fortress_recovery.py --data C:\Alice\base --first red
+```
+
+The opt-in report now includes Boojum selection, visibility, distance and stable
+encounter IDs (the two room Boojums have no authored names). It changes neither
+normal gameplay nor the network protocol. The combat probe swaps the nearest
+player, takes real scream damage, defeats both active Boojums with the Blade,
+then checks an available personal healing drop. The recovery probe leaves the
+survivor in the courtyard while the other enters the Boojum room, checks both
+ten-second spectator/respawn roles, then sends both low-health players into the
+fight to verify their actual automatic checkpoint. These checks supply no health,
+position, inventory or shared-world writes.
+
+The focused combat probe passes on build
+`2271c7db46267916aa0d866bcc99db4b4d94fce2516014274027895145d58ab8` in
+`private/coop/fortress-combat-e4a4260346de427c84f93e82e338f187/` (public internet,
+40 ms delay + 20 ms jitter). The observed Boojum selects nearer Red, then Blue,
+with both visible. The checked damage changes Red 100 to 93, then Blue 100 to 98,
+leaving the farther partner unchanged at each check. Both active Boojums are
+defeated by ordinary Blade attacks. The same reward heals Blue 87 to 100 while
+Red stays at 85 and retains her copy, then heals Red to 100 without changing
+Blue. An independent history check confirms separate healing/collection in both
+clients. All 2,442 comparable sent/restored states and 78 coincident full enemy/
+player reports match. The first two probe attempts are retained as failures:
+the first retreated under a lintel that blocked throws; the second approached a
+farther health drop and collected the nearer one on the way, becoming too healthy
+to collect the chosen drop. Neither contributes a campaign pass.
+The Blue damage view, both-player pickup view and final healed Red view were
+inspected. Both clients and the helper exited normally; the invite was removed.
+
+Fortress recovery uses inventory at the observed death as its preservation
+reference. A real pickup during the preceding fight is allowed; respawning must
+retain it. The earlier village and Pandemonium recovery histories still pass
+that comparison for both roles in both clients (`private/coop-fortress-recovery-inventory-audit.json`).
+The courtyard survivor route uses the ordinary jump planner across its gap.
+The first two Fortress recovery attempts are retained as failures: one used the
+pre-fight inventory reference, and the other left the survivor hanging from a
+ledge after a fall-reset portal. The latter correctly deferred respawning until
+a safe platform was available; it does not supply a successful timed recovery.
+
+The complete recovery probe passes on the same `2271c7db` build and public
+40 ms + 20 ms connection in
+`private/coop/fortress-recovery-6388fe74d6414e87a48f45ee92ceda44/`.
+Red dies at tick 15,887 and respawns at 17,087; Blue dies at 19,780 and returns at
+20,980. Both have exactly 25 Sanity, stand 48 units from the survivor on clear
+ground, retain their death-time inventory and regain their own camera after
+following the moving partner. The survivor takes no damage during either check.
+Both then die in the actual Boojum room. Tick 24,430 restores the automatic
+checkpoint from tick 10,021, including personal resources, earlier placements,
+scene/machinery state and the Boojums' original positions with no scream waves.
+The first restored reports arrive 22/17 ticks after restoration; movement stays
+within the bound derived from those ticks (Blue drifts 15.85/11.52 units, Red 0).
+All 3,662 comparable sent/restored states and 88 coincident enemy/player reports
+match. The spectator view, revived pair and both restored views were inspected;
+both clients/helper close normally and the invite is removed.
+
+Combined with the two full routes, fresh guest rejoin, native paired supports and
+single-player regressions above, the first Fortress visit is now passed in the
+campaign matrix. Its splitting room is a first-arrival environmental trap, not
+an activated passenger lift; a shared boarding barrier is not applicable here.
+The opt-in diagnostic build and both route-driver regression tests pass in
+`private/coop-fortress-combat-build1.log` and
+`private/coop-fortress-combat-driver-tests1.log`. Normal gameplay is unchanged by
+the additional read-only Boojum report.
 
 ## Reproducing transport checks
 

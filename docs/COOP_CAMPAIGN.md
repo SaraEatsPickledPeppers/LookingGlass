@@ -1,13 +1,13 @@
 # Co-op campaign verification matrix
 
 Source: `campaign::route()` in `src/campaign.rs`. Return visits are separate requirements.
-The village and Pandemonium have the complete combined co-op evidence below.
+The village, Pandemonium and first Fortress visit have the complete combined co-op evidence below.
 Existing single-player route tests do not supply evidence for two-player play.
 Record build identities and reproducible evidence before changing a row to passed.
 
 Each visit requires both host/guest roles and both first-arrival orders, coherent enemies
 and individual consumables, single-player cutscenes with safe reunion, shared-transport
-boarding, a traversal death followed by timed spectating/respawn, a simultaneous wipe
+boarding, a real gameplay death followed by timed spectating/respawn, a simultaneous wipe
 and checkpoint reload, a trailing guest, and disconnect/rejoin near a transition.
 Where a feature is absent, record why it is not applicable instead of silently omitting it.
 The finale must verify completion for both players in place of an outgoing transition.
@@ -177,11 +177,26 @@ arrival views do not verify the Fortress visit. Both client pairs and helpers
 exit normally, and both invites are removed. Coverage summaries are retained as
 `encounter-coverage.json` inside each fixture.
 
+The first Fortress visit now has complete combined evidence (details and failed
+development attempts are in `docs/COOP.md`): native paired split-room carry and
+single-player route/cinematic regressions on `bac55928`; Blue-leading full public
+route with fresh guest rejoin (`fortress-test-cc6abe54e07e4f2fac11ff3621b1c75d`)
+and Red-leading full route (`fortress-test-3cf5044c3af64e3e97ed3ef09d70f751`)
+on `fda92609`; focused Boojum targeting/personal healing
+(`fortress-combat-e4a4260346de427c84f93e82e338f187`) and both combat-death
+roles plus shared checkpoint restore (`fortress-recovery-6388fe74d6414e87a48f45ee92ceda44`)
+on `2271c7db`. All public runs use 40 ms delay + 20 ms jitter and compare actual
+sent/restored player/enemy state. The newer builds add opt-in diagnostics and
+ordinary-input test controls; gameplay is unchanged from the paired-support build.
+Its entry scene starts automatically with Blue as owner even when Red leads the
+subsequent route. The split room is an environmental trap; passenger boarding is
+not applicable. The later return visit and Beyond the Wall remain unverified.
+
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Passed (combined evidence above): both arrival orders, all scenes/reunions, nearest-visible guard damage in both roles, individual health/Blade pickups, matching encounter/player states, both death/spectator/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit; shared boarding N/A |
 | 2 | `pandemonium` | `Initial` | Passed (combined evidence above): native and delayed public routes in both orders, rope/cart, four scenes/three reunions, personal Cards/healing rewards, nearest-visible guard damage in both roles, full-route encounter/player comparison, both hazard death/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit |
-| 3 | `fortress1` | `Initial` | Partial: Blue-leading public route/rejoin and paired split supports pass; opposite order, focused combat/consumables and recovery unverified |
+| 3 | `fortress1` | `Initial` | Passed (combined evidence above): both delayed public route orders, original scene/reunion, independent portals, paired split supports, upper jumps and exit, fresh guest rejoin, nearest-visible Boojum selection/damage in both roles, separate healing, coherent enemies, both combat death/spectator/respawn roles and saved-checkpoint wipe; shared boarding N/A |
 | 4 | `fortress2` | `Initial` | Not run |
 | 5 | `fortress1` | `fortress1_start2` | Not run |
 | 6 | `skool1` | `Initial` | Not run |
