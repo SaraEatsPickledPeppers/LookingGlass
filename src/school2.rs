@@ -10,7 +10,7 @@ use crate::{
 };
 use crate::{
     boojum::{Boojum, Timing as BoojumTiming},
-    combat::{Feedback, Guard, Target, Timing},
+    combat::{Feedback, Guard, PlayerTarget, Target, Timing},
     interaction::Events,
     school2_quest::{Quest, Stage},
 };
@@ -18,6 +18,7 @@ use anyhow::{Context, Result};
 pub(crate) mod cinema;
 pub(crate) mod cinema_check;
 mod coop_mover_check;
+mod coop_combat_check;
 pub(crate) mod encounters;
 pub(crate) mod potion_check;
 pub(crate) mod rage_hint;
@@ -638,8 +639,35 @@ impl School2 {
         feet: Vec3,
         paused: bool,
     ) -> (Events, Feedback) {
+        self.player_targets(None);
+        let (events, feedback, _) = self.update_targets(dt, world, feet, paused, &[(0, feet)]);
+        (events, feedback)
+    }
+    /// One quest/enemy clock, with both living players eligible for contact.
+    /// The returned actor identifies the player who collected a quest item;
+    /// timed story events otherwise belong to the existing conversation owner.
+    pub fn update_players(&mut self, dt: f32, world: &World, players: [PlayerTarget; 2],
+        speaker: usize, paused: bool) -> (Events, Feedback, Option<usize>) {
+        self.player_targets(Some(players));
+        self.notarget(false);
+        let feet = players[speaker].eye - Vec3::Z * crate::movement::EYE_HEIGHT;
+        let contacts: Vec<_> = players.iter().enumerate().filter(|(_, p)| p.alive)
+            .map(|(i, p)| (i, p.eye - Vec3::Z * crate::movement::EYE_HEIGHT)).collect();
+        self.update_targets(dt, world, feet, paused, &contacts)
+    }
+    fn player_targets(&mut self, players: Option<[PlayerTarget; 2]>) {
+        for b in &mut self.boojums { b.opponents.players = players; }
+        for (i, g) in self.guards.iter_mut().enumerate() {
+            // Unprovoked rescue guards are attacking the Gnome, not either Alice.
+            g.opponents.players = if self.guard_angry[i] { players } else { None };
+        }
+        for g in &mut self.reinforcements { g.opponents.players = players; }
+    }
+    fn update_targets(&mut self, dt: f32, world: &World, feet: Vec3, paused: bool,
+        contacts: &[(usize, Vec3)]) -> (Events, Feedback, Option<usize>) {
         let mut events = Events::default();
         let mut feedback = Feedback::default();
+        let mut collector = None;
         if !self.placed {
             let center = Vec3::Z * 32.;
             let half = vec3(24., 24., 32.);
@@ -654,7 +682,7 @@ impl School2 {
         // Dialogue pauses quest/combat updates, but its actor still addresses
         // Alice. The render camera can orbit independently in third person.
         if dt <= 0. || !dt.is_finite() {
-            return (events, feedback);
+            return (events, feedback, collector);
         }
         self.advance_rage_hint(dt, feet, &mut feedback);
         if let Some(s) = &mut self.cinema {
@@ -697,21 +725,17 @@ impl School2 {
             }
         }
         if paused || self.cinematic() {
-            return (events, feedback);
+            return (events, feedback, collector);
         }
         for b in &mut self.boojums {
-            let f = b.advance(
+            let mut f = b.advance(
                 dt,
                 world,
                 feet + Vec3::Z * crate::movement::EYE_HEIGHT,
                 self.boojum_timing,
             );
-            feedback.summon_hits.extend(f.summon_hits);
-            feedback.damage += f.damage;
-            feedback.impulse += f.impulse;
-            feedback
-                .spatial_sounds
-                .extend(f.sounds.into_iter().map(|s| (s, b.target(0).center)));
+            f.spatial_sounds.extend(f.sounds.drain(..).map(|s| (s, b.target(0).center)));
+            feedback.append(f);
         }
         if self.quest.stage == Stage::Rescue {
             for (i, g) in self.guards.iter_mut().enumerate() {
@@ -723,26 +747,22 @@ impl School2 {
                 } else {
                     self.lab + Vec3::Z * 48.
                 };
-                let f = g.advance(dt, world, target, self.guard_timing);
-                feedback.summon_hits.extend(f.summon_hits);
-                if self.guard_angry[i] {
-                    feedback.damage += f.damage;
-                    feedback.impulse += f.impulse;
+                let mut f = g.advance(dt, world, target, self.guard_timing);
+                if !self.guard_angry[i] {
+                    f.damage = 0.;
+                    f.impulse = Vec3::ZERO;
+                    f.will_drain = 0.;
+                    f.players = Default::default();
                 }
-                feedback
-                    .spatial_sounds
-                    .extend(f.sounds.into_iter().map(|s| (s, g.target(0).center)));
+                f.spatial_sounds.extend(f.sounds.drain(..).map(|s| (s, g.target(0).center)));
+                feedback.append(f);
             }
         }
         if self.dice_guards {
             for g in &mut self.reinforcements {
-                let f = g.advance(dt, world, feet + Vec3::Z * 48., self.guard_timing);
-                feedback.summon_hits.extend(f.summon_hits);
-                feedback.damage += f.damage;
-                feedback.impulse += f.impulse;
-                feedback
-                    .spatial_sounds
-                    .extend(f.sounds.into_iter().map(|s| (s, g.target(0).center)));
+                let mut f = g.advance(dt, world, feet + Vec3::Z * 48., self.guard_timing);
+                f.spatial_sounds.extend(f.sounds.drain(..).map(|s| (s, g.target(0).center)));
+                feedback.append(f);
             }
         }
         let before = self.quest.stage;
@@ -766,25 +786,28 @@ impl School2 {
         }
         // Each pickup requires proximity and a clear line through the actual world.
         for name in ["jumbo_shelf1", "ig_lollypop", "shrink_potion", "lucky_star"] {
-            let point = self.items[name] + Vec3::Z * 16.;
-            let eye = feet + Vec3::Z * 48.;
-            let delta = point - eye;
-            if delta.truncate().length() > 46. || delta.z.abs() > 58. {
-                continue;
-            }
-            let t = world.sweep(eye, point, Vec3::splat(0.5));
-            if !t.start_solid && t.fraction >= 1. && self.quest.collect(name) {
-                println!("School pickup: {name}");
-                events.message = Some(format!(
-                    "Collected {}",
-                    match name {
-                        "jumbo_shelf1" => "Jumbogrow",
-                        "ig_lollypop" => "Lollipop",
-                        "shrink_potion" => "Drink Me potion",
-                        _ => "Lucky Star",
-                    }
-                ));
-                events.sound = Some("sound/item/pickup.wav".into());
+            for &(slot, feet) in contacts {
+                let point = self.items[name] + Vec3::Z * 16.;
+                let eye = feet + Vec3::Z * 48.;
+                let delta = point - eye;
+                if delta.truncate().length() > 46. || delta.z.abs() > 58. {
+                    continue;
+                }
+                let t = world.sweep(eye, point, Vec3::splat(0.5));
+                if !t.start_solid && t.fraction >= 1. && self.quest.collect(name) {
+                    collector = Some(slot);
+                    println!("School pickup: {name}");
+                    events.message = Some(format!(
+                        "Collected {}",
+                        match name {
+                            "jumbo_shelf1" => "Jumbogrow",
+                            "ig_lollypop" => "Lollipop",
+                            "shrink_potion" => "Drink Me potion",
+                            _ => "Lucky Star",
+                        }
+                    ));
+                    events.sound = Some("sound/item/pickup.wav".into());
+                }
             }
         }
         if self.quest.stage == Stage::Complete && before != Stage::Complete {
@@ -799,9 +822,8 @@ impl School2 {
             if o.name == "boojum_clip"
                 && self.quest.stage != Stage::Explore
                 && self.quest.stage != Stage::MushroomDialogue
-                && !o
-                    .collider
-                    .touches(feet + PLAYER_CENTER, feet + PLAYER_CENTER, PLAYER_HALF)
+                && !contacts.iter().any(|(_, feet)| o.collider
+                    .touches(*feet + PLAYER_CENTER, *feet + PLAYER_CENTER, PLAYER_HALF))
             {
                 o.enabled = true;
             }
@@ -809,7 +831,7 @@ impl School2 {
                 o.enabled = self.quest.stage == Stage::Complete;
             }
         }
-        (events, feedback)
+        (events, feedback, collector)
     }
     fn props(&self) -> Vec<(&'static str, Transform, f32)> {
         if self.cinema.as_ref().is_some_and(|s| {
@@ -1335,6 +1357,7 @@ impl Art {
 pub fn check(assets: &mut Assets) -> Result<()> {
     let map = Bsp::parse(&assets.read("maps/skool2.bsp")?)?;
     coop_mover_check::check(assets, &map)?;
+    coop_combat_check::check(assets, &map)?;
     crate::interaction::school2_check::check(assets)?;
     cinema_check::check(assets, &map)?;
     potion_check::check(assets, &map)?;

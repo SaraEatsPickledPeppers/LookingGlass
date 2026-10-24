@@ -2092,3 +2092,30 @@ library-floor legs. All 2,607 matching states and 112 coincident full reports
 agree, with no death or checkpoint reset and final Sanity 86/100. The run was
 then deliberately stopped to hand Anode to queued work. Lifts and the remaining
 route were not reached in this repeat; it adds no completed campaign visit.
+
+### Second-school combat and quest adapter (24 October)
+
+The host now includes School2's legacy Boojums, rescue guards and reinforcements
+in weapon contacts and the once-per-world combat update. Their per-player
+damage/knockback feedback reaches the selected Alice. Rescue guards continue
+attacking the Gnome until provoked. Living players can both collect the story
+ingredients and rewards; those quest flags are shared while health, Will and
+ordinary inventory remain personal. Scene/dialogue steps advance actor/audio
+presentation with quest and combat paused. Single-player retains its wrapper.
+
+Build `a3ce8a69e7cb0f9a27aacc788300bb67dc6c733fc0c70c5f1733512d937fe4be`
+passes all 756 Rust tests (one existing ignored test), release compilation,
+`--school2-check` and `--coop-world-check`. New staged checks use both player
+roles to verify individual damage, dead/concealed-target changes, serialized
+save continuation, all four real-map quest contacts, shared quest flags,
+personal resources and one quest clock. Barrier insertion protection is tested
+with an explicitly blocking fixture using the original enemy-only brush's
+volume; production keeps its original collision mask. Evidence is in
+`private/coop-school2-combat-{release3,native3,world,tests-final}.log`.
+These are component checks. Full rendered second-school co-op traversal,
+real-network combat and scene ownership still need verification; row 7 and
+the overall estimate (about 42%, five completed visits) remain unchanged.
+The complete single-player School2 regression also passes on this build:
+53,236 ticks, nine jumps, 23 throws, 149 cards, 170 combat damage and 27 final
+Sanity, with both original portals, all quest items and the gated return.
+`private/coop-school2-combat-route.log` records the no-cheats/no-recovery run.

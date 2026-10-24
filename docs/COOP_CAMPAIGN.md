@@ -661,6 +661,22 @@ all ingredients/rewards and the gated `skool1_start2` return. No cheats,
 recovery or refills are used. This confirms the single-player regression check
 for the paired school machinery as well as the earlier gym adapter.
 
+The later second-school combat/quest adapter is implemented on build
+`a3ce8a69e7cb0f9a27aacc788300bb67dc6c733fc0c70c5f1733512d937fe4be`.
+It connects legacy enemy hits and per-player damage to the host arena, advances
+the quest once per world tick, accepts either living player's story-item
+contacts, and keeps the Gnome rescue guards' original pre-provocation target.
+Staged native checks pass for both victims/collectors, concealed/dead target
+changes, save continuation, individual resources, shared story rewards and
+paused quest clocks. All 756 Rust tests, native School2 checks, release build
+and co-op world regression pass. This is integration/component evidence only;
+the full rendered/network School2 route and row 7 remain open. See
+`private/coop-school2-combat-{native3,world,tests-final,release3}.log`.
+The full single-player route also passes unchanged on this exact build:
+53,236 ticks, nine jumps, 23 throws, 149 cards, 170 combat damage, 27 Sanity,
+both original portals and the gated return, without cheats or recovery
+(`private/coop-school2-combat-route.log`).
+
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Passed (combined evidence above): both arrival orders, all scenes/reunions, nearest-visible guard damage in both roles, individual health/Blade pickups, matching encounter/player states, both death/spectator/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit; shared boarding N/A |

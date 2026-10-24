@@ -173,6 +173,21 @@ impl Stage {
             self.last_owner = id;
         }
     }
+    pub fn school2_step(&mut self, dt: f32, roster: &mut Roster, world: &mut World,
+        paused: bool) -> crate::combat::Feedback {
+        let speaker = self.speaker();
+        let targets = roster.players.each_ref().map(|b| crate::combat::PlayerTarget {
+            eye: b.player.eye(), alive: b.stats.alive(), hidden: b.stats.ignores_alice(),
+        });
+        let Some(school) = &mut self.interactions.school2 else { return Default::default(); };
+        let (events, feedback, collector) = school.update_players(dt, world, targets, speaker.index(), paused);
+        // These are shared story ingredients/rewards. Ordinary consumables,
+        // health, Will and weapon ownership stay in each player's own Stats.
+        for body in &mut roster.players { body.stats.school_items = school.quest.items.clone(); }
+        self.accept(events, collector.map_or(speaker, |i| PlayerId::ALL[i]), roster, world);
+        self.interactions.sync_coop(world);
+        feedback
+    }
     /// Ordinary speech keeps exploration running, as in single player. Only a
     /// controller-owned camera/motion scene freezes and later reunites the pair.
     pub fn speech_step(&mut self, roster: &mut Roster, world: &World, advance: bool) {
@@ -399,6 +414,8 @@ impl Stage {
             world,
             &mut roster.players[owner.index()].player,
         )?;
+        let feedback = self.school2_step(FIXED_DT, roster, world, true);
+        self.sounds.feedback(roster.tick, &feedback);
         self.speech_step(roster, world, inputs[owner.index()].0.use_pressed);
         self.interactions.sync_coop(world);
         if self.transition.is_none() && !controls_scene(&self.interactions) && !self.story.busy() {

@@ -218,6 +218,7 @@ impl Arena {
             }
             let mut targets = self.npcs.targets();
             if let Some(encounters) = &self.stage.interactions.encounters { targets.extend(encounters.targets()); }
+            if let Some(school) = &self.stage.interactions.school2 { targets.extend(school.targets()); }
             targets.extend(self.stage.interactions.shot_targets());
             targets.extend(character.ice_targets());
             if let Some(summon) = character.summon_target() {
@@ -269,6 +270,12 @@ impl Arena {
                     }
                     self.npcs.hit(hit);
                     if let Some(encounters) = &mut self.stage.interactions.encounters { encounters.hit(hit); }
+                    if let Some(school) = &mut self.stage.interactions.school2 {
+                        if let Some(sound) = school.hit_attack(hit) {
+                            let origin = targets.iter().find(|t|t.id == hit.id).map(|t|t.center);
+                            self.stage.sounds.emit(roster.tick, sound, origin, 1., false);
+                        }
+                    }
                     let events = self.stage.interactions.shoot(hit);
                     self.stage.accept(events, PlayerId::ALL[index], roster, world);
                 }
@@ -284,6 +291,8 @@ impl Arena {
         if let Some(encounters) = &mut self.stage.interactions.encounters {
             feedback.append(encounters.update_players(world_dt, world, targets));
         }
+        feedback.append(self.stage.school2_step(if talking { FIXED_DT } else { world_dt },
+            roster, world, talking));
         self.stage.sounds.feedback(roster.tick,&feedback);
         for (body, hit) in roster.players.iter_mut().zip(feedback.players) {
             body.stats.damage(hit.damage);
@@ -306,7 +315,7 @@ impl Arena {
             );
         }
         self.story_cast(roster, world);
-        self.finish(roster, map, world, false)
+        self.finish(roster, map, world, self.stage.busy())
     }
     fn story_cast(&mut self, roster: &Roster, world: &World) {
         let owner = self.stage.speaker();
