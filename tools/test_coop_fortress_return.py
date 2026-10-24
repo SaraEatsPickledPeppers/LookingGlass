@@ -70,6 +70,17 @@ class FortressReturnPair(FortressPair):
         # The corner parapet blocks hand-height Blade throws from the earlier
         # wall. Complete the ordinary approach before waiting for this fight.
         self.secure()
+        self.set(self.partner)
+        self.set(self.first,(-3060,2660,376))
+        # The automatic scene-entry capture sees the original opening white
+        # fade. Also capture the actual reveal after that fade has cleared.
+        self.until(lambda: all(self.fortress(r)['cinema']['beat'] == 'Boojum'
+                               and 1.75 <= self.fortress(r)['cinema']['time'] < 4.5
+                               for r in self.reports),30)
+        self.capture_pair('boojum-middle')
+        self.evidence['middle_reveal_times'] = {r:self.fortress(r)['cinema']['time'] for r in self.reports}
+        assert all(1.5 <= t < 4.5 for t in self.evidence['middle_reveal_times'].values())
+        self.until(lambda: all(r['combat']['stage']['owner'] is None for r in self.reports.values()),30)
         self.go((-3060,2660,376))
         self.until(lambda: all(r['combat']['stage']['owner'] is None for r in self.reports.values()),30)
         self.secure()

@@ -123,7 +123,7 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after completing the village, Pandemonium, first Fortress and Beyond verification rows: **about 41%**. Credited
+Overall estimate after completing the village, Pandemonium, both Fortress visits and Beyond verification rows: **about 42%**. Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
 9/15 for two-player movement/presentation, paired school supports, dry/swimming arrival placement, complete delayed village/Pandemonium traversal in separate clients and rendered independent rope controls, and 7/20 for native targeting, host-owned
 weapons/damage, personal resources, timed respawns and full saved-state team wipes,
@@ -131,10 +131,10 @@ plus 8/20 for shared world replication, ordered contacts, the verified theatre
 ownership/reunion slice, school boarding barriers, visit history and restart/backup
 restoration of shared checkpoints, and native traversal of all six village scenes
 and all four Pandemonium scenes with either player arriving first (also verified through public internet clients).
-Full-campaign verification now earns 80/39 points (about 2.05/20), for the village,
-Pandemonium, first Fortress and Beyond visits' complete combined evidence. Total
-credited points are about 41.05, rounded to 41%. Standalone policy tests receive
-no campaign credit; 35 visits remain open.
+Full-campaign verification now earns 100/39 points (about 2.56/20), for the village,
+Pandemonium, both Fortress visits and Beyond's complete combined evidence. Total
+credited points are about 41.56, rounded to 42%. Standalone policy tests receive
+no campaign credit; 34 visits remain open.
 
 Pandemonium now uses each replicated player's own rope grip in co-op, while the
 single-player controller and saved grip remain unchanged. The host advances its
@@ -1783,6 +1783,65 @@ open, together with the middle-reveal view. No fifth-row completion credit is
 claimed. Seven source-package tests and Python syntax checks pass in
 `private/coop-fortress-return-source-tests1.log`; the game source/build remains
 the validated `ef3db23e` above.
+
+The return visit's focused guard and personal-healing check now passes on that
+same build in `private/coop/fortress-return-combat-86bb88db6fc24b00b5320f8c0f494b9c/`.
+`tools/test_coop_fortress_return_combat.py --data <base>` walks from the authored
+entrance with public 40/20 ms delay/jitter. With both players visible, guard
+`end_spawn4` selects nearer Red, then nearer Blue. Each checked hit removes seven
+Sanity only from the selected player. Ordinary Blade attacks defeat the guard;
+Blue collects her earned shard and heals 72 to 97 while Red stays at 79 and
+retains her copy. Red then heals 79 to 100 while Blue stays at 97. Both clients
+observe those separate collections. All 578 comparable sent/restored states and
+eight coincident player/enemy reports match. Both attack views and both healing
+views were inspected. The shared combat/recovery helpers now accept an explicit
+loot visit, so this return uses `fortress1$return`; first-visit defaults are
+unchanged. No game source or save format changed.
+
+`tools/test_coop_fortress_return_recovery.py --data <base>` also passes on the same
+build and public delay/jitter in
+`private/coop/fortress-return-recovery-15c11dd1a47044339884ce41fd8b686f/`.
+Each Alice walks into the actual guard encounter without attacking while the
+survivor stays on the upper wall. Red dies/respawns at ticks 3,029/4,229; Blue at
+7,055/8,255. Both clients agree on exactly 1,200 ticks, 25-Sanity recovery,
+moving spectator cameras, restored personal cameras, retained inventory and
+unchanged survivor health. Separation is 49.19 and 48.89 units respectively.
+Their subsequent shared wipe at tick 10,518 restores the automatic checkpoint
+from tick 1: exact resources, earlier Fortress state, enemy health/activation/
+positions/state, and both starting placements within ordinary movement bounds.
+All 1,538 comparable sent/restored states and 31 coincident player/enemy reports
+match. Both spectator views and both restored checkpoint views were inspected.
+Both recovered-player views were also inspected. The combat and recovery
+clients/helpers close normally and remove their invites.
+
+The route fixture now explicitly captures the reveal after its original white
+fade. The Red-first repeat passes in
+`private/coop/fortress-return-53bf1343634e43e19a655a6ffd592774/`, with 1,042 matching
+sent/restored states, one reunion at tick 2,911 and fresh guest rejoin before the
+school exit. Its middle captures show the original Boojum cutaway in both clients,
+with no extra Alice in the shot; both final school views were also inspected.
+The reported scene clocks after capture are 2.33 seconds in the host and 2.05 in
+the delayed guest. Both finish at 100 Sanity. The original opening-fade captures
+remain in the evidence, and the new capture does not change game state.
+
+The Blue-first repeat also passes in
+`private/coop/fortress-return-e744240e838d43b6b1776eea5d0c2ede/`: 1,036 matching
+sent/restored states, the Blue-owned reveal, reunion at tick 2,906 and a fresh
+guest rejoin before the exit. Both middle-reveal views and both final school
+views were inspected; scene clocks after capture are 2.21/2.02 seconds. Both
+arrive at 100 Sanity without respawns or a wipe. These two completed routes use
+fixture SHA-256 `24aac8cc240f3ff41d2ba5423aa3e155f852c9d384470dec16d7ec5878e81d16`.
+
+There is no activated passenger lift or ride on the return route. Fortress's
+split-room trigger is first-visit-only (`Fortress::gate`), while the rocking
+school is ambient machinery (`Fortress::advance_machinery`), so shared boarding
+is not applicable here. Combined traversal, visual, combat, recovery and rejoin
+evidence now completes the fifth campaign row. Overall weighted progress is
+41.56%, reported as about 42%; 34 visits remain open. The game remains the frozen
+`ef3db23e` build with its existing 746 passing Rust tests (one ignored), release
+build and native/single-player checks recorded above. This checkpoint adds only
+Python fixtures and evidence documentation. Seven source-package tests, Python
+syntax checks and the source-boundary audits cover the authored additions.
 
 ## Reproducing transport checks
 

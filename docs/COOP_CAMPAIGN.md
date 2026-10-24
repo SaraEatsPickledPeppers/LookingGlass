@@ -1,7 +1,7 @@
 # Co-op campaign verification matrix
 
 Source: `campaign::route()` in `src/campaign.rs`. Return visits are separate requirements.
-The village, Pandemonium, first Fortress and Beyond visits have the complete combined co-op evidence below.
+The village, Pandemonium, both Fortress visits and Beyond have the complete combined co-op evidence below.
 Existing single-player route tests do not supply evidence for two-player play.
 Record build identities and reproducible evidence before changing a row to passed.
 
@@ -318,10 +318,46 @@ movement/combat/jump inputs. The reveal has the correct first owner, a frozen
 partner and one safe reunion; the ambush activates. A second guest process
 rejoins before the school window with resources and scene state preserved.
 Both reach `skool1_start1` at 100 Sanity without death or checkpoint reset.
-Reunion/window/school entrance views were inspected. The scene capture is the
-opening white fade; its middle view remains to be checked. Dedicated targeting,
-individual resources and both death/respawn/wipe cases also remain open, so this
-is partial row evidence. Reproduce with `tools/test_coop_fortress_return.py`.
+Reunion/window/school entrance views were inspected. The initial scene captures
+are the opening white fade. The route now also captures the actual reveal after
+the fade, verified in both clients and both trigger orders on the same build:
+`private/coop/fortress-return-53bf1343634e43e19a655a6ffd592774/` (Red, 1,042 matching
+states) and `private/coop/fortress-return-e744240e838d43b6b1776eea5d0c2ede/` (Blue,
+1,036). Both original Boojum cutaway views, without an extra Alice, and both final
+school views were inspected. Both repeats include fresh guest rejoin and end
+at 100 Sanity without recovery. Reproduce with
+`tools/test_coop_fortress_return.py --data <base> --first red --rejoin` (also Blue).
+
+Focused return combat passes in
+`private/coop/fortress-return-combat-86bb88db6fc24b00b5320f8c0f494b9c/` on that build
+and public 40/20 ms delay/jitter. With both players visible, `end_spawn4` targets
+nearer Red, then nearer Blue; each checked seven-Sanity hit leaves the distant
+partner unchanged. After ordinary Blade combat, Blue's earned shard heals 72 to
+97 while Red stays at 79 with her copy available. Red's copy then heals 79 to 100
+while Blue stays at 97. Both clients observe independent collections under the
+return ledger `fortress1$return`. All 578 comparable sent/restored states and
+eight coincident player/enemy reports agree; attack/healing views were inspected.
+Reproduce with `tools/test_coop_fortress_return_combat.py --data <base>`.
+
+Both actual guard-death roles and the saved-checkpoint wipe pass in
+`private/coop/fortress-return-recovery-15c11dd1a47044339884ce41fd8b686f/` on that build
+and connection settings. Red's death/respawn ticks are 3,029/4,229 and Blue's are
+7,055/8,255: exactly 1,200 ticks, moving spectator cameras, 25 Sanity, safe nearby
+placement (49.19/48.89 units), retained inventory and unchanged survivor health.
+The wipe at tick 10,518 restores the real checkpoint from tick 1, including exact
+personal resources, earlier scene/machinery and enemy state, and both starting
+placements within ordinary movement bounds. All 1,538 comparable sent/restored
+states and 31 coincident player/enemy reports agree. Both spectator, respawn and
+checkpoint views were inspected. Reproduce with
+`tools/test_coop_fortress_return_recovery.py --data <base>`.
+
+Return shared boarding is N/A: the split-room trigger is first-visit-only in
+`Fortress::gate`; the rocking school is ambient machinery, not an activated
+passenger transport. All four new jobs exit normally, close their clients/helpers
+and remove their invites. Combined evidence completes the fifth row; 34 remain
+open. Only Python fixtures/documentation changed after the frozen game's existing
+Rust, release and native/single-player verification; source-package/syntax/source
+boundary checks cover these additions.
 
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
@@ -329,7 +365,7 @@ is partial row evidence. Reproduce with `tools/test_coop_fortress_return.py`.
 | 2 | `pandemonium` | `Initial` | Passed (combined evidence above): native and delayed public routes in both orders, rope/cart, four scenes/three reunions, personal Cards/healing rewards, nearest-visible guard damage in both roles, full-route encounter/player comparison, both hazard death/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit |
 | 3 | `fortress1` | `Initial` | Passed (combined evidence above): both delayed public route orders, original scene/reunion, independent portals, paired split supports, upper jumps and exit, fresh guest rejoin, nearest-visible Boojum selection/damage in both roles, separate healing, coherent enemies, both combat death/spectator/respawn roles and saved-checkpoint wipe; shared boarding N/A |
 | 4 | `fortress2` | `Initial` | Passed (combined evidence above): full traversal in both orders (Blue audited, Red clean exit), fresh guest rejoin before exit; both Rage, bridge and cycling-elevator boarding orders; late Rage on the cycling lift; notes/reset/rejoin with audio; nearest-visible guard damage and separate healing; both combat death/spectator/respawn roles and saved-checkpoint wipe; clear return camera and visible Rage owner |
-| 5 | `fortress1` | `fortress1_start2` | Partial: both delayed public full traversals to school, correct reveal owners/frozen partners/reunions, ambush activation, fresh guest rejoin before exit; both finish at 100 Sanity. Middle-reveal view, focused targeting/resources and both death/respawn/wipe roles remain open |
+| 5 | `fortress1` | `fortress1_start2` | Passed (combined evidence above): both delayed public full traversals to school, correct reveal owners/frozen partners/reunions and inspected middle views, ambush activation, fresh guest rejoin before exit; nearest-visible guard damage in both roles, individual healing, both actual death/spectator/respawn roles and saved-checkpoint wipe; shared boarding N/A |
 | 6 | `skool1` | `Initial` | Not run |
 | 7 | `skool2` | `Initial` | Not run |
 | 8 | `skool1` | `skool1_start2` | Not run |

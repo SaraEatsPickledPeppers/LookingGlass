@@ -168,7 +168,7 @@ class Recovery(Pair):
                     # loot::tick_with creates the current visit's empty ledger
                     # on the first resumed ordinary tick. This adds no award or
                     # item. Every resource, award and drop still compares exactly.
-                    expected_stats['loot'].setdefault(self.map_name + '$first', {'awarded': [], 'drops': []})
+                    expected_stats['loot'].setdefault(getattr(self,'loot_visit',self.map_name + '$first'), {'awarded': [], 'drops': []})
                 assert body['stats'] == expected_stats, 'Wipe did not restore saved personal resources exactly'
             # Even the first received frame can follow resumed held movement.
             # Bound horizontal drift by ordinary maximum run speed and the known

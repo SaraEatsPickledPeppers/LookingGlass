@@ -52,7 +52,7 @@ class VillageCombat(Pair):
         print('PASS guard selected and damaged nearest visible player', index, flush=True)
 
     def pickups(self):
-        visit = self.map_name + '$first'
+        visit = getattr(self,'loot_visit',self.map_name + '$first')
         drop = self.map_pickup or f'drop:{visit}:{self.reward_source}'
         initial = self.stats()
         collected = [drop in s['collected'] for s in initial]
@@ -123,7 +123,7 @@ class VillageCombat(Pair):
         self.capture('guard-defeated')
         self.prepare_pickups()
         self.pickups()
-        self.evidence['personal_rewards'] = personal_rewards(self.history, self.map_name + '$first',
+        self.evidence['personal_rewards'] = personal_rewards(self.history, getattr(self,'loot_visit',self.map_name + '$first'),
             [self.map_pickup] if self.map_pickup else [])
         self.verify_coherence()
         self.finish_pair(1)
