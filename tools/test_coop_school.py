@@ -44,6 +44,8 @@ class SchoolPair(PandemoniumPair):
         for role,report in self.reports.items():
             if self.history[role]:
                 self.history[role][-1]['school'] = report['combat']['stage']['world']['school']
+                self.history[role][-1]['network_timing'] = report.get('network_timing')
+                self.history[role][-1]['frame_timing'] = report.get('frame_timing')
         if len(self.reports) == 2 and not self.arrived():
             scene = self.reports['host']['route_driver']['scene']
             if scene and scene == self.reports['guest']['route_driver']['scene']:
@@ -407,7 +409,9 @@ class SchoolPair(PandemoniumPair):
                     assert a['warped_at'] == b['warped_at'] > 0
                     assert distance(a['feet'],b['feet']) <= 110+max(0,row['tick']-a['warped_at'])*640/120
                     reunions.add(a['warped_at'])
-            assert all(b['spawned_at'] == 0 for r in rows for b in r['players'])
+            assert all(r['checkpoint_generation'] == 0 for r in rows), 'Route silently restored a checkpoint'
+            assert all(b['spawned_at'] == 0 and b['health'] > 0 for r in rows for b in r['players']), \
+                'Route silently died or respawned'
             assert any(r['school']['books'] == ['Bridge']*4 for r in visit)
             assert any(r['school']['recipe'] for r in visit)
             assert all('skool1:78' in b['stats']['collected'] for b in self.bodies(role)), 'Personal Mallet pickup missing'

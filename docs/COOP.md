@@ -1982,3 +1982,11 @@ removes its invite file. These checks need no original game assets.
 Quick Tunnels are for development/testing, not an uptime promise. A released build
 needs a separately reviewed service choice and updated third-party notices for the
 network dependencies/helper. No co-op release has been created.
+
+Local `coop-live.json` diagnostics include guest `network_timing` (sent input
+sequence, last acknowledged input round trip, oldest retained pending input age)
+and `frame_timing` (render-frame duration, guest polling and world restoration).
+Input timing keeps at most 128 send timestamps and resets on a visit transition.
+These observations do not change controls, packet ordering or authoritative
+simulation. The school fixture retains them in its private history to distinguish
+connection delay from slow client updates during a traversal.

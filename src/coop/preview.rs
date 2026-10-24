@@ -193,6 +193,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         let mut route_driver = launch.route_driver.clone().map(super::route_driver::Driver::new);
         loop {
             let now = Instant::now();
+            let mut guest_poll_ms = 0.;
+            let mut replicate_ms = 0.;
             if let Some(driver) = &mut route_driver { driver.poll(now); }
             if let Some(setup) = &hosting {
                 if let Status::Failed(reason) = setup.status() { anyhow::bail!("{reason}"); }
@@ -204,11 +206,15 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 if host.phase() == Phase::Playing { rejected_guest.clear(); }
             }
             if let Some(guest) = &mut guest {
+                let polling = Instant::now();
                 guest.poll(now)?;
+                guest_poll_ms = polling.elapsed().as_secs_f32()*1000.;
                 if let Some(next) = guest.take_visit() { pending_visit = Some(next); }
                 if let Some(mut frame) = guest.take_frame() {
                     if let Some(combat) = frame.combat.take() {
+                        let restoring = Instant::now();
                         arena.replicate(&combat, &scene.map, &mut scene.world)?;
+                        replicate_ms = restoring.elapsed().as_secs_f32()*1000.;
                         if let Some(driver) = &mut route_driver { driver.record_state(&frame, &arena)?; }
                     }
                     display = Some(frame);
@@ -574,6 +580,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         "camera_player": watched, "camera": camera_eye, "camera_target": target,
                         "camera_subject_feet": camera_subject_feet,
                         "audio": audio.report,
+                        "network_timing": guest.as_ref().map(|g| g.input_timing()),
+                        "frame_timing": {"frame_ms": get_frame_time()*1000., "guest_poll_ms": guest_poll_ms, "replicate_ms": replicate_ms},
                         "combat": arena.snapshot(), "visit": visit, "completed_visits": if launch.host { Some(campaign.completed()) } else { None },
                         "route_driver": route_driver.as_ref().map(|d| &d.report) })) {
                         let _ = std::fs::write(path, bytes);

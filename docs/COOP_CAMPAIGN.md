@@ -596,6 +596,24 @@ results do not replace the outstanding full two-client traversals.
 The release build and 750 Rust tests also pass, with one existing ignored test
 (`private/coop-landing2-release.log`, `private/coop-landing2-tests.log`).
 
+The next full Blue run, `school-route-862883d3dd5742c8919c21f5e9878be4`,
+was stopped before reaching either lift. Red continued down the Mallet stair
+after the test released walking, fell to the lower floor, and could not complete
+the subsequent planned jump. Both remained at 100 Sanity; 4,733 network states
+and 129 full school reports agree. Guest input was marked idle at tick 31,622,
+but the host still showed the old walking velocity through tick 31,925. This
+needs timing investigation and receives no traversal credit. The full-route
+verifier now explicitly rejects any observed death or checkpoint restoration.
+
+A separate small-packet public echo probe at 40/20 ms measures 156–188 ms round
+trip (median 172 ms), in `private/coop/rtt-probe-cc2bce2ca4814751b30061a9a12cdca1`.
+The ordinary two-process transport probe also passes in
+`private/coop/network-test-626abcf67dad4732aced57c0b7dc6037`.
+Build `f2ff00f9d7e31835bfc705351276cfba5f631d0657aa3bdd597ade6014ac6d08`
+adds passive bounded input-acknowledgement and per-frame timing diagnostics to
+measure this under actual school load. Its release build and 750 tests pass
+(one existing ignored); the rendered timing repeat is still pending.
+
 Second-school machinery preparation was first implemented on build
 `59cc04b2bad4238d013635b739de9807fdc6a092845181fac604e99f99504f7f`.
 The gym lever uses the original activation rules for either player and assigns

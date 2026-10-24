@@ -307,6 +307,8 @@ pub struct Guest {
     new_visit: bool,
     local_ready: bool,
     sequence: u64,
+    sent_inputs: VecDeque<(u64, Instant)>,
+    input_round_trip_ms: Option<f32>,
     frame: Option<super::world::Frame>,
     last_tick: Option<u64>,
     pending: VecDeque<Vec<u8>>,
@@ -324,6 +326,8 @@ impl Guest {
             new_visit: false,
             local_ready: false,
             sequence: 0,
+            sent_inputs: VecDeque::new(),
+            input_round_trip_ms: None,
             frame: None,
             last_tick: None,
             pending: VecDeque::new(),
@@ -342,6 +346,14 @@ impl Guest {
     }
     pub fn take_frame(&mut self) -> Option<super::world::Frame> {
         self.frame.take()
+    }
+    /// Passive diagnostics only: timings never affect movement or packet order.
+    pub fn input_timing(&self) -> serde_json::Value {
+        serde_json::json!({
+            "sent_input": self.sequence,
+            "round_trip_ms": self.input_round_trip_ms,
+            "oldest_pending_ms": self.sent_inputs.front().map(|(_, at)| at.elapsed().as_secs_f32()*1000.),
+        })
     }
     pub fn poll(&mut self, now: Instant) -> Result<()> {
         if self.phase == Phase::Ended {
@@ -410,6 +422,8 @@ impl Guest {
                     self.phase = Phase::Loading;
                     self.deadline = now + LOAD_TIMEOUT;
                     self.sequence = 0;
+                    self.sent_inputs.clear();
+                    self.input_round_trip_ms = None;
                     self.frame = None;
                     self.last_tick = None;
                     self.pending.clear();
@@ -441,6 +455,12 @@ impl Guest {
                         "Host snapshot is out of order."
                     );
                     frame.validate()?;
+                    if let Some((_, sent)) = self.sent_inputs.iter().find(|(sequence, _)| *sequence == frame.acknowledged_input) {
+                        self.input_round_trip_ms = Some(sent.elapsed().as_secs_f32()*1000.);
+                    }
+                    while self.sent_inputs.front().is_some_and(|(sequence, _)| *sequence <= frame.acknowledged_input) {
+                        self.sent_inputs.pop_front();
+                    }
                     self.last_tick = Some(frame.tick);
                     self.frame = Some(*frame);
                 }
@@ -477,6 +497,8 @@ impl Guest {
         })?)?;
         if sent {
             self.sequence = sequence;
+            if self.sent_inputs.len() == 128 { self.sent_inputs.pop_front(); }
+            self.sent_inputs.push_back((sequence, Instant::now()));
         }
         Ok(sent)
     }
