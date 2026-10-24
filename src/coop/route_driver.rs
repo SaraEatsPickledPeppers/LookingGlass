@@ -150,6 +150,8 @@ pub struct Report {
     pub scene: Option<String>,
     pub speech: bool,
     pub clear: [bool; 2],
+    /// Nearby supported stopping points; only the local fixture reads these.
+    pub neighbors: [Vec<Vec3>; 2],
     pub blade_pickups: [bool; 2],
     pub cards_pickups: [bool; 2],
     pub expected: Option<Vec3>,
@@ -267,6 +269,11 @@ impl Driver {
         self.report.beyond_steps = arena.stage.interactions.beyond.as_ref()
             .map(|b|std::array::from_fn(|i|b.step_goal(i+1)));
         self.report.clear = frame.players.each_ref().map(|b| !b.stats.alive() || world.body_clear(b.player.feet));
+        self.report.neighbors = frame.players.each_ref().map(|b| {
+            if b.stats.alive() && b.player.grounded && !arena.stage.busy() {
+                super::placement::neighbors(world,b.player.feet,|at| !arena.stage.interactions.hazardous(at))
+            } else { Vec::new() }
+        });
         self.report.blade_pickups = frame.players.each_ref().map(|b| b.stats.copies(0) > 0
             && arena.pickups.iter().any(|p| matches!(p.kind, crate::inventory::PickupKind::Weapon(0))
                 && b.stats.collected.contains(&p.id)));

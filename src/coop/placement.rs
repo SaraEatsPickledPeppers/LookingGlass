@@ -20,54 +20,67 @@ pub fn reunion(world: &World, owner: &Player, safe: impl Fn(Vec3) -> bool) -> Op
 }
 
 pub fn near(world: &World, feet: Vec3, drop: f32, safe: impl Fn(Vec3) -> bool) -> Option<Player> {
-    let source = Immersion::sample(world, feet);
     for radius in [48., 72., 96.] {
-        for direction in [
-            Vec3::X,
-            -Vec3::X,
-            Vec3::Y,
-            -Vec3::Y,
-            vec3(1., 1., 0.).normalize(),
-            vec3(-1., 1., 0.).normalize(),
-            vec3(1., -1., 0.).normalize(),
-            vec3(-1., -1., 0.).normalize(),
-        ] {
-            let beside = feet + direction * radius;
-            // A swimmer needs clear water at the same depth, not a dry floor.
-            // Trace against walls and sample water along the route, rather than
-            // accepting only an endpoint on the far side of a shore.
-            if source.kind == Liquid::Water
-                && source.level >= 2
-                && safe(beside)
-                && clear_path(world, feet, beside)
-                && (0..=8).all(|i| {
-                    let at = feet.lerp(beside, i as f32 / 8.);
-                    let liquid = Immersion::sample(world, at);
-                    liquid.kind == Liquid::Water && liquid.level >= 2
-                })
-            {
-                return Player::spawn(world, beside + Vec3::Z * EYE_HEIGHT);
+        for direction in directions() {
+            if let Some(player) = beside(world, feet, feet + direction * radius, drop, &safe) {
+                return Some(player);
             }
-            let candidate = beside + Vec3::Z * 18.;
-            if !clear_path(world, feet + Vec3::Z, candidate) {
-                continue;
-            }
-            let distance = drop + 18.;
-            let floor = world.body_trace(candidate, candidate - Vec3::Z * distance);
-            if floor.start_solid || floor.fraction >= 1. || floor.normal.z < 0.65 {
-                continue;
-            }
-            let landing = candidate - Vec3::Z * (distance * floor.fraction);
-            if !supported(world, landing)
-                || !safe(landing)
-                || !clear_path(world, candidate, landing)
-            {
-                continue;
-            }
-            return Player::spawn(world, landing + Vec3::Z * EYE_HEIGHT);
         }
     }
     None
+}
+
+fn directions() -> [Vec3; 8] {
+    [Vec3::X, -Vec3::X, Vec3::Y, -Vec3::Y,
+     vec3(1.,1.,0.).normalize(), vec3(-1.,1.,0.).normalize(),
+     vec3(1.,-1.,0.).normalize(), vec3(-1.,-1.,0.).normalize()]
+}
+
+/// Read-only options for the opt-in route harness. These are destinations to
+/// walk to, never placements applied to the authoritative player. Keep them
+/// close and at the same landing height; the harness chooses its approach side.
+pub(super) fn neighbors(world: &World, feet: Vec3, safe: impl Fn(Vec3) -> bool) -> Vec<Vec3> {
+    directions().into_iter().filter_map(|direction| {
+        beside(world, feet, feet + direction * 48., 18., &safe)
+            .filter(|p|p.grounded && (p.feet.z-feet.z).abs() <= 18.1)
+            .map(|p|p.feet)
+    }).collect()
+}
+
+fn beside(world: &World, feet: Vec3, beside: Vec3, drop: f32, safe: &impl Fn(Vec3) -> bool) -> Option<Player> {
+    let source = Immersion::sample(world, feet);
+    // A swimmer needs clear water at the same depth, not a dry floor.
+    // Trace against walls and sample water along the route, rather than
+    // accepting only an endpoint on the far side of a shore.
+    if source.kind == Liquid::Water
+        && source.level >= 2
+        && safe(beside)
+        && clear_path(world, feet, beside)
+        && (0..=8).all(|i| {
+            let at = feet.lerp(beside, i as f32 / 8.);
+            let liquid = Immersion::sample(world, at);
+            liquid.kind == Liquid::Water && liquid.level >= 2
+        })
+    {
+        return Player::spawn(world, beside + Vec3::Z * EYE_HEIGHT);
+    }
+    let candidate = beside + Vec3::Z * 18.;
+    if !clear_path(world, feet + Vec3::Z, candidate) {
+        return None;
+    }
+    let distance = drop + 18.;
+    let floor = world.body_trace(candidate, candidate - Vec3::Z * distance);
+    if floor.start_solid || floor.fraction >= 1. || floor.normal.z < 0.65 {
+        return None;
+    }
+    let landing = candidate - Vec3::Z * (distance * floor.fraction);
+    if !supported(world, landing)
+        || !safe(landing)
+        || !clear_path(world, candidate, landing)
+    {
+        return None;
+    }
+    Player::spawn(world, landing + Vec3::Z * EYE_HEIGHT)
 }
 
 fn clear_path(world: &World, from: Vec3, to: Vec3) -> bool {
@@ -105,6 +118,23 @@ fn supported(world: &World, feet: Vec3) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn route_neighbors_use_supported_same_landing_and_respect_hazards_and_walls() {
+        let floor = World::fixture(&[(vec3(-500.,-500.,-100.),vec3(500.,500.,0.))]);
+        let feet = Vec3::Z*0.03125;
+        let candidates = neighbors(&floor,feet,|_|true);
+        assert_eq!(candidates.len(),8);
+        assert!(candidates.iter().all(|p|(p.truncate().length()-48.).abs()<0.01 && p.z==feet.z));
+        assert!(neighbors(&floor,feet,|_|false).is_empty());
+        let narrow = World::fixture(&[(vec3(-22.,-500.,-100.),vec3(22.,500.,0.))]);
+        let candidates = neighbors(&narrow,feet,|_|true);
+        assert_eq!(candidates.len(),2);
+        assert!(candidates.iter().all(|p|p.x==0.));
+        let wall = World::fixture(&[(vec3(-500.,-500.,-100.),vec3(500.,500.,0.)),
+                                   (vec3(17.,-500.,0.),vec3(20.,500.,100.))]);
+        assert!(neighbors(&wall,feet,|_|true).iter().all(|p|p.x<=0.));
+        assert!(neighbors(&floor,feet+Vec3::Z*40.,|_|true).is_empty());
+    }
     #[test]
     fn airborne_scene_reunion_can_finish_without_widening_ordinary_revival() {
         let world = World::fixture(&[(vec3(-500., -500., -100.), vec3(500., 500., 0.))]);

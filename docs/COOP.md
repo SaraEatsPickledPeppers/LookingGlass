@@ -2044,3 +2044,40 @@ retain a premature test during the entry scene and an invalid requirement for
 visible effects at every camera angle; neither receives a pass. This focused
 regression adds no completed campaign visits. The existing traversal evidence
 predates player contact and must be repeated before release.
+
+## School route inputs after player contact
+
+The opt-in route report now offers nearby supported stopping points, checked
+against walls, hazards and landing height. These are read-only navigation goals;
+the fixture reaches them with ordinary inputs. They never move a player directly.
+The school fixture gives the second player a separate endpoint, sends players
+through narrow stairs in sequence, and clears a landing before the next jump.
+Both players still have to touch their own Mallet pickup. Grounding, landing,
+health, checkpoint and network-coherence checks remain required.
+
+Build `d4869cdf7f939ddeab026e4c5613e57ef8855e02fa44fe9d5ccc6b71bf40f3aa`
+passes 756 Rust tests (one existing ignored), the release build and
+`--coop-world-check`. Logs: `private/coop-neighbors-{all-tests,release,world}.log`.
+The new placement test covers a broad floor, a narrow platform, walls, hazards
+and a lower floor that must not qualify as the same landing.
+
+The delayed public two-client school repeat
+`private/coop/school-resume-378c70871dd14f6f9af3636ebd9eebd8` verifies both
+directions of the Mallet stairs and both personal pickups, with no deaths,
+checkpoint reset or cinematic warp. All 1,708 matching sent/restored states
+and 13 coincident full school reports agree. Both finish that partial attempt
+at 97/100 Sanity. It then fails the second balcony jump from the offset waiting
+spot; this is retained as a failed route, not campaign completion. Subsequent
+fixture work uses the intended run-up for each jumper and the wider balcony
+as the first player's waiting area. The full route remains open.
+
+The balcony correction passes in the subsequent Anode run
+`private/coop/school-resume-5e37391b2d0348c28ea9350c75f589de`, using the unchanged
+normal menu checkpoint saved at tick 36,452 in the preceding `86c39c0c...` run.
+Both jump landings and the first library approach pass; host/guest landing
+captures were inspected. The guest now aims at the actual upper landing rather
+than the old offset target over the lower slope. This attempt was stopped later
+when enemy knockback moved the leader into the partner's waiting destination;
+3,102 matching states and five coincident full reports agree, with both alive
+at 83/100 Sanity. The fixture now clears nearby enemies before choosing these
+destinations. This remains partial traversal evidence, with no new campaign credit.

@@ -67,6 +67,68 @@ class SchoolPair(PandemoniumPair):
     def reached(self,role):
         return super().reached(role) and self.bodies(role)[0 if role == 'host' else 1]['player']['grounded']
 
+    def move_aside(self,role):
+        index = 0 if role == 'host' else 1
+        anchor = self.bodies()[index]['player']['feet']
+        incoming = self.bodies()[1-index]['player']['feet']
+        candidates = self.reports['host']['route_driver']['neighbors'][index]
+        assert candidates, f'No supported waiting spot near {anchor}'
+        # Prefer stepping sideways so the other player can pass in either
+        # direction, including when returning from a personal pickup.
+        approach = [anchor[i]-incoming[i] for i in range(2)]
+        endpoint = max(candidates,key=lambda p:(abs(
+            (p[0]-anchor[0])*approach[1]-(p[1]-anchor[1])*approach[0]),distance(p,incoming)))
+        self.evidence.setdefault('waiting_spots',[]).append(dict(role=role,anchor=anchor,goal=endpoint,
+            tick=self.reports['host']['frame']['tick']))
+        self.set(role,endpoint)
+        self.until(lambda:self.reached(role),15)
+        self.set(role)
+        self.wait(.4)
+        assert abs(self.bodies()[index]['player']['feet'][2]-endpoint[2]) < 2
+
+    def go(self,goal=None,navigate=False,marker=None,horizontal=False,together=False):
+        assert not together and marker is None, 'School paired endpoints require an explicit ordinary route goal'
+        if self.arrived():
+            return
+        self.set(self.partner)
+        self.set(self.first,goal,navigate,horizontal=horizontal)
+        self.until(lambda: self.arrived() or self.reached(self.first))
+        if self.arrived():
+            return
+        # Freeze the leader before choosing a second supported endpoint. Both
+        # clients still walk normally, with unchanged collision and landing rules.
+        self.set(self.first)
+        self.wait(.4)
+        # An enemy hit can knock the leader into the partner's chosen slot.
+        # Finish the nearby encounter before measuring the waiting positions.
+        self.secure()
+        first_index = 0 if self.first == 'host' else 1
+        partner_index = 1-first_index
+        anchor = self.bodies()[first_index]['player']['feet']
+        start = self.bodies()[partner_index]['player']['feet']
+        candidates = self.reports['host']['route_driver']['neighbors'][first_index]
+        assert candidates, f'No supported paired endpoint near {anchor}; route must move the leader onward'
+        endpoint = min(candidates,key=lambda p: distance(p,start))
+        assert 47.9 <= distance(endpoint[:2],anchor[:2]) <= 48.1 and abs(endpoint[2]-anchor[2]) <= 18.1
+        self.evidence.setdefault('paired_endpoints',[]).append(dict(goal=goal,leader=self.first,
+            anchor=anchor,partner_goal=endpoint,tick=self.reports['host']['frame']['tick']))
+        self.set(self.partner,endpoint,navigate,horizontal=False)
+        self.until(lambda: self.arrived() or self.reached(self.partner))
+        if self.arrived():
+            return
+        # Navigation's ordinary broad arrival is followed by a precise walk on
+        # this checked landing, so the partner cannot stop on the wrong stair.
+        self.set(self.partner,endpoint,horizontal=False)
+        self.until(lambda: self.reached(self.partner))
+        self.set(self.partner)
+        self.wait(.4)
+        for report in self.reports.values():
+            bodies = report['frame']['players']
+            assert bodies[partner_index]['player']['grounded']
+            assert distance(bodies[partner_index]['player']['feet'][:2],endpoint[:2]) < 8
+            assert abs(bodies[partner_index]['player']['feet'][2]-endpoint[2]) < 2
+        print('PASS paired school leg',goal,'partner',endpoint,flush=True)
+
     def until(self,predicate,seconds=120):
         end = time.monotonic()+seconds
         while not predicate():
@@ -95,6 +157,25 @@ class SchoolPair(PandemoniumPair):
         for goal,navigate in goals:
             self.go(goal,navigate)
             self.secure()
+
+    def passage(self,goals):
+        # Narrow stairs have no same-height waiting spot at each bend. Let one
+        # player finish the passage and step aside before the other follows
+        # exactly the same ordinary route. Never skip the intermediate stops.
+        for role in (self.first,self.partner):
+            other = 'guest' if role == 'host' else 'host'
+            self.set(other)
+            for goal,navigate in goals:
+                self.set(role,goal,navigate)
+                self.until(lambda:self.reached(role))
+                self.set(role)
+                self.secure()
+                self.evidence.setdefault('passage_stops',[]).append(dict(role=role,goal=goal,
+                    feet=self.bodies()[0 if role == 'host' else 1]['player']['feet'],
+                    tick=self.reports['host']['frame']['tick']))
+            if role == self.first:
+                self.move_aside(role)
+        print('PASS school passage',goals,flush=True)
 
     def lift(self,name,first_goal,second_goal,top):
         def obj(role='host'):
@@ -183,8 +264,9 @@ class SchoolPair(PandemoniumPair):
         # Stop on the lower stair before the short jump to the altar platform.
         # Walk down its centre: a broad navigation stop can leave running
         # momentum carrying the delayed guest off the side of the stairs.
-        self.legs([((-2304,2800,-256),False),((-2304,2624,-342),False),((-2304,2544,-352),False),
-                   ((-2272,2464,-256),True)])
+        self.go((-2304,2800,-256))
+        self.passage([((-2304,2624,-342),False),((-2304,2544,-352),False),
+                      ((-2272,2464,-256),True)])
 
     def checkpoint_stop(self,label):
         if label not in getattr(self.args,'checkpoint_stops',[]):
@@ -201,9 +283,15 @@ class SchoolPair(PandemoniumPair):
         # A short running approach followed by feedback steering is less brittle
         # than replaying a timed sequence of sideways inputs across this gap.
         for role in (self.first,self.partner):
-            # The delayed guest aims farther back while braking; its pending
-            # southward inputs still carry it toward the centre of the shelf.
-            goal = (-1664,3040 if role == 'host' else 3072,-256)
+            # Waiting beside the partner can put Alice on the adjacent sloping
+            # stair. Each jumper must first walk to the authored run-up point.
+            self.set(role,(-1664,3248,-256))
+            self.until(lambda:self.reached(role),20)
+            self.wait(.4)
+            # Both aim at the actual upper landing. The old guest-only target
+            # at y=3072 is over the lower slope, so anticipatory steering can
+            # stop there before reaching the balcony.
+            goal = (-1664,3040,-256)
             index = 0 if role == 'host' else 1
             jumps = self.bodies()[index]['player']['jumps']
             self.set(role,goal,run=True,jump=True,runup=dict(millis=200,wish=[0,-1]))
@@ -228,6 +316,14 @@ class SchoolPair(PandemoniumPair):
             self.set(role)
             self.wait(.5)
             assert landed(), f'{role}: did not remain on the balcony landing'
+            if role == self.first:
+                # This landing is too narrow for a supported sideways step.
+                # Continue along the ordinary route to the wider balcony.
+                waiting = copy.deepcopy(self.bodies()[1-index]['player']['feet'])
+                self.set(role,(-1480,3008,-256),navigate=True)
+                self.until(lambda:self.reached(role),30)
+                self.wait(.4)
+                assert self.bodies()[1-index]['player']['feet'] == waiting, 'Balcony waiting player moved'
         self.capture_pair('balcony-gap')
         self.secure()
 
@@ -238,6 +334,10 @@ class SchoolPair(PandemoniumPair):
         drops = self.bodies()[0]['stats']['loot']['skool1$first']['drops']
         reward = next(d for d in drops if d['id'] == 3000019)
         self.go(reward['origin'])
+        self.move_aside(self.first)
+        self.set(self.partner,reward['origin'])
+        self.until(lambda:self.reached(self.partner),20)
+        self.wait(.4)
         self.capture_pair('theatre-earned-healing')
 
     def theatre(self,upstairs=True):
@@ -273,9 +373,18 @@ class SchoolPair(PandemoniumPair):
         self.mallet_landing()
         # The essence beside the Mallet belongs to the return visit; the first
         # visit uses the fresh theatre reward above for ordinary healing.
-        self.legs([((-2274,2334,-256),False),((-2272,2440,-256),False),
-                   ((-2304,2544,-352),True),((-2304,2624,-342),True),((-2304,2800,-256),True),
-                   ((-2304,3248,-256),False),((-1664,3248,-256),False)])
+        self.go((-2274,2334,-256))
+        self.secure()
+        self.move_aside(self.first)
+        self.set(self.partner,(-2274,2334,-256))
+        self.until(lambda:self.reached(self.partner),20)
+        self.wait(.4)
+        assert all('skool1:78' in b['stats']['collected'] for b in self.bodies()), 'Both players must collect their own Mallet'
+        self.go((-2272,2440,-256))
+        self.passage([((-2304,2544,-352),True),((-2304,2624,-342),True),((-2304,2800,-256),True)])
+        # The far end is a narrow run-up, so each player approaches it only
+        # when it is their turn to jump in balcony_gap().
+        self.go((-2304,3248,-256))
         self.checkpoint_stop('balcony')
         self.balcony_gap()
         self.library_route()
@@ -329,6 +438,8 @@ class SchoolPair(PandemoniumPair):
             self.set(role)
             self.wait(.5)
             assert landed(), f'{role}: left the upper library landing'
+            if role == self.first:
+                self.move_aside(role)
         self.capture_pair('upper-library-gap')
 
     def book_jump(self,approach,goal):
@@ -347,6 +458,8 @@ class SchoolPair(PandemoniumPair):
             self.set(role)
             self.wait(.5)
             assert landed(), f'{role}: left the book after landing'
+            if role == self.first:
+                self.move_aside(role)
         self.capture_pair('book-landing-'+str(goal[1]))
 
     def book_bridge(self):
