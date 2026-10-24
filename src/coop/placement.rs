@@ -6,10 +6,17 @@ use crate::{
 };
 use macroquad::prelude::*;
 
-/// Entrance markers may be above their playable landing. Only arrival may
-/// search that far down; an ordinary revival must remain near the survivor.
+/// Entrance markers may be above their playable landing. An ordinary revival
+/// uses the narrower search instead, to remain near the survivor.
 pub fn entrance(world: &World, feet: Vec3, safe: impl Fn(Vec3) -> bool) -> Option<Player> {
     near(world, feet, 256., safe)
+}
+
+/// A completed scene can restore Alice at the airborne point where it started.
+/// Place the partner on nearby supported ground so ordinary gravity can resume
+/// for the owner. This wider search must not change revival placement rules.
+pub fn reunion(world: &World, owner: &Player, safe: impl Fn(Vec3) -> bool) -> Option<Player> {
+    near(world, owner.feet, if owner.grounded { 32. } else { 256. }, safe)
 }
 
 pub fn near(world: &World, feet: Vec3, drop: f32, safe: impl Fn(Vec3) -> bool) -> Option<Player> {
@@ -98,6 +105,27 @@ fn supported(world: &World, feet: Vec3) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn airborne_scene_reunion_can_finish_without_widening_ordinary_revival() {
+        let world = World::fixture(&[(vec3(-500., -500., -100.), vec3(500., 500., 0.))]);
+        let airborne = Player::new(Vec3::Z * 46.67);
+        assert!(near(&world, airborne.feet, 32., |_| true).is_none());
+        let partner = reunion(&world, &airborne, |_| true).unwrap();
+        assert!(partner.grounded && partner.feet.z.abs() < 0.1);
+        assert!((partner.feet.truncate().length()-48.).abs() < 0.1);
+        assert!(reunion(&world, &airborne, |_| false).is_none());
+        assert!(reunion(&world, &Player::new(Vec3::Z * 300.), |_| true).is_none());
+        let narrow = World::fixture(&[(vec3(-500., -12., -100.), vec3(500., 12., 0.))]);
+        assert!(reunion(&narrow, &airborne, |_| true).is_none());
+        let ledge = World::fixture(&[
+            (vec3(-500.,-500.,-200.),vec3(500.,500.,-100.)),
+            (vec3(-20.,-20.,-100.),vec3(20.,20.,0.)),
+        ]);
+        let standing = Player::spawn(&ledge, Vec3::Z * (EYE_HEIGHT+0.04)).unwrap();
+        assert!(standing.grounded);
+        assert!(reunion(&ledge, &standing, |_| true).is_none(),
+            "A grounded owner's partner must not be moved to a lower floor");
+    }
     #[test]
     fn swimmer_revives_at_the_same_depth_with_fresh_air_but_never_in_harmful_liquid() {
         use crate::collision::{Collider, Liquid as Volume};

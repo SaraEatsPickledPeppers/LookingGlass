@@ -2,7 +2,7 @@
 use super::{
     arena::direction,
     protocol::{Input, Visit},
-    world::{self, Body, Roster},
+    world::{Body, Roster},
     PlayerId,
 };
 use crate::{
@@ -405,7 +405,7 @@ impl Stage {
             let partner = owner.partner();
             if roster.players[partner.index()].stats.alive() {
                 let Some(player) =
-                    world::safe_near_with(world, roster.players[owner.index()].player.feet, |at| {
+                    super::placement::reunion(world, &roster.players[owner.index()].player, |at| {
                         !self.interactions.hazardous(at)
                             && self.interactions.beyond.as_ref().is_none_or(|b| b.reunion_safe(at))
                     })
@@ -763,6 +763,30 @@ pub fn check(assets: &mut Assets) -> Result<()> {
         println!(
             "PASS co-op theatre wipe {first:?}: shared world/story/contact checkpoint restored"
         );
+        // Regression: the recipe scene may be entered during a jump and gives
+        // control back at that same airborne position. A revival-sized search
+        // cannot reach its floor, and waiting while freezing gravity deadlocks.
+        let airborne = vec3(203.63718, 2444.5977, 742.67017);
+        ensure!(world.body_clear(airborne), "Airborne recipe contact is obstructed");
+        ensure!(super::world::safe_near_with(&world, airborne, |_| true).is_none(),
+            "Airborne regression no longer exercises the narrow revival search");
+        roster.players[first.index()].player = Player::new(airborne);
+        let health = roster.players.each_ref().map(|b| b.stats.sanity());
+        stage.owner = Some(first);
+        stage.last_owner = first;
+        stage.scene_step(&mut roster, &map, &mut world, &Default::default())?;
+        ensure!(!stage.busy() && roster.players[first.index()].player.feet == airborne,
+            "Finished airborne scene did not release ordinary owner movement");
+        let other = &roster.players[first.partner().index()].player;
+        ensure!(other.grounded && (other.feet.z-696.).abs() < 1.
+            && !stage.interactions.hazardous(other.feet), "Airborne reunion did not find the recipe floor");
+        ensure!(roster.players.iter().all(|b| b.warped_at == roster.tick),
+            "Airborne reunion did not cut both presentation tracks");
+        for _ in 0..120 { roster.move_players(&world, Default::default()); }
+        ensure!(roster.players[first.index()].player.grounded
+            && roster.players.each_ref().map(|b| b.stats.sanity()) == health,
+            "Recipe owner did not land normally after reunion");
+        println!("PASS co-op airborne recipe handoff {first:?}: partner on safe floor, owner gravity resumes, no health grant or damage");
     }
     Ok(())
 }

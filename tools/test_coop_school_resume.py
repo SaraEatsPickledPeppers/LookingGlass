@@ -33,6 +33,42 @@ class SchoolResume(SchoolPair):
         (self.folder/'resume-fixture-source.py').write_bytes(source)
         self.evidence['resume_fixture_sha256'] = hashlib.sha256(source).hexdigest()
 
+    def verify_segment(self):
+        expected = {'Book_Ingredients_Exit'}
+        if self.args.resume_point != 'descent':
+            expected.add('book_cinematic')
+        if self.args.resume_point == 'balcony':
+            expected.update(('shelf_cinematic','Skool1_Book_Win'))
+        assert self.captures == expected, self.captures
+        for role,rows in self.history.items():
+            visit = [r for r in rows if r['epoch'] == 1]
+            owners = {scene:{r['owner'] for r in visit if r['scene'] == scene} for scene in expected}
+            assert all(ids == {self.args.first.title()} for ids in owners.values()), owners
+            assert all(r['checkpoint_generation'] == self.saved['frame']['checkpoint_generation']
+                       for r in visit), 'Segment silently restored a checkpoint'
+            assert all(b['spawned_at'] == old['spawned_at'] and b['health'] > 0
+                       for r in visit for b,old in zip(r['players'],self.saved['frame']['players'])), \
+                'Segment silently died or respawned'
+            reunions,airborne = set(),[]
+            for old,row in zip(visit,visit[1:]):
+                if old['owner'] is not None and row['owner'] == old['owner']:
+                    partner = 1 if row['owner'] == 'Blue' else 0
+                    assert row['players'][partner]['feet'] == old['players'][partner]['feet'], \
+                        'Partner moved during school scene'
+                if old['owner'] is not None and row['owner'] is None:
+                    a,b = row['players']
+                    assert a['warped_at'] == b['warped_at'] > 0
+                    assert distance(a['feet'],b['feet']) <= 110+max(0,row['tick']-a['warped_at'])*640/120
+                    reunions.add(a['warped_at'])
+                    owner = 0 if old['owner'] == 'Blue' else 1
+                    if not old['players'][owner]['grounded']:
+                        airborne.append(dict(owner=old['owner'],tick=a['warped_at'],
+                                             original_feet=old['players'][owner]['feet']))
+            assert self.reports[role]['visit']['entry'] == 'skool2_start1'
+            self.evidence[role] = dict(owners={s:sorted(ids) for s,ids in owners.items()},
+                                      reunions=sorted(reunions),airborne_handoffs=airborne)
+        self.verify_coherence()
+
     def run(self):
         self.start_pair()
         self.wait(.5)
@@ -56,7 +92,7 @@ class SchoolResume(SchoolPair):
         else:
             self.descent()
         assert self.arrived()
-        self.verify_coherence()
+        self.verify_segment()
         self.finish_pair(2)
         (self.folder/'result.json').write_text(json.dumps(dict(passed=True,build=self.build,
             internet=not self.args.local,first=self.args.first,delay_ms=self.args.delay_ms,

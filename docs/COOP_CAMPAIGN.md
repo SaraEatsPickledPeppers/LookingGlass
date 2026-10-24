@@ -451,8 +451,38 @@ The opt-in local route controller now accepts a bounded analogue input speed cap
 for the next book-jump repeat. This does not change player physics or network
 authority. Build `bd57c4843ded26e3102c046a2f3f0c3e485a5006e11e4160623f6a033d08e285`
 passes 746 Rust tests (one existing ignored test) and the optimized build. Its
-new book sequence still requires rendered verification; the campaign count is
-unchanged.
+new book sequence passes all three gaps for both players in
+`private/coop/school-resume-4d348a4e85d942dd85073256e2b80164/`, with Blue/Red
+Sanity unchanged at 82/76. The third and fourth book landings were visually
+inspected. All 9,321 comparable network states and 270 coincident full school
+reports match. This run exposes a game bug after the recipe scene: Red entered
+while airborne, 46.67 units above the floor. The finished scene's 32-unit partner
+placement search could not find that floor, but holding the scene also froze
+Red's gravity, leaving both players stuck. The run times out and remains a
+failure, with no descent, exit or full-route credit.
+
+An unchanged host-menu checkpoint before the bridge is retained from that run:
+tick 73,578, Blue/Red Sanity 82/76, SHA-256
+`d271632b9cde459d80998e315bc03f22974ac2c8d3997b396e318576aeeb7324`.
+It allows the airborne scene handoff and remaining descent to be repeated through
+the normal resume path without editing either player's state.
+
+Build `7f7637c10d8dd0cdea57cdfbe3369145fe3e96dbe39664a1adbb576379fd3c51`
+fixes that handoff: when the scene owner is airborne, partner placement may search
+up to 256 units down for a supported, unobstructed, non-hazardous landing. A
+grounded owner's reunion and ordinary death respawns keep the 32-unit limit.
+All 747 Rust tests pass (one existing ignored test), as do the optimized build
+and native co-op world check, including the actual recipe platform with both
+owners. The resumed bridge-to-exit internet run passes in
+`private/coop/school-resume-e9785d16088944ac80929212f68b3227/`: Red's airborne
+handoff releases at tick 79,695, the fresh guest rejoins at 80,462/80,543, both
+reach the lower shelf and enter `skool2_start1` alive at 59/53 Sanity. Both scenes
+belong to Red; the waiting partner stays frozen; no death, respawn or checkpoint
+rollback occurs. The completed-history audit finds 2,134 matching network states
+and 49 coincident full school reports. The reunion, lower landing, exit scene and
+next-level view were inspected. This is a resumed segment, not a full-route pass.
+The resume fixture now checks scene ownership, frozen partners, common reunion
+ticks and absence of silent death/checkpoint recovery as well as coherence.
 
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |

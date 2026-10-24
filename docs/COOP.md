@@ -1930,6 +1930,14 @@ positions, personal resources and school progress. It records the checkpoint's
 SHA-256 and source tick. It never edits health, positions or world state, and a
 successful segment does not count as a full entrance-to-exit campaign pass.
 
+The bridge-to-exit repeat now passes over the public internet with 40 ms delay
+and 20 ms jitter per sender, including a fresh guest reconnect. It exposed and
+verified a fix for entering the recipe scene while airborne: after the scene,
+the partner can land on safe nearby ground and the owner resumes normal gravity.
+Grounded reunions and ordinary death respawns keep their narrower placement rule.
+Both players survive the lower shelf descent and reach the next school entrance.
+See `COOP_CAMPAIGN.md` for the build, evidence and remaining full-route checks.
+
 ## Reproducing transport checks
 
 Build with `cargo build --locked`, then run:
