@@ -1592,8 +1592,115 @@ corridor probe passes on the same `7eec625b` build in
 both traverse all flipping-platform gaps and take the authored portal, with
 1,709 matching sent/restored states under 40/20 ms delay/jitter. Both rendered
 portal views show 100 Sanity and were inspected. This initial placement is
-staged. The final full route, revised combat stops and final shuffled-door exit
-still need an uninterrupted normal-entrance run; no full-route pass is claimed.
+staged. The subsequent normal-entrance traversal below covers the revised
+combat stops and final shuffled-door exit.
+
+The Blue-leading normal-entrance run on the same build reaches the authored
+`fortress1_start2` return with both players alive in
+`private/coop/beyond-route-3ea9b2df6c034cffb7c1b83a3df0ccc9/`.
+It has 7,722 matching sent/restored states, all three Blue-owned route scenes,
+frozen partners and safe reunions, a solved musical puzzle, walkway stage nine,
+the correct final door and no respawns. Minimum Sanity is Blue 96 / Red 98;
+both arrive in Fortress at 100. The original harness exits with an error after
+the actual traversal: it scheduled its Beyond reconnect check after crossing
+the outgoing trigger, then looked for Beyond state in the Fortress visit.
+The retained observations pass the extracted `verify_route()` validator in
+`audited-route-result.json`; `audited-post-transition-rejoin.json` independently
+checks the actual fresh guest's preserved Fortress placement and resources.
+This is audited traversal evidence, not a claim that the original harness
+exited successfully. The fixture now reconnects at the safe pre-exit landing.
+
+The corrected Red-leading full route exits successfully in
+`private/coop/beyond-route-26dba8d47c88465abb0ab7cc4a1eb6bd/`, on the same build
+and 40/20 ms public connection. All three scenes belong to Red, all reunions
+and traversal invariants pass, and 7,885 sent/restored states match. A second
+guest process joins at the safe pre-exit landing with personal resources,
+placements and completed puzzles intact. Both reach `fortress1_start2` at
+100 Sanity. The rendered guest stair/upper-door/return views were inspected,
+including a live Anode observation. The host return capture is orange and
+obscures the scene despite valid placement; the route assertions alone did not
+detect it. The scoped camera correction and rendered repeat are recorded below.
+
+The separate public combat check passes on `7eec625b` in
+`private/coop/beyond-combat-04edc0990c244e69995a04acf6a9d34f/`.
+The hallway guard chooses nearer visible Red, then nearer visible Blue. Each
+checked hit removes 12 Sanity from its target without hurting the other player.
+Both collect their own earned healing drop after ordinary Blade combat: Blue
+heals 76 to 91 while Red stays at 88; Red then heals to 100 while Blue stays at
+91. There are 505 matching actual sent/restored states and nine coincident full
+enemy/player reports. Both target views and the final personal pickup view
+were inspected. Reproduce with `tools/test_coop_beyond_combat.py --data <base>`.
+
+Both combat deaths and the shared wipe pass on the same build/settings in
+`private/coop/beyond-recovery-6ca7a13ffb634602bc613cff7d893097/`.
+Red dies at tick 3,660 and returns at 4,860; Blue dies at 8,492 and returns at
+9,692. Each spectates the moving survivor for exactly 1,200 ticks, returns at
+25 Sanity about 48 units away, and preserves inventory. A subsequent team wipe
+at tick 13,015 restores the actual earlier checkpoint's personal resources,
+placement, enemy state and Beyond machinery. There are 1,943 matching
+sent/restored states and 89 coincident full enemy/player reports. Spectator,
+respawn and checkpoint views were inspected. Both fixtures use normal-entrance
+movement and actual enemy damage; neither injects health or world state.
+Reproduce recovery with `tools/test_coop_beyond_recovery.py --data <base>`.
+
+The focused passenger probes in `tools/test_coop_beyond_transports.py` use the
+same public connection and delay/jitter. `--probe rage` walks from the normal
+entrance; `--probe bridge` explicitly stages only the initial bridge approach.
+Both accept `--first blue` or `--first red`, and neither claims a full route.
+On `7eec625b`, Rage passes with Red first in
+`private/coop/beyond-rage-ffb2d9ac54324e4ca8b926673385d316/` (956 matching states)
+and Blue first in `private/coop/beyond-rage-fdfee62536404a0d97d6c2633a33f0e6/`
+(965). The first player waits for the partner, owns the original scene, then
+both descend 48 units together. The other player collects an independent Rage
+copy with an ordinary jump; the scene runs once. These state assertions pass,
+but inspecting the middle of the scene revealed that its owning Alice was
+hidden: the generic co-op cinematic drawing rule hid both gameplay bodies.
+The renderer now draws the owner's existing authoritative Rage pose while
+keeping the other player hidden. Other cinematic actor drawing is unchanged.
+The corrected `cf86b004` public repeats pass with Red first in
+`private/coop/beyond-rage-7d58e582d71842dfaae8f083f4998a27/` (936 matching states)
+and Blue first in `private/coop/beyond-rage-ca85ba3508fb4818846294edf437d0a2/`
+(960). Both clients' middle-scene views were inspected in each run: exactly the
+owning Alice is visible in the original transformation pose, with the correct
+clothing. All boarding, frozen-partner, descent and independent-copy assertions
+also pass on this final build.
+
+The bridge waits for a trailing player, shows the boarding notice, and then
+advances once with both safely aboard in both orders. Red's run is
+`private/coop/beyond-bridge-5cd7763586a34c51919d81c6feec49c6/` on `7eec625b`
+(156 matching states). Blue's run is
+`private/coop/beyond-bridge-07f7c0ef71a64c2aa9a796aeade41fbb/` on
+`cf86b00492db900ea0f523d75c5bde56c763f11e7890fb1ef74775f1a0c1ad24`
+(170). Waiting/boarding views were inspected. Initial probe failures remain
+retained: a broad navigation plan could not reach the Rage lift, a walking
+approach stopped at its raised lip, and the bridge's combat wait could not
+reach a distant enemy across the gap. The final probe uses ordinary approach
+points/jumps and keeps real combat active. A Blue bridge setup also started
+its partner already on a safe tile; both orders now place the trailing role
+on the same rear approach before checking the barrier.
+
+The `cf86b004` build also fixes the obscured Fortress return view. Blue's camera
+was inside the visible `portal_back1` volume, which had no camera collider.
+That visible portal now blocks cameras without becoming a player obstacle or
+changing save state. An independent real-geometry regression checks both
+entrance positions at 30/60/144 Hz in `--fortress-cinematic-check`.
+The original local two-client reproduction is
+`private/coop/fortress-return-camera-0d47b1f15b4e4c0081c7f68b5679dddc/`;
+the fixed repeat is `fortress-return-camera-579dd23381c84f05aa0c6937d36aec74/`.
+Both fixed entrance views were inspected and are clear while stationary.
+The existing watched/skipped/paused/resumed/legacy-save Fortress scene checks
+and both native co-op Fortress/Beyond adapter suites also pass. Evidence:
+`private/coop-fortress-camera-check7.log`, `private/coop-fortress-adapter-check7.log`
+and `private/coop-beyond-adapter-check7.log`.
+
+Final build `cf86b004` passes all 745 Rust tests (one existing ignored test),
+debug/release builds and all seven source-package tests. The rendered clients
+match the independently calculated source identity. Validation logs are
+`private/coop-beyond-validation-tests7.log`, `private/coop-beyond-validation-build7.log`,
+`private/coop-beyond-validation-release7.log`, `private/coop-beyond-source-tests7.log`
+and `private/coop-beyond-source-identity7.json`. The source-only worktree audit
+passes 765 files. No private captures, saves, game data or invite links are
+included in the contribution.
 
 Validation for this source build: 745 Rust tests pass with one existing ignored
 test, both debug and release builds succeed, and all seven source-package tests
@@ -1602,9 +1709,11 @@ probe. Evidence: `private/coop-beyond-route-tests5.log`,
 `private/coop-beyond-route-build5.log`, `private/coop-beyond-route-release5.log`,
 `private/coop-beyond-source-tests4.log` and `private/coop-beyond-source-identity5.json`.
 
-Internet joining and 40/20 ms delay/jitter are the defaults. Full routes in both
-orders, combat/resource checks, death/wipe and remaining rendered transport
-checks are still required for this campaign row. Overall credit remains 41%.
+Internet joining and 40/20 ms delay/jitter are the defaults. Both full traversal
+orders, combat/resources and death/wipe now have the evidence above. The
+cycling elevator's rendered/network probe is still open; its native checks
+alone do not complete the row.
+Overall credit remains 41%.
 
 ## Reproducing transport checks
 

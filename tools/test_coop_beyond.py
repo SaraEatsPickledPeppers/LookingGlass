@@ -259,15 +259,17 @@ class BeyondPair(PandemoniumPair):
             state = self.beyond()
             return state['last_started'] is not None and state['age'] - state['last_started'] >= [15,12.8,8.5][state['last_cycle']]
         self.until(doors_ready, 45)
-        for goal in [(-544,4200,384),(-544,4070,384),(-544,3950,384),(-536,3820,384)]:
+        for goal in [(-544,4200,384),(-544,4070,384)]:
             self.go(goal,True)
         if self.args.rejoin:
             self.rejoin_guest()
-        self.set(self.first,(-536,3500,384),horizontal=True,run=True)
+        self.go((-544,3950,384),True)
+        self.set(self.first,(-536,3820,384),horizontal=True,run=True)
         self.until(self.arrived, 30)
 
     def verify_rejoined_world(self, before, report):
         old, now = (r['combat']['stage']['world']['beyond'] for r in (before,report))
+        assert old is not None and now is not None, 'Reconnect fixture must stop before leaving Beyond'
         for field in ['solved','notes','walkway','last_open']:
             assert old[field] == now[field], f'Rejoin changed {field}'
 
@@ -292,6 +294,15 @@ class BeyondPair(PandemoniumPair):
         for section in ['hall','corridor','puzzle','walkway','arches','finish_route']:
             self.section = section
             getattr(self,section)()
+        self.verify_route()
+        self.finish_pair(2)
+        (self.folder/'result.json').write_text(json.dumps(dict(passed=True,internet=not self.args.local,
+            build=self.build,first=self.args.first,delay_ms=self.args.delay_ms,jitter_ms=self.args.jitter_ms,
+            scope='Beyond normal-entrance traversal in two clients; recovery matrix remains separate',evidence=self.evidence),indent=2))
+        print('PASS Beyond entrance to Fortress return in two clients.',flush=True)
+
+    def verify_route(self):
+        """Validate live or retained observations without changing game state."""
         self.verify_network_states()
         assert all(r['visit']['entry'] == 'fortress1_start2' for r in self.reports.values())
         assert all(b['spawned_at'] == 0 for rows in self.history.values() for r in rows for b in r['players']), 'Route respawned a player'
@@ -313,11 +324,6 @@ class BeyondPair(PandemoniumPair):
             assert owners == {scene:{self.args.first.title()} for scene in expected}, owners
             assert any(r['beyond'] and r['beyond']['solved'] and r['beyond']['walkway'] == 9 and r['beyond']['last_open'] for r in rows)
             self.evidence[role] = {'scene_owners':{name:sorted(ids) for name,ids in owners.items()}}
-        self.finish_pair(2)
-        (self.folder/'result.json').write_text(json.dumps(dict(passed=True,internet=not self.args.local,
-            build=self.build,first=self.args.first,delay_ms=self.args.delay_ms,jitter_ms=self.args.jitter_ms,
-            scope='Beyond normal-entrance traversal in two clients; recovery matrix remains separate',evidence=self.evidence),indent=2))
-        print('PASS Beyond entrance to Fortress return in two clients.',flush=True)
 
 
 if __name__ == '__main__':

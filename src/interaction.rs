@@ -983,7 +983,8 @@ impl Interactions {
         }
     }
     pub fn sync(&self, world: &mut World) {
-        world.set_camera_obstacles(self.levels.iter().flat_map(|s| s.ctl.camera_colliders()).collect());
+        world.set_camera_obstacles(self.levels.iter().flat_map(|s| s.ctl.camera_colliders())
+            .chain(self.fortress.iter().flat_map(|f| f.camera_colliders())).collect());
         world.set_settled_supports(self.levels.iter().flat_map(|s| s.ctl.settled_supports()).collect());
         world
             .traversal

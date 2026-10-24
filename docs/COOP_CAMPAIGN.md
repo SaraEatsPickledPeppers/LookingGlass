@@ -239,15 +239,63 @@ Its initial placement is staged before the corridor trigger. Subsequent full
 repeats have not reached the exit: one stops at lever range, one at a Boojum
 knockback on the spiral stairs, and one at a later corridor navigation gap.
 The harness now uses precise lever approaches, broader combat waits and explicit
-corridor jumps. A final normal-entrance pass, Red-leading repeat, combat/personal
-resource checks, recovery matrix and remaining rendered transports are open.
+corridor jumps. The subsequent Blue-leading run reaches the actual Fortress
+return in `private/coop/beyond-route-3ea9b2df6c034cffb7c1b83a3df0ccc9/` on
+`7eec625b`: all three Blue-owned scenes, frozen partners, safe reunions, puzzle,
+walkway, final door and 7,722 matching sent/restored states pass without respawns.
+The original harness fails after successful travel because its reconnect check
+still expects Beyond state. The retained route passes the same extracted route
+validator (`audited-route-result.json`); the separate post-transition reconnect
+audit also passes. The fixture now reconnects before the outgoing trigger.
+
+Combat and individual earned healing pass on that build under 40/20 ms public
+delay/jitter in `private/coop/beyond-combat-04edc0990c244e69995a04acf6a9d34f/`.
+The guard selects nearer visible Red and then Blue, damages only each target,
+and both collect separate healing copies. All 505 compared sent/restored states
+and nine coincident full enemy/player reports match; target/pickup views were
+inspected. Both real combat deaths and the shared earlier-checkpoint wipe pass
+in `private/coop/beyond-recovery-6ca7a13ffb634602bc613cff7d893097/`: each role
+spectates for exactly 1,200 ticks and returns at 25 Sanity, 48 units from the
+survivor, with inventory preserved. The wipe restores personal resources,
+placement, enemies and machinery. All 1,943 compared sent/restored states and
+89 coincident full enemy/player reports match; recovery views were inspected.
+The corrected Red-leading full repeat passes on the same build/settings in
+`private/coop/beyond-route-26dba8d47c88465abb0ab7cc4a1eb6bd/`: all three Red-owned
+scenes, safe reunions, no respawns, 7,885 matching sent/restored states and a
+fresh guest reconnect before the exit. Both arrive at `fortress1_start2` at
+100 Sanity. Guest stair/upper-door/return views were inspected, including live
+Anode observation. Blue's obscured return capture exposed a missing camera
+collider on the visible return portal. Build `cf86b004` corrects that camera
+collision; the focused two-client repeat `fortress-return-camera-579dd23381c84f05aa0c6937d36aec74`
+has clear stationary entrance views. Both native body positions also pass at
+30/60/144 Hz, alongside the original Fortress cinematic/save regressions.
+
+Focused public transport checks pass Rage boarding, ownership, a single scene,
+paired 48-unit descent and individual power copies in both orders on `7eec625b`
+(`beyond-rage-ffb2d9ac54324e4ca8b926673385d316`, Red; `beyond-rage-fdfee62536404a0d97d6c2633a33f0e6`, Blue).
+They walk from the entrance and compare 956/965 sent/restored states. Their
+middle-scene captures exposed a hidden owner body; `cf86b004` now draws its
+authoritative Rage pose instead of hiding every gameplay body during a scene.
+Rolling-bridge waiting/boarding passes under 40/20 ms public delay/jitter with
+Red first (`beyond-bridge-5cd7763586a34c51919d81c6feec49c6`, `7eec625b`, 156 states)
+and Blue first (`beyond-bridge-07f7c0ef71a64c2aa9a796aeade41fbb`, `cf86b004`, 170).
+Those bridge probes stage the initial approach; both waiting/boarding views
+were inspected. Final `cf86b004` Rage repeats pass with Red first in
+`beyond-rage-7d58e582d71842dfaae8f083f4998a27` (936 matching states) and Blue first
+in `beyond-rage-ca85ba3508fb4818846294edf437d0a2` (960). Both clients' middle-scene
+views were inspected in each run: the owning Alice is visible with the correct
+clothing and transformation pose, and the partner is hidden. The final build
+passes 745 Rust tests, debug/release builds, seven source-package tests and
+the Fortress cinematic plus native Fortress/Beyond co-op regressions.
+Cycling-elevator rendered/network coverage remains open, so the full row is
+not yet passed.
 
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Passed (combined evidence above): both arrival orders, all scenes/reunions, nearest-visible guard damage in both roles, individual health/Blade pickups, matching encounter/player states, both death/spectator/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit; shared boarding N/A |
 | 2 | `pandemonium` | `Initial` | Passed (combined evidence above): native and delayed public routes in both orders, rope/cart, four scenes/three reunions, personal Cards/healing rewards, nearest-visible guard damage in both roles, full-route encounter/player comparison, both hazard death/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit |
 | 3 | `fortress1` | `Initial` | Passed (combined evidence above): both delayed public route orders, original scene/reunion, independent portals, paired split supports, upper jumps and exit, fresh guest rejoin, nearest-visible Boojum selection/damage in both roles, separate healing, coherent enemies, both combat death/spectator/respawn roles and saved-checkpoint wipe; shared boarding N/A |
-| 4 | `fortress2` | `Initial` | Partial: native lift/boarding, levers and Rage scene/personal pickups; staged public musical notes/reset/rejoin with audio; normal-entrance traversal through corridor, puzzle, rolling bridge and arch step 11; separate delayed public corridor and complete moving-stair probes. Full routes, combat/recovery and remaining rendered/network verification are open |
+| 4 | `fortress2` | `Initial` | Partial: full traversal in both orders (Blue audited, Red clean exit), fresh guest rejoin before exit; both Rage boarding/descent and bridge waiting orders; notes/reset/rejoin with audio; nearest-visible guard damage and separate healing; both combat death/spectator/respawn roles and saved-checkpoint wipe; fixed return camera and visible Rage owner. Cycling-elevator rendered/network coverage remains open |
 | 5 | `fortress1` | `fortress1_start2` | Not run |
 | 6 | `skool1` | `Initial` | Not run |
 | 7 | `skool2` | `Initial` | Not run |

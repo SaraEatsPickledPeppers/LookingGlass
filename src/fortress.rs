@@ -216,6 +216,13 @@ impl Fortress {
             .filter(|o| o.solid && self.visible(&o.name))
             .map(|o| o.collider.clone())
     }
+    /// The return portal is passable scenery, but the follow camera must stay
+    /// in front of its visible volume instead of filling the view with orange.
+    pub fn camera_colliders(&self) -> impl Iterator<Item = Collider> + '_ {
+        self.objects.iter()
+            .filter(|o| o.name == "portal_back1" && self.visible(&o.name))
+            .map(|o| o.collider.clone())
+    }
     pub fn trigger_pose(&self, name: &str, base: Vec3) -> Option<(Vec3, Quat)> {
         match name {
             "s1_changelevel" => Some(pose(name, base, &self.state)),

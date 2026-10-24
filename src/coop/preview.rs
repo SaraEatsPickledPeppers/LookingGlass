@@ -515,16 +515,23 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 scene.draw(camera_eye, frame.tick as f32 * FIXED_DT, false, false, &transforms);
                 level_art.story_pose(&arena.stage.story);
                 level_art.draw(&arena.stage.interactions, &arena.stage.hints, &scene.atmosphere, camera_eye, false);
+                // Rage uses the owning player's authoritative transformation
+                // pose, rather than a separate cinematic Alice in LevelArt.
+                let rage_actor = arena.stage.interactions.beyond.as_ref()
+                    .and_then(|b| b.rage_scene())
+                    .and_then(|(_, finished)| (!finished).then_some(arena.stage.speaker().index()));
                 for (index, (character, body)) in arena.characters.iter_mut().zip(&visual.players).enumerate() {
                     character.power_appearance(&body.stats);
                     character.water_appearance(&body.player);
                     character.atmosphere(&scene.atmosphere, camera_eye);
-                    let show_body = scripted.is_none() && (arena.stage.owner.is_none() || index == watched.index())
+                    let show_body = if scripted.is_some() { rage_actor == Some(index) } else {
+                        (arena.stage.owner.is_none() || index == watched.index())
                         && (index != watched.index() || show_local)
                         && camera_eye.distance(body.player.feet + Vec3::Z * 32.) > 48.
                         // Close partners can pass through one another in tight
                         // passages. Show the watched body instead of overlapping skins.
-                        && (index == watched.index() || body.player.feet.distance(watched_body.player.feet) > 24.);
+                        && (index == watched.index() || body.player.feet.distance(watched_body.player.feet) > 24.)
+                    };
                     if show_body {
                         character.draw_replica(body.player.feet, frame.players[index].player.feet, false);
                     }
