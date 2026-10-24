@@ -187,6 +187,13 @@ impl Interactions {
                 .collect::<Vec<_>>();
             school.advance_players(dt, map, world, players, &fixed)?;
         }
+        if let Some(gym) = &mut self.gym {
+            let fixed = self.doors.iter().filter(|d| d.enabled && self.event_world.enabled(d.id))
+                .map(|d| d.collider.clone())
+                .chain(self.school2.iter().flat_map(|s| s.colliders())).collect::<Vec<_>>();
+            let clock = if self.school2.as_ref().is_some_and(|s| s.hold_bleachers()) { 0. } else { dt };
+            gym.advance_players(clock, map, world, players, &fixed)?;
+        }
         self.sync_coop(world);
         Ok(())
     }
@@ -220,6 +227,8 @@ impl Interactions {
                 if let Some(event) = self.beyond.as_mut().and_then(|b| b.activate(world, player.eye(), *aim)) {
                     events[index].merge(event);
                     self.used += 1;
+                } else if let Some(event) = self.use_gym(world, player, *aim) {
+                    events[index].merge(event);
                 } else {
                     events[index].merge(self.use_door(world, player, *aim, &mut operated));
                 }

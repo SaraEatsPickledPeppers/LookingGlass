@@ -1323,21 +1323,8 @@ impl Interactions {
                 events.merge(e);
                 self.used += 1;
             }
-            if self.gym_entity.is_some_and(|id| {
-                self.event_world
-                    .allowed(&Event::Entity(id, Input::Use), &self.event_facts())
-            }) && self
-                .gym
-                .as_mut()
-                .is_some_and(|g| g.activate(world, player.eye(), aim))
-            {
-                events.message = Some("Bleachers extending / climb toward the Elder Gnome".into());
-                if let Some(s) = &mut self.school2 { s.begin_bleachers(); }
-                events.sound = Some("sound/world/machine/lever1.wav".into());
-                self.used += 1;
-                if let Some(id) = self.gym_entity {
-                    events.merge(self.dispatch(Event::Entity(id, Input::Use)));
-                }
+            if let Some(event) = self.use_gym(world, player, aim) {
+                events.merge(event);
             } else {
                 events.merge(self.use_door(world, player, aim, &mut BTreeSet::new()));
             }
@@ -1345,6 +1332,20 @@ impl Interactions {
         self.advance_doors(dt, map, &[player])?;
         self.sync(world);
         Ok(())
+    }
+    fn use_gym(&mut self, world: &World, player: &Player, aim: Vec3) -> Option<Events> {
+        let id = self.gym_entity?;
+        if !self.event_world.allowed(&Event::Entity(id, Input::Use), &self.event_facts())
+            || !self.gym.as_mut()?.activate(world, player.eye(), aim) {
+            return None;
+        }
+        let mut events = Events::default();
+        events.message = Some("Bleachers extending / climb toward the Elder Gnome".into());
+        events.sound = Some("sound/world/machine/lever1.wav".into());
+        if let Some(s) = &mut self.school2 { s.begin_bleachers(); }
+        self.used += 1;
+        events.merge(self.dispatch(Event::Entity(id, Input::Use)));
+        Some(events)
     }
     fn use_door(&mut self, world: &World, player: &Player, aim: Vec3, operated: &mut BTreeSet<Id>) -> Events {
         let mut events = Events::default();

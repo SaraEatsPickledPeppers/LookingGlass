@@ -131,7 +131,9 @@ class SchoolPair(PandemoniumPair):
             self.set(role,(56,2780,384))
             self.until(lambda: self.reached(role),25)
             self.set(role,(96,2780,384))
-            self.until(lambda: self.bodies(role)[index]['player']['feet'][2] < 382,15)
+            # Turn back at the first loss of footing. Waiting for a two-unit
+            # fall can miss that first report and lose most of the air time.
+            self.until(lambda: not self.bodies(role)[index]['player']['grounded'],15)
             self.set(role,(-32,2780,64))
             self.until(lambda: self.reached(role),20)
             assert abs(self.bodies(role)[index]['player']['feet'][2]-64) < 2, 'Missed the lower library shelf'
@@ -169,16 +171,20 @@ class SchoolPair(PandemoniumPair):
             # Air steering takes time to shed running speed. Include braking
             # time as well as network delivery when aiming at this short ledge.
             self.commands[role]['input_lead'] += .30
-            self.until(lambda: self.bodies()[index]['player']['jumps'] > jumps
-                       and not self.bodies()[index]['player']['grounded']
-                       and self.bodies()[index]['player']['velocity'][2] < 0,8)
-            # Release run before touchdown: grounded acceleration is much
-            # stronger and a delayed running correction can cross the ledge.
-            self.set(role,goal)
             def landed():
                 body = self.bodies()[index]['player']
                 return (body['jumps'] > jumps and body['grounded'] and
                         abs(body['feet'][2]-goal[2]) < 20 and distance(body['feet'],goal) < 45)
+            # Reports may skip the brief descending portion under load. A
+            # confirmed landing is also a valid time to release run; requiring
+            # an already-past airborne frame would time out on a safe crossing.
+            self.until(lambda: self.bodies()[index]['player']['jumps'] > jumps
+                       and ((not self.bodies()[index]['player']['grounded']
+                             and self.bodies()[index]['player']['velocity'][2] < 0)
+                            or landed()),8)
+            # Release run before touchdown: grounded acceleration is much
+            # stronger and a delayed running correction can cross the ledge.
+            self.set(role,goal)
             self.until(landed,20)
             self.set(role)
             self.wait(.5)
@@ -241,7 +247,13 @@ class SchoolPair(PandemoniumPair):
                    ((208,4160,-264),False),((144,4230,-288),False)])
         self.lift('library_spiral_lift',(144,4360,-264),(192,4360,-264),64)
         self.legs([((272,4160,64),False),((700,4096,64),False),((884,4056,64),False),
-                   ((0,4096,64),False),((0,3500,64),False),((-140,3300,64),False),
+                   ((0,4096,64),False),((0,3500,64),False)])
+        self.checkpoint_stop('library')
+        self.upper_library_route()
+
+    def upper_library_route(self):
+        # Clear the west edge of the bookcase before turning toward the stairs.
+        self.legs([((-180,3500,64),False),((-180,3300,64),False),((-140,3300,64),False),
                    ((208,3300,400),True),((-32,3496,384),True),((-464,3520,384),False),
                    ((-464,3800,384),False),((-464,4096,384),False),((-276,4160,384),False)])
         self.lift('elevator2',(-276,4360,400),(-228,4360,400),696)
@@ -356,7 +368,7 @@ if __name__ == '__main__':
     parser.add_argument('--first',choices=('blue','red'),default='red')
     parser.add_argument('--local',action='store_true')
     parser.add_argument('--rejoin',action='store_true')
-    parser.add_argument('--checkpoint-stops',nargs='*',choices=('balcony','bridge','descent'),default=[],
+    parser.add_argument('--checkpoint-stops',nargs='*',choices=('balcony','library','bridge','descent'),default=[],
                         help='Hold neutral inputs for up to 180 seconds for a normal menu checkpoint; create continue-<stop> in the evidence folder to resume')
     parser.add_argument('--delay-ms',type=int,default=40)
     parser.add_argument('--jitter-ms',type=int,default=20)

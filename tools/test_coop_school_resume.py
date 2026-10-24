@@ -37,8 +37,10 @@ class SchoolResume(SchoolPair):
         expected = {'Book_Ingredients_Exit'}
         if self.args.resume_point != 'descent':
             expected.add('book_cinematic')
+        if self.args.resume_point in ('balcony','library'):
+            expected.add('Skool1_Book_Win')
         if self.args.resume_point == 'balcony':
-            expected.update(('shelf_cinematic','Skool1_Book_Win'))
+            expected.add('shelf_cinematic')
         assert self.captures == expected, self.captures
         for role,rows in self.history.items():
             visit = [r for r in rows if r['epoch'] == 1]
@@ -87,6 +89,8 @@ class SchoolResume(SchoolPair):
         if self.args.resume_point == 'balcony':
             self.balcony_gap()
             self.library_route()
+        elif self.args.resume_point == 'library':
+            self.upper_library_route()
         elif self.args.resume_point == 'bridge':
             self.book_bridge()
         else:
@@ -105,11 +109,11 @@ if __name__ == '__main__':
     parser.add_argument('--exe',type=Path,default=ROOT/'target/release/looking-glass.exe')
     parser.add_argument('--data',type=Path,required=True)
     parser.add_argument('--checkpoint',type=Path,required=True)
-    parser.add_argument('--resume-point',choices=('balcony','bridge','descent'),required=True)
+    parser.add_argument('--resume-point',choices=('balcony','library','bridge','descent'),required=True)
     parser.add_argument('--first',choices=('blue','red'),default='red')
     parser.add_argument('--local',action='store_true')
     parser.add_argument('--rejoin',action='store_true')
-    parser.add_argument('--checkpoint-stops',nargs='*',choices=('balcony','bridge','descent'),default=[])
+    parser.add_argument('--checkpoint-stops',nargs='*',choices=('balcony','library','bridge','descent'),default=[])
     parser.add_argument('--delay-ms',type=int,default=40)
     parser.add_argument('--jitter-ms',type=int,default=20)
     args = parser.parse_args()
