@@ -104,24 +104,38 @@ class SchoolPair(PandemoniumPair):
         self.secure()
         first_index = 0 if self.first == 'host' else 1
         partner_index = 1-first_index
-        anchor = self.bodies()[first_index]['player']['feet']
-        start = self.bodies()[partner_index]['player']['feet']
-        candidates = self.reports['host']['route_driver']['neighbors'][first_index]
-        assert candidates, f'No supported paired endpoint near {anchor}; route must move the leader onward'
-        endpoint = min(candidates,key=lambda p: distance(p,start))
-        assert 47.9 <= distance(endpoint[:2],anchor[:2]) <= 48.1 and abs(endpoint[2]-anchor[2]) <= 18.1
-        self.evidence.setdefault('paired_endpoints',[]).append(dict(goal=goal,leader=self.first,
-            anchor=anchor,partner_goal=endpoint,tick=self.reports['host']['frame']['tick']))
-        self.set(self.partner,endpoint,navigate,horizontal=False)
-        self.until(lambda: self.arrived() or self.reached(self.partner))
-        if self.arrived():
-            return
-        # Navigation's ordinary broad arrival is followed by a precise walk on
-        # this checked landing, so the partner cannot stop on the wrong stair.
-        self.set(self.partner,endpoint,horizontal=False)
-        self.until(lambda: self.reached(self.partner))
-        self.set(self.partner)
-        self.wait(.4)
+        for attempt in range(8):
+            self.set(self.partner)
+            self.until(lambda:self.arrived() or self.bodies()[first_index]['player']['grounded'],15)
+            if self.arrived():
+                return
+            anchor = self.bodies()[first_index]['player']['feet']
+            start = self.bodies()[partner_index]['player']['feet']
+            candidates = self.reports['host']['route_driver']['neighbors'][first_index]
+            assert candidates, f'No supported paired endpoint near {anchor}; route must move the leader onward'
+            endpoint = min(candidates,key=lambda p: distance(p,start))
+            assert 47.9 <= distance(endpoint[:2],anchor[:2]) <= 48.1 and abs(endpoint[2]-anchor[2]) <= 18.1
+            self.evidence.setdefault('paired_endpoints',[]).append(dict(goal=goal,leader=self.first,
+                anchor=anchor,partner_goal=endpoint,attempt=attempt,tick=self.reports['host']['frame']['tick']))
+            def displaced():
+                return distance(self.bodies()[first_index]['player']['feet'],anchor) > 8
+            # In-flight attacks can still move the leader. Replan from the new
+            # supported position instead of walking into their occupied slot.
+            for planned in (navigate,False):
+                self.set(self.partner,endpoint,planned,horizontal=False)
+                self.until(lambda:self.arrived() or displaced() or self.reached(self.partner))
+                if self.arrived():
+                    return
+                if displaced():
+                    break
+            self.set(self.partner)
+            self.wait(.4)
+            if not displaced():
+                break
+        else:
+            raise AssertionError('Leader repeatedly displaced before partner could reach a safe endpoint')
+        # The final straight walk keeps navigation's broad arrival from passing
+        # an adjacent stair or an occupied stopping point as the destination.
         for report in self.reports.values():
             bodies = report['frame']['players']
             assert bodies[partner_index]['player']['grounded']

@@ -2081,3 +2081,14 @@ when enemy knockback moved the leader into the partner's waiting destination;
 3,102 matching states and five coincident full reports agree, with both alive
 at 83/100 Sanity. The fixture now clears nearby enemies before choosing these
 destinations. This remains partial traversal evidence, with no new campaign credit.
+
+Clearing combat alone does not cover later knockback: the `f69cf642...` repeat
+still times out against an occupied endpoint. The fixture now reselects a
+supported endpoint if the leader moves more than eight units, with a bounded
+retry count and unchanged final distance, height and grounding checks. In
+`private/coop/school-resume-468abae7fed045bb8b34234eeef32083`, two real knockbacks
+cause two recorded replans; both players finish that leg and the following
+library-floor legs. All 2,607 matching states and 112 coincident full reports
+agree, with no death or checkpoint reset and final Sanity 86/100. The run was
+then deliberately stopped to hand Anode to queued work. Lifts and the remaining
+route were not reached in this repeat; it adds no completed campaign visit.
