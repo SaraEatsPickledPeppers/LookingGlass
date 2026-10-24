@@ -22,6 +22,10 @@ struct Command {
     horizontal: bool,
     #[serde(default)]
     rope: Option<RopeCommand>,
+    #[serde(default)]
+    run: bool,
+    #[serde(default)]
+    jump: bool,
     navigate: bool,
     attack: bool,
     capture: bool,
@@ -34,6 +38,8 @@ impl Command {
             "Invalid route goal");
         ensure!(self.goal.is_none() || self.marker.is_none(), "Choose a route goal or a marker");
         ensure!(self.marker.is_none_or(|i| i < 100_000), "Invalid route marker");
+        ensure!(!(self.run || self.jump) || !self.navigate && self.rope.is_none(),
+            "Explicit run/jump needs straight movement, not a planned route or rope command");
         if let Some(rope) = &self.rope { rope.validate()?; }
         Ok(())
     }
@@ -207,7 +213,8 @@ impl Driver {
             && arena.pickups.iter().any(|p| matches!(p.kind, crate::inventory::PickupKind::Weapon(1))
                 && b.stats.collected.contains(&p.id)));
         self.report.scene = arena.stage.interactions.village.as_ref().and_then(|v|v.cinema.scene_id())
-            .or_else(|| arena.stage.interactions.pandemonium.as_ref().and_then(|p|p.scene_id())).map(str::to_owned);
+            .or_else(|| arena.stage.interactions.pandemonium.as_ref().and_then(|p|p.scene_id()))
+            .or_else(|| arena.stage.interactions.fortress.as_ref().and_then(|f|f.state.cinema.scene_id())).map(str::to_owned);
         self.report.speech = arena.stage.story.busy() && !arena.stage.busy();
         self.report.guards = arena.stage.interactions.encounters.iter().flat_map(|cast| &cast.actors)
             .filter_map(|actor| {
@@ -346,6 +353,8 @@ impl Driver {
             self.report.phase="walking";
             keys.wish=delta.truncate().normalize_or_zero()*(delta.truncate().length()/48.).min(1.);
             keys.swim=keys.wish.extend(0.);
+            keys.run=command.run;
+            if command.jump && !self.jumped { keys.jumps+=1; self.jumped=true; }
         }
         if !keys.primary && !keys.alternate && keys.wish.length()>0. {
             keys.yaw=keys.wish.y.atan2(keys.wish.x); keys.pitch=0.;
@@ -401,7 +410,11 @@ mod tests {
     fn legacy_route_commands_remain_valid_and_rope_inputs_are_bounded() {
         let base=serde_json::json!({"id":1,"heartbeat":1,"epoch":1,"goal":null,"navigate":false,"attack":true,"capture":false,"finish":false});
         let old:Command=serde_json::from_value(base.clone()).unwrap(); assert!(old.validate().is_ok());
-        assert!(old.rope.is_none() && old.marker.is_none() && !old.horizontal);
+        assert!(old.rope.is_none() && old.marker.is_none() && !old.horizontal && !old.run && !old.jump);
+        let mut jumping=base.clone(); jumping["jump"]=true.into(); jumping["run"]=true.into();
+        assert!(serde_json::from_value::<Command>(jumping.clone()).unwrap().validate().is_ok());
+        jumping["navigate"]=true.into();
+        assert!(serde_json::from_value::<Command>(jumping).unwrap().validate().is_err());
         for invalid in [serde_json::json!({"action":"climb","rise":2}),serde_json::json!({"action":"release","goal":[1e9,0]})] {
             let mut input=base.clone(); input["rope"]=invalid;
             assert!(serde_json::from_value::<Command>(input).unwrap().validate().is_err());

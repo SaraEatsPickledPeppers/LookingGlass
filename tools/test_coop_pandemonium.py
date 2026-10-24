@@ -39,7 +39,8 @@ class PandemoniumPair(Pair):
     def capture_pair(self, label):
         for role, old in list(self.commands.items()):
             self.set(role, old['goal'], old['navigate'], capture=True, epoch=old['epoch'],
-                     horizontal=old['horizontal'], rope=old['rope'], marker=old['marker'])
+                     horizontal=old['horizontal'], rope=old['rope'], marker=old['marker'],
+                     run=old['run'], jump=old['jump'])
         self.until(lambda: all(self.reports[r]['route_driver']['captured'] == self.commands[r]['id']
                                for r in self.commands), 30)
         self.evidence.setdefault('captures', {})[label] = {r: c['id'] for r, c in self.commands.items()}
@@ -55,7 +56,7 @@ class PandemoniumPair(Pair):
             if not self.arrived():
                 self.set(self.partner, goal, navigate, marker=marker, horizontal=horizontal)
         self.until(lambda: self.arrived() or all(self.reached(r) for r in self.commands))
-        print('PASS network Pandemonium leg', goal if marker is None else f'marker {marker}', flush=True)
+        print('PASS network', self.map_name, 'leg', goal if marker is None else f'marker {marker}', flush=True)
 
     def rope(self):
         self.go((-3400, 2190, -32))

@@ -41,13 +41,14 @@ class Pair:
             self.set(role)
 
     def set(self, role, goal=None, navigate=False, capture=False, finish=False, epoch=1,
-            horizontal=False, rope=None, marker=None, attack=None):
+            horizontal=False, rope=None, marker=None, attack=None, run=False, jump=False):
         self.serial += 1
         if attack is None:
             attack = self.commands.get(role, {}).get('attack', True)
         self.commands[role] = dict(id=self.serial, heartbeat=1, epoch=epoch,
                                   goal=goal, navigate=navigate, attack=attack,
-                                  capture=capture, finish=finish, horizontal=horizontal, rope=rope, marker=marker)
+                                  capture=capture, finish=finish, horizontal=horizontal, rope=rope, marker=marker,
+                                  run=run, jump=jump)
 
     def start(self, role):
         assert role not in self.processes or self.processes[role].poll() is not None
@@ -125,7 +126,8 @@ class Pair:
                         continue
                     old = self.commands[role]
                     self.set(role, old['goal'], old['navigate'], capture=True, epoch=old['epoch'],
-                             horizontal=old['horizontal'],rope=old['rope'],marker=old['marker'])
+                             horizontal=old['horizontal'],rope=old['rope'],marker=old['marker'],
+                             run=old['run'],jump=old['jump'])
                     pending[role] = self.commands[role]['id']
                 if all(role in pending and (self.folder / role / f'route-capture-{pending[role]}.png').exists()
                        for role in self.commands):

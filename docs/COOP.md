@@ -1240,7 +1240,65 @@ Evidence: `private/coop-fortress-sp-comparison1.json`,
 `private/coop-fortress-sp-route1.log`, `private/coop-fortress-sp-cinema1.log`.
 All 740 Rust tests pass (one pre-existing ignored), and the normal build succeeds.
 Full network routes, map-specific recovery, and the later return visit remain
-unverified. The campaign count remains two of 39 visits.
+separate requirements; the first Blue-leading network result follows below.
+The campaign count remains two of 39 visits.
+
+The separate-client first-visit probe is under development:
+
+```text
+python tools/test_coop_fortress.py --data C:\Alice\base --first blue --rejoin
+python tools/test_coop_fortress.py --data C:\Alice\base --first red
+```
+
+It uses the public invite with 40 ms delay and 20 ms jitter per sender by default.
+Each process receives ordinary local goals and controls; the harness reads the
+Fortress scene/state, requires independent portal contacts and the completed
+split, compares authoritative player/enemy snapshots, and checks optional fresh
+guest rejoin before the authored exit. The opt-in driver can now send one ordinary
+jump per command and a run modifier without inventing a grounded destination for
+an airborne doorway. Neither control changes the network input protocol. Its
+legacy-command/rope regressions pass and the normal build succeeds on
+`fda9260961ca3342961c3a50c0d71e3ff8a23d820466e92efa3c009cff63cff2`.
+
+Trials 1–8 are failures, not campaign credit. Long timed paths missed landings,
+the guest overshot an upper ledge, and walking a gap fell below its sloping landing.
+The route now uses supported waypoints, a landing farther onto the upper platform,
+and received-position steering for the gap jump. The failed trial summary is
+`private/coop-fortress-development-summary.json`; logs are
+`private/coop-fortress-internet-blue1.log` through `blue8.log`.
+Trials 3 and 4 were stopped after the failure was observed and retain final
+observations/captures instead of full histories; the others retain full histories.
+All eight have their owned clients/helpers stopped and invite files removed.
+Creating `stop-test` inside a running Fortress probe's printed evidence folder
+now stops it through its normal cleanup and preserves its partial history.
+
+Trial 7 reached the last raised section with both players at 100/92 Sanity, but
+its next navigation search timed out. Its partial checks match 5,114 sent/restored
+player/enemy states and 87 full reports including Fortress state. Both clients
+observe the Blue-owned entry scene, the reunion at tick 10,020, independent portal
+contacts and a completed split. Both sloping-walkway views were inspected.
+Evidence: `private/coop/fortress-test-c85881127e254ef2b5969aa41136dd02/partial-checks.json`.
+Trial 8's direct jump landed both bodies, but continued exact-marker steering ran
+the guest back off the edge. The controller now releases input after a real jump
+lands near the destination at the right height, then verifies the body remains
+grounded after the delayed inputs settle. These partial results do not verify an
+exit, rejoin, recovery matrix or the later return visit.
+
+The Blue-leading full route with fresh guest rejoin now passes on `fda92609`, in
+`private/coop/fortress-test-cc6abe54e07e4f2fac11ff3621b1c75d/` (public internet,
+40 ms delay + 20 ms jitter per sender). Both clients observe the original entry
+scene owned by Blue (the tied automatic arrival), one safe reunion at tick 10,020,
+their independent portal contacts, the completed split and the authored exit to
+`fortress2` epoch 2. All 3,740 comparable sent/restored player/enemy states match;
+50 coincident full reports also match, including Fortress controller state.
+The guest exits and rejoins in a fresh process near the final doorway (ticks
+24,817/24,901), preserving both players' resources, placements and completed
+scene/machinery progress. Both finish alive at 85/80 Sanity with their Blade and
+Cards, no respawn and no wipe. The sloping-walkway view and both final views were
+inspected. Both clients and the helper close normally and the invite is removed.
+This verifies the first visit's Blue-leading traversal/rejoin, not the next level,
+the opposite arrival order, focused targeting/consumables, map-specific recovery
+or the later Fortress return visit. The campaign row therefore remains partial.
 
 ## Reproducing transport checks
 
