@@ -28,11 +28,12 @@ class SchoolPair(PandemoniumPair):
         (self.folder/'fixture-source.py').write_bytes(source)
         self.evidence['fixture_sha256'] = hashlib.sha256(source).hexdigest()
 
-    def set(self,role,*args,runup=None,speed_limit=None,**kwargs):
+    def set(self,role,*args,runup=None,speed_limit=None,arrival_radius=8.0,**kwargs):
         super().set(role,*args,**kwargs)
         self.commands[role]['input_lead'] = min(1.5,.05+2*(self.args.delay_ms+self.args.jitter_ms)/1000) if role == 'guest' else 0
         self.commands[role]['runup'] = runup
         self.commands[role]['speed_limit'] = speed_limit
+        self.commands[role]['arrival_radius'] = arrival_radius
 
     def school(self,role='host'):
         return self.reports[role]['combat']['stage']['world']['school']
@@ -80,11 +81,20 @@ class SchoolPair(PandemoniumPair):
             (p[0]-anchor[0])*approach[1]-(p[1]-anchor[1])*approach[0]),distance(p,incoming)))
         self.evidence.setdefault('waiting_spots',[]).append(dict(role=role,anchor=anchor,goal=endpoint,
             tick=self.reports['host']['frame']['tick']))
-        self.set(role,endpoint)
-        self.until(lambda:self.reached(role),15)
-        self.set(role)
-        self.wait(.4)
-        assert abs(self.bodies()[index]['player']['feet'][2]-endpoint[2]) < 2
+        for _ in range(3):
+            self.set(role,endpoint,speed_limit=20,arrival_radius=2.0)
+            self.until(lambda:self.reached(role),15)
+            self.set(role)
+            # An arrival report can precede the last in-flight walking input.
+            # Let it drain, then correct from the settled position if needed.
+            timing = self.reports.get(role,{}).get('network_timing') or {}
+            self.wait(max(.4,min(3,(timing.get('round_trip_ms') or 0)/1000+.2)))
+            if all(r['frame']['players'][index]['player']['grounded'] and
+                   distance(r['frame']['players'][index]['player']['feet'][:2],endpoint[:2]) < 3 and
+                   abs(r['frame']['players'][index]['player']['feet'][2]-endpoint[2]) < 2
+                   for r in self.reports.values()):
+                return
+        raise AssertionError(f'{role}: did not settle at supported waiting spot {endpoint}')
 
     def clear_departure(self,goal):
         index = 0 if self.first == 'host' else 1
@@ -259,7 +269,7 @@ class SchoolPair(PandemoniumPair):
             self.go(goal,navigate)
             self.secure()
 
-    def passage(self,goals,after_reunion=None):
+    def passage(self,goals,after_reunion=None,speed_limit=None):
         # Narrow stairs have no same-height waiting spot at each bend. Let one
         # player finish the passage and step aside before the other follows
         # exactly the same ordinary route. An authored scene may already have
@@ -276,13 +286,13 @@ class SchoolPair(PandemoniumPair):
                     feet=self.bodies()[partner_index]['player']['feet']))
                 role_goals = after_reunion
             for goal,navigate in role_goals:
-                self.set(role,goal,navigate)
+                self.set(role,goal,navigate,speed_limit=speed_limit if not navigate else None)
                 self.until(lambda:self.reached(role))
                 # A planned jump accepts the first grounded arrival within
                 # its landing radius. Switch to damped ordinary steering now:
                 # delayed inputs can otherwise carry the guest off the stairs
                 # and restart that jump plan during the combat wait.
-                self.set(role,goal)
+                self.set(role,goal,speed_limit=speed_limit)
                 self.secure(keep_movement=True)
                 self.until(lambda:self.reached(role),20)
                 self.set(role)
@@ -401,8 +411,11 @@ class SchoolPair(PandemoniumPair):
         # Walk down its centre: a broad navigation stop can leave running
         # momentum carrying the delayed guest off the side of the stairs.
         self.go((-2304,2800,-256))
-        self.passage([((-2304,2624,-342),False),((-2304,2544,-352),False),
-                      ((-2272,2464,-256),True)])
+        # The second player waits beside this landing. Align them on the
+        # stair centre before descending instead of cutting diagonally across
+        # its unsupported side from their separate waiting spot.
+        self.passage([((-2304,2800,-256),False),((-2304,2624,-342),False),((-2304,2544,-352),False),
+                      ((-2272,2464,-256),True)],speed_limit=20)
 
     def checkpoint_stop(self,label):
         if label not in getattr(self.args,'checkpoint_stops',[]):
@@ -517,6 +530,17 @@ class SchoolPair(PandemoniumPair):
         self.after_theatre()
 
     def after_theatre(self):
+        self.collect_mallet()
+        self.go((-2272,2440,-256))
+        self.return_stairs()
+        # The far end is a narrow run-up, so each player approaches it only
+        # when it is their turn to jump in balcony_gap().
+        self.go((-2304,3248,-256))
+        self.checkpoint_stop('balcony')
+        self.balcony_gap()
+        self.library_route()
+
+    def collect_mallet(self):
         self.mallet_landing()
         # The essence beside the Mallet belongs to the return visit; the first
         # visit uses the fresh theatre reward above for ordinary healing.
@@ -527,14 +551,14 @@ class SchoolPair(PandemoniumPair):
         self.until(lambda:self.reached(self.partner),20)
         self.wait(.4)
         assert all('skool1:78' in b['stats']['collected'] for b in self.bodies()), 'Both players must collect their own Mallet'
-        self.go((-2272,2440,-256))
-        self.passage([((-2304,2544,-352),True),((-2304,2624,-342),True),((-2304,2800,-256),True)])
-        # The far end is a narrow run-up, so each player approaches it only
-        # when it is their turn to jump in balcony_gap().
-        self.go((-2304,3248,-256))
-        self.checkpoint_stop('balcony')
-        self.balcony_gap()
-        self.library_route()
+
+    def return_stairs(self):
+        # Bring each player from their own waiting spot to the same altar edge.
+        # Walk the drop and lower stair before planning the short upper jump;
+        # a running plan for the whole return overshoots its narrow supports.
+        self.passage([((-2272,2440,-256),False),((-2304,2544,-352),False),
+                      ((-2304,2624,-342),False),((-2304,2720,-334),False),
+                      ((-2304,2800,-256),True)],speed_limit=20)
 
     def library_route(self):
         self.legs([((-1480,3008,-256),True),

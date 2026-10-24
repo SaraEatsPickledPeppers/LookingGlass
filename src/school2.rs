@@ -578,6 +578,17 @@ impl School2 {
         }
         result
     }
+    /// Read-only legacy pools for the opt-in two-client route diagnostics.
+    /// Keep the same identities and activation gates as targets()/hit_attack().
+    pub(crate) fn diagnostic_guards(&self) -> impl Iterator<Item = (usize, String, bool, &Guard)> {
+        let visible = !self.cinematic();
+        [(100, "gnome_killer", visible && self.quest.stage == Stage::Rescue, self.guards.as_slice()),
+         (200, "club_spawn", visible && self.dice_guards, self.reinforcements.as_slice())]
+            .into_iter().flat_map(|(offset, name, active, guards)| {
+                guards.iter().enumerate().map(move |(i, guard)|
+                    (ENEMY_BASE + offset + i, format!("{name}{}", i + 1), active, guard))
+            })
+    }
     pub fn hit(&mut self, id: usize, damage: f32) -> Option<&'static str> {
         self.hit_kind(id, damage, crate::combat::DamageKind::Other)
     }

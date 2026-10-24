@@ -13,6 +13,7 @@ pub fn check(assets: &mut Assets, map: &Bsp) -> Result<()> {
     // Isolate each authored enemy type on an unobstructed floor. This makes
     // target selection/damage assertions independent of route navigation.
     let floor = World::fixture(&[(vec3(-2000.,-2000.,-20.), vec3(2000.,2000.,0.))]);
+    check_diagnostics(&initial, &floor, [vec3(65.,0.,0.04), vec3(1200.,0.,0.04)], None)?;
     for victim in 0..2 {
         for kind in ["boojum", "rescue", "reinforcement"] {
             let mut school = initial.clone();
@@ -56,6 +57,8 @@ pub fn check(assets: &mut Assets, map: &Bsp) -> Result<()> {
             ensure!(feedback.players[victim].damage > 0. && feedback.players[1-victim].damage == 0.
                 && feedback.damage == 0., "School {kind} misrouted damage for player {victim}: {:?}",
                 feedback.players.each_ref().map(|p|p.damage));
+            let report_id = ENEMY_BASE + match kind { "boojum" => 0, "rescue" => 100, _ => 200 };
+            check_diagnostics(&school, &floor, feet, Some((report_id, victim)))?;
             let state = serde_json::from_slice(&serde_json::to_vec(&school.snapshot())?)?;
             let mut restored = school.clone();
             restored.restore(&state, map)?;
@@ -90,6 +93,41 @@ pub fn check(assets: &mut Assets, map: &Bsp) -> Result<()> {
     }
     quest_contacts(assets, map, &initial)?;
     barrier_and_clock(map, &initial)?;
+    Ok(())
+}
+
+fn check_diagnostics(school: &School2, world: &World, feet: [Vec3; 2],
+    selected: Option<(usize, usize)>) -> Result<()> {
+    use crate::{coop::{route_driver::school2_reports, world::Roster}, inventory::Stats};
+    let before = serde_json::to_value(school.snapshot())?;
+    let mut roster = Roster::new(world, feet[0] + Vec3::Z * EYE_HEIGHT, 0., Stats::for_level("skool2", None))?;
+    for (body, feet) in roster.players.iter_mut().zip(feet) { body.player.feet = feet; }
+    let mut frame = roster.frame(1, 0);
+    let (guards, boojums) = school2_reports(school, &frame, world);
+    let reports = serde_json::to_value(guards)?.as_array().unwrap().iter().cloned()
+        .chain(serde_json::to_value(boojums)?.as_array().unwrap().iter().cloned()).collect::<Vec<_>>();
+    ensure!(reports.len() == school.guards.len() + school.reinforcements.len() + school.boojums.len(),
+        "School2 diagnostics omitted a legacy enemy");
+    let active = reports.iter().filter(|r|r["active"] == true && r["health"].as_f64().unwrap() > 0.)
+        .map(|r|r["id"].as_u64().unwrap() as usize).collect::<std::collections::BTreeSet<_>>();
+    ensure!(active == school.targets().iter().map(|t|t.id).collect(),
+        "School2 diagnostic identities/activation differ from combat targets");
+    if let Some((id, victim)) = selected {
+        let report = reports.iter().find(|r|r["id"] == id).context("Missing selected School2 enemy")?;
+        ensure!(report["selected_player"] == victim && report["line_of_sight"][victim] == true
+            && report["distance"][victim].as_f64() < report["distance"][1-victim].as_f64(),
+            "School2 diagnostic did not identify the nearer visible victim");
+    }
+    for victim in 0..2 {
+        frame.players[victim].stats.set_health(0.)?;
+        let (guards, boojums) = school2_reports(school, &frame, world);
+        for reports in [serde_json::to_value(guards)?, serde_json::to_value(boojums)?] {
+            ensure!(reports.as_array().unwrap().iter().all(|r|r["line_of_sight"][victim] == false),
+                "School2 diagnostics reported a dead player as visible");
+        }
+        frame.players[victim].stats.set_health(100.)?;
+    }
+    ensure!(serde_json::to_value(school.snapshot())? == before, "School2 diagnostics changed live state");
     Ok(())
 }
 

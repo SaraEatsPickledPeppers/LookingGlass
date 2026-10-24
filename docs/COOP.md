@@ -2301,11 +2301,29 @@ approach and ride. They require a two-second partner wait, both riders reaching
 the upper landing, matching network state and no death or wipe. The staged
 start makes these component checks; they do not certify school traversal.
 
+`--only stairs-blue stairs-red` similarly checks the full Mallet trip out and
+back from an explicit staged upper-landing spawn, including both individual
+pickups. On the return each player first walks to the same edge, descends
+slowly onto the narrow lower support, and approaches the
+upper step before its short jump. This avoids treating the entire descent and
+climb as a running navigation plan. Both players must finish grounded on the
+upper landing with matching shared-world states and no death/wipe/respawn.
+Short school waiting moves request a two-unit stopping radius and a slower
+walking input, so a supported spot on a small step is actually reached. Other
+walks retain the original eight-unit default. Slow inputs on the narrow stair
+supports limit overshoot while delayed feedback is in flight. Planned
+navigation and game physics are unchanged.
+
 The runner writes one private `regression-suite-*/summary.json` with bounded
 pass/fail output, executable and fixture hashes, elapsed times, network/effect
 metrics, evidence locations and explicit coverage scope. It stops at the first
 failure, applies per-test time limits and cleans up its owned process tree on
 timeout/interruption. Partial or interrupted runs cannot report a suite pass.
+Failures include a bounded log excerpt and, when available, each client's last
+command, scene, player positions, health and most recent supported stopping
+points. This permits routine triage from the summary without opening images or
+loading the complete frame history. Missing final evidence is reported without
+hiding the original failure.
 
 Prefer these automated assertions and compact reports for routine repeats.
 Keep captures in the evidence folder, and inspect images only for a new visual
@@ -2408,3 +2426,64 @@ The full-school runner correctly recorded the earlier failed traversal and
 stopped; these component passes do not replace it. Complete entrance-to-exit
 runs in both arrival orders and current-contact combat/recovery repeats remain
 open. Overall progress stays about 42%.
+
+### School Two enemy observations and stair-return repeat
+
+School Two's original quest-owned guards and Boojums now appear in opt-in route
+diagnostics alongside the shared encounter actors. Their stable combat IDs,
+activation gates, health, selected player, distances and visibility are read
+without advancing AI or changing the world. The real-data School2 check verifies
+all legacy actors are included, active IDs match combat targets, each enemy
+group reports the nearer visible victim in both player roles, dead players are
+not visible, and observation leaves the saved world state unchanged.
+
+Build `dfa73f5c13cafaffb5c51a18671aa48e2ef53414462c37f67d1416ede6fd8686`
+passes 757 unit tests (one existing ignored), the release build, native School2
+and shared-world checks. The focused stair return passes in both orders on the
+public connection with 40/20 ms delay/jitter: Blue-first evidence
+`private/coop/school-stairs-6f3f540cf8154a69ae18fa1847b4713c` has 672 matching
+player/enemy and shared-stage states plus seven coincident full reports;
+Red-first evidence `private/coop/school-stairs-d90a7ac236bd405987b7346eea6e9482`
+has 653 matching states and two full reports. Both finish at 100/100 Sanity.
+They take about 60 and 59 seconds respectively. No images were opened.
+
+These are component results. The preceding full Blue-first attempt failed on
+the earlier stair-return controls after 5,214 matching network/shared-stage
+states, so it receives no traversal credit. Complete school runs in both arrival
+orders, focused combat/recovery repeats and School Two network traversal remain
+open; the estimate stays about 42%.
+
+### Automated Mallet trip and compact failure reports
+
+The focused stairs fixture now covers the approach, both personal Mallet
+pickups and the return climb. Each player first reaches the stair centre from
+their own waiting position. The controller uses small ordinary walking inputs
+on the narrow supports and more precise short waiting moves; it never writes
+positions, health or inventory after the explicit initial staged spawn.
+
+Build `1d02f54c6a39f5a9943584f9a6c67fb48d60d8fe659b8b78521a5f35f0f2eefe`
+passes 757 unit tests (one existing ignored), release compilation and the native
+world/School2 suite. That suite is retained in
+`private/coop/regression-suite-f1db698a3af24eadb8a63842cfc49061`.
+Blue-first completes the expanded route over the public connection with 40/20 ms
+delay/jitter in 184 seconds, at 100/100 Sanity: evidence
+`private/coop/school-stairs-ddfba6c292f0445a8397631831f12982` contains 2,813
+matching player/enemy and shared-stage states and 88 coincident full reports.
+Red-first subsequently passes with settled waiting-position corrections in
+207 seconds at 100/100 Sanity:
+`private/coop/school-stairs-04aef6633c83432bb201adcbdc3b4759` contains 3,106
+matching player/enemy and shared-stage states and 66 coincident full reports.
+Waiting moves now let delayed inputs drain and make at most three ordinary
+corrections, requiring both clients to confirm a grounded position within
+three horizontal units and two height units of the supported target.
+The final Blue-first repeat passes in 193 seconds at 100/100 Sanity:
+`private/coop/school-stairs-04255752c6124e97b34ce37016e666d0` contains 2,823
+matching player/enemy and shared-stage states and 88 coincident full reports.
+Both final orders pass in the single runner report
+`private/coop/regression-suite-0e5a204930b24acc9ab958fad8490321/summary.json`.
+
+Earlier expanded probes exposed unsupported diagonal approaches and delayed
+control overshoot. Their failing summaries retain client positions, commands,
+last supported targets and a bounded log excerpt automatically. They receive
+no traversal credit. No images were opened for these checks. Full first-school
+traversal in both arrival orders remains open; the estimate stays about 42%.

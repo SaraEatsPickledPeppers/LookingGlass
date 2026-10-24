@@ -42,15 +42,22 @@ struct Command {
     /// ordinary movement input only; authoritative movement stays unchanged.
     #[serde(default)]
     speed_limit: Option<f32>,
+    /// Straight-walking stopping precision for authored steps and ledges.
+    /// Older fixtures keep their original eight-unit tolerance.
+    #[serde(default = "default_arrival_radius")]
+    arrival_radius: f32,
     navigate: bool,
     attack: bool,
     capture: bool,
     finish: bool,
 }
+fn default_arrival_radius() -> f32 { 8. }
 impl Command {
     fn validate(&self) -> Result<()> {
         ensure!(self.id > 0 && self.epoch > 0 && self.heartbeat > 0, "Invalid route command identity");
         ensure!(self.input_lead.is_finite() && (0. ..=1.5).contains(&self.input_lead), "Invalid input lead");
+        ensure!(self.arrival_radius.is_finite() && (1. ..=8.).contains(&self.arrival_radius),
+            "Invalid route arrival radius");
         if let Some(speed) = self.speed_limit {
             ensure!(speed.is_finite() && (1. ..=320.).contains(&speed)
                 && !self.navigate && self.rope.is_none() && self.runup.is_none(),
@@ -184,6 +191,32 @@ pub struct EnemyReport<S> {
     selected_player: Option<usize>,
     distance: [f32; 2],
     line_of_sight: [bool; 2],
+}
+/// School Two retains its original quest-owned enemies alongside Encounters.
+/// Observe both pools so a route cannot mistake an unreported live enemy for
+/// cleared combat. This does not run AI or modify either client world.
+pub(crate) fn school2_reports(school: &crate::school2::School2, frame: &Frame, world: &World)
+    -> (Vec<EnemyReport<crate::combat::State>>, Vec<EnemyReport<crate::boojum::State>>) {
+    let view = |center: Vec3| (
+        frame.players.each_ref().map(|b| center.distance(b.player.eye())),
+        frame.players.each_ref().map(|b| {
+            let trace = world.sweep(center, b.player.eye(), Vec3::splat(0.5));
+            b.stats.alive() && !b.stats.ignores_alice() && !trace.start_solid && trace.fraction >= 1.
+        }),
+    );
+    let guards = school.diagnostic_guards().map(|(id, name, active, guard)| {
+        let (distance, line_of_sight) = view(guard.target(id).center);
+        EnemyReport { id, name, active, feet:guard.feet, health:guard.health, state:guard.state,
+            selected_player:guard.opponents.selected_player, distance, line_of_sight }
+    }).collect();
+    let boojums = school.boojums.iter().enumerate().map(|(i, boojum)| {
+        let id = crate::school2::ENEMY_BASE + i;
+        let (distance, line_of_sight) = view(boojum.target(id).center);
+        EnemyReport { id, name:format!("school2_boojum_{i}"), active:boojum.active && !school.cinematic(),
+            feet:boojum.feet, health:boojum.health, state:boojum.state,
+            selected_player:boojum.opponents.selected_player, distance, line_of_sight }
+    }).collect();
+    (guards, boojums)
 }
 struct Worker {
     id: u64,
@@ -324,6 +357,11 @@ impl Driver {
                     }),
                 })
             }).collect();
+        if let Some(school) = &arena.stage.interactions.school2 {
+            let (guards, boojums) = school2_reports(school, frame, world);
+            self.report.guards.extend(guards);
+            self.report.boojums.extend(boojums);
+        }
     }
     pub fn sample(&mut self, frame: &Frame, arena: &Arena, world: &World, map: &crate::bsp::Bsp, local: PlayerId, keys: &mut Input, now: Instant) {
         Self::neutral(keys);
@@ -445,7 +483,7 @@ impl Driver {
         let Some(goal) = goal else { return; };
         let delta = goal-body.player.feet;
         self.report.reached = if command.navigate { delta.length()<42. && body.player.grounded }
-            else { delta.truncate().length()<8. && (command.horizontal || delta.z.abs()<35.) };
+            else { delta.truncate().length()<command.arrival_radius && (command.horizontal || delta.z.abs()<35.) };
         if self.report.reached { self.report.phase="reached"; self.plan.clear(); return; }
         if command.navigate {
             self.report.phase="navigating";
@@ -567,6 +605,13 @@ mod tests {
         assert!(old.rope.is_none() && old.marker.is_none() && !old.horizontal && !old.run && !old.jump);
         assert!(old.use_aim.is_none() && !old.watch_dialogue && old.beyond_step.is_none());
         assert!(old.speed_limit.is_none());
+        assert_eq!(old.arrival_radius,8.);
+        for radius in [0.99,8.01] {
+            let mut input=base.clone(); input["arrival_radius"]=radius.into();
+            assert!(serde_json::from_value::<Command>(input).unwrap().validate().is_err());
+        }
+        let mut precise=base.clone(); precise["arrival_radius"]=2.into();
+        assert!(serde_json::from_value::<Command>(precise).unwrap().validate().is_ok());
         for speed in [0.,321.] {
             let mut input=base.clone(); input["speed_limit"]=speed.into();
             assert!(serde_json::from_value::<Command>(input).unwrap().validate().is_err());

@@ -41,13 +41,18 @@ def stop_owned_process(process):
         process.wait(timeout=10)
 
 
-def result_from_log(log):
+def evidence_from_log(log):
     match = re.search(r'^Evidence: (.+)$', log.read_text(errors='replace'), re.MULTILINE)
     if not match:
         raise ValueError('Rendered test did not report an evidence folder')
     folder = Path(match.group(1).strip()).resolve()
     if not folder.is_relative_to(EVIDENCE.resolve()):
         raise ValueError('Test evidence is outside private/coop')
+    return folder
+
+
+def result_from_log(log):
+    folder = evidence_from_log(log)
     result = json.loads((folder / 'result.json').read_text())
     if result.get('passed') is not True or not re.fullmatch(r'[0-9a-f]{64}', result.get('build', '')):
         raise ValueError('Rendered test has no valid passing result/build identity')
@@ -62,13 +67,51 @@ def result_from_log(log):
                 first=result.get('first'), metrics=metrics)
 
 
+def failure_from_log(log, rendered):
+    """Keep enough terminal evidence to triage without opening images/history."""
+    result = {'log_tail': '\n'.join(log.read_text(errors='replace').splitlines()[-18:])[-6000:]}
+    if not rendered:
+        return result
+    try:
+        folder = evidence_from_log(log)
+        result['evidence'] = str(folder)
+        reports = json.loads((folder / 'last-reports.json').read_text())
+        result['clients'] = {}
+        for role in ('host', 'guest'):
+            if role not in reports:
+                continue
+            report = reports[role]
+            route = report.get('route_driver', {})
+            state = dict(visit=report.get('visit'), tick=report['frame']['tick'],
+                         route={k: route.get(k) for k in
+                                ('command', 'phase', 'reached', 'error', 'scene', 'replans')},
+                         players=[dict(feet=b['player']['feet'], grounded=b['player']['grounded'],
+                                       health=b['stats']['sanity'], spawned_at=b['spawned_at'])
+                                  for b in report['frame']['players']])
+            command = folder / role / 'route-command.json'
+            if command.exists():
+                state['last_command'] = json.loads(command.read_text())
+            result['clients'][role] = state
+        observations = folder / 'observations.json'
+        if observations.exists():
+            data = json.loads(observations.read_text())
+            result['last_stops'] = {k: data[k][-1] for k in
+                                   ('waiting_spots', 'paired_endpoints', 'passage_stops') if data.get(k)}
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        # A crash or timeout may leave no final report. Preserve the test's
+        # original failure and log instead of making missing evidence a pass.
+        result['diagnostic_error'] = str(error)
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--exe', type=Path, default=ROOT / 'target/release/looking-glass.exe')
     parser.add_argument('--data', type=Path, required=True)
     parser.add_argument('--only', nargs='+', choices=('world', 'school2', 'presence', 'school',
-                                                   'school-blue', 'school-red', 'lift-blue', 'lift-red'),
-                        help='school resumes a checkpoint; school-blue/red traverse the full first school; lift-blue/red test boarding from a staged start')
+                                                   'school-blue', 'school-red', 'lift-blue', 'lift-red',
+                                                   'stairs-blue', 'stairs-red'),
+                        help='school resumes a checkpoint; school-blue/red traverse the full first school; lift/stairs-blue/red are staged component checks')
     parser.add_argument('--local', action='store_true')
     parser.add_argument('--delay-ms', type=int, default=40)
     parser.add_argument('--jitter-ms', type=int, default=20)
@@ -106,6 +149,8 @@ def main():
                                     '--first', first, '--rejoin'], 1500, True)
         cases['lift-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school_lift.py'), *common,
                                   '--first', first], 300, True)
+        cases['stairs-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school_stairs.py'), *common,
+                                    '--first', first], 300, True)
     if args.school_checkpoint:
         cases['school'] = ([sys.executable, str(ROOT / 'tools/test_coop_school_resume.py'), *common,
                            '--checkpoint', str(args.school_checkpoint), '--resume-point', args.school_resume_point,
@@ -158,6 +203,8 @@ def main():
             case['passed'] = True
         except (OSError, ValueError, RuntimeError, KeyError, subprocess.SubprocessError) as error:
             case['error'] = str(error)
+            if log.exists():
+                case['failure'] = failure_from_log(log, rendered)
         case['seconds'] = round(time.monotonic() - started, 2)
         report['cases'].append(case)
         save()
