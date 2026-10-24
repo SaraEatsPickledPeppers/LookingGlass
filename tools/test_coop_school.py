@@ -475,10 +475,9 @@ class SchoolPair(PandemoniumPair):
 
     def upper_library_route(self):
         # Clear the west edge of the bookcase before turning toward the stairs.
-        self.legs([((-180,3500,64),False),((-180,3300,64),False),((-140,3300,64),False),
-                   ((208,3300,400),True),((192,3344,400),False)])
+        self.legs([((-180,3500,64),False),((-180,3300,64),False),((-140,3300,64),False)])
         self.upper_library_gap()
-        self.legs([((-32,3496,384),False),((-464,3520,384),False),
+        self.legs([((-464,3520,384),False),
                    ((-464,3800,384),False),((-464,4096,384),False),((-276,4160,384),False)])
         self.lift('elevator2',(-276,4360,400),(-228,4360,400),696)
         self.legs([((-276,4160,704),False),((-212,3860,704),False),((-64,3968,704),False),
@@ -496,6 +495,19 @@ class SchoolPair(PandemoniumPair):
         self.wait(.5)
         for role in (self.first,self.partner):
             index = 0 if role == 'host' else 1
+            # Keep the waiting player below the stairs until the first has
+            # crossed. A nearby paired stop can occupy the take-off point.
+            self.set(role,(208,3300,400),navigate=True)
+            self.until(lambda:self.reached(role),40)
+            self.set(role,(208,3300,400))
+            self.secure(keep_movement=True)
+            self.until(lambda:self.reached(role),20)
+            self.wait(.4)
+            # The stair lip has no flat paired waiting slot. Approach this
+            # shared run-up only when it is this player's turn to jump.
+            self.set(role,(192,3344,400))
+            self.until(lambda:self.reached(role),20)
+            self.wait(.4)
             jumps = self.bodies()[index]['player']['jumps']
             self.set(role,goal,run=True,jump=True)
             def landed():
@@ -509,21 +521,38 @@ class SchoolPair(PandemoniumPair):
             self.wait(.5)
             assert landed(), f'{role}: left the upper library landing'
             if role == self.first:
-                self.move_aside(role)
+                # Continue west along the gallery before the partner lands.
+                # A generic sideways wait leaves the leader behind the second
+                # jumper, whose body then blocks the next westbound waypoint.
+                self.set(role,(-128,3504,384))
+                self.until(lambda:self.reached(role),15)
+                self.wait(.4)
+                assert abs(self.bodies()[index]['player']['feet'][2]-384) < 2
         self.capture_pair('upper-library-gap')
 
-    def book_jump(self,approach,goal):
-        self.go(approach)
+    def book_jump(self,approach,goal,guest_braking=.30):
+        # The smaller books have no side-by-side waiting space at the lip.
+        # Let each jumper walk from their landing to the take-off point in turn.
         for role in (self.first,self.partner):
             index = 0 if role == 'host' else 1
+            # The second player's waiting slot is farther from the next book.
+            # Walk to the same take-off point after the first has cleared it.
+            self.set(role,approach)
+            self.until(lambda:self.reached(role),20)
+            self.wait(.4)
             jumps = self.bodies()[index]['player']['jumps']
             self.set(role,goal,run=True,jump=True,speed_limit=220)
+            # Airborne momentum needs braking before a delayed guest receives
+            # the landing report; a neutral input alone does not slow the jump.
+            braking_lead = guest_braking if role == 'guest' else 0
+            self.commands[role]['input_lead'] += braking_lead
             def landed():
                 p = self.bodies()[index]['player']
                 return (p['jumps'] > jumps and p['grounded'] and
                         abs(p['feet'][2]-goal[2]) < 5 and distance(p['feet'],goal) < 60)
             self.until(landed,15)
             self.set(role,goal)
+            self.commands[role]['input_lead'] += braking_lead
             self.until(lambda: self.reached(role),10)
             self.set(role)
             self.wait(.5)
@@ -539,7 +568,9 @@ class SchoolPair(PandemoniumPair):
         self.go((-150,3396,708))
         self.book_jump((-130,3334,708),(-40,3186,724))
         self.book_jump((20,3158,724),(136,3014,716))
-        self.book_jump((160,2990,716),(224,2796,716))
+        # The last gap is longer; retain more forward momentum until reaching
+        # its near edge, then brake on the broader final book.
+        self.book_jump((160,2990,716),(224,2796,716),guest_braking=.10)
         self.legs([((204,2450,704),True)])
         self.wait(4)
         self.capture_pair('recipe-reunion')
@@ -549,7 +580,9 @@ class SchoolPair(PandemoniumPair):
         self.descent()
 
     def descent(self):
-        self.legs([((104,2736,624),True),((0,2824,564),True),((-32,2780,384),True)])
+        # Descend the authored shelves in turn. Sideways paired endpoints can
+        # change the next drop into a diagonal route over open air.
+        self.passage([((104,2736,624),True),((0,2824,564),True),((-32,2780,384),True)])
         self.lower_library_landing()
         self.legs([((200,2776,-288),True)])
         self.until(self.arrived,90)

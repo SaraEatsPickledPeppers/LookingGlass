@@ -16,7 +16,22 @@ pub fn entrance(world: &World, feet: Vec3, safe: impl Fn(Vec3) -> bool) -> Optio
 /// Place the partner on nearby supported ground so ordinary gravity can resume
 /// for the owner. This wider search must not change revival placement rules.
 pub fn reunion(world: &World, owner: &Player, safe: impl Fn(Vec3) -> bool) -> Option<Player> {
-    near(world, owner.feet, if owner.grounded { 32. } else { 256. }, safe)
+    let drop = if owner.grounded { 32. } else { 256. };
+    near(world, owner.feet, drop, &safe).or_else(|| {
+        // A valid scene landing may have no upward clearance under a shelf.
+        // Try a level sweep from the actual body position, retaining the same
+        // distance/drop limits, full footprint and hazard checks. Ordinary
+        // revival keeps its existing placement rules.
+        for radius in [48., 72., 96.] {
+            for direction in directions() {
+                if let Some(player) = beside_with_step(world, owner.feet,
+                    owner.feet + direction * radius, drop, 0., &safe) {
+                    return Some(player);
+                }
+            }
+        }
+        None
+    })
 }
 
 pub fn near(world: &World, feet: Vec3, drop: f32, safe: impl Fn(Vec3) -> bool) -> Option<Player> {
@@ -48,6 +63,11 @@ pub(super) fn neighbors(world: &World, feet: Vec3, safe: impl Fn(Vec3) -> bool) 
 }
 
 fn beside(world: &World, feet: Vec3, beside: Vec3, drop: f32, safe: &impl Fn(Vec3) -> bool) -> Option<Player> {
+    beside_with_step(world, feet, beside, drop, 18., safe)
+}
+
+fn beside_with_step(world: &World, feet: Vec3, beside: Vec3, drop: f32, step: f32,
+    safe: &impl Fn(Vec3) -> bool) -> Option<Player> {
     let source = Immersion::sample(world, feet);
     // A swimmer needs clear water at the same depth, not a dry floor.
     // Trace against walls and sample water along the route, rather than
@@ -64,11 +84,11 @@ fn beside(world: &World, feet: Vec3, beside: Vec3, drop: f32, safe: &impl Fn(Vec
     {
         return Player::spawn(world, beside + Vec3::Z * EYE_HEIGHT);
     }
-    let candidate = beside + Vec3::Z * 18.;
-    if !clear_path(world, feet + Vec3::Z, candidate) {
+    let candidate = beside + Vec3::Z * step;
+    if !clear_path(world, feet + Vec3::Z * step.min(1.), candidate) {
         return None;
     }
-    let distance = drop + 18.;
+    let distance = drop + step;
     let floor = world.body_trace(candidate, candidate - Vec3::Z * distance);
     if floor.start_solid || floor.fraction >= 1. || floor.normal.z < 0.65 {
         return None;
@@ -118,6 +138,28 @@ fn supported(world: &World, feet: Vec3) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn scene_reunion_can_sweep_under_a_low_ceiling_without_crossing_walls() {
+        for ceiling in [56.5, 64.] {
+            let floor = (vec3(-500., -500., -100.), vec3(500., 500., 0.));
+            let roof = (vec3(-500., -500., ceiling), vec3(500., 500., 100.));
+            let world = World::fixture(&[floor, roof]);
+            let owner = Player::spawn(&world, Vec3::Z * (EYE_HEIGHT + 0.03125)).unwrap();
+            assert!(owner.grounded);
+            assert!(near(&world, owner.feet, 32., |_| true).is_none());
+            let partner = reunion(&world, &owner, |_| true).unwrap();
+            assert!(partner.grounded && supported(&world, partner.feet));
+            assert!((partner.feet.distance(owner.feet)-48.).abs() < 0.1);
+            assert!(reunion(&world, &owner, |_| false).is_none());
+            let wall = World::fixture(&[floor, roof,
+                (vec3(19., -500., 0.), vec3(22., 500., 100.)),
+                (vec3(-22., -500., 0.), vec3(-19., 500., 100.)),
+                (vec3(-500., 19., 0.), vec3(500., 22., 100.)),
+                (vec3(-500., -22., 0.), vec3(500., -19., 100.)),
+            ]);
+            assert!(reunion(&wall, &owner, |_| true).is_none());
+        }
+    }
     #[test]
     fn route_neighbors_use_supported_same_landing_and_respect_hazards_and_walls() {
         let floor = World::fixture(&[(vec3(-500.,-500.,-100.),vec3(500.,500.,0.))]);

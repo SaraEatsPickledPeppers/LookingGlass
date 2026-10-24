@@ -390,6 +390,7 @@ impl Driver {
         if command.attack && body.stats.copies(0) > 0 {
             let mut targets = arena.npcs.targets();
             if let Some(cast) = &arena.stage.interactions.encounters { targets.extend(cast.targets()); }
+            if let Some(school) = &arena.stage.interactions.school2 { targets.extend(school.targets()); }
             targets.extend(arena.stage.interactions.shot_targets());
             let context = crate::combat::Context { world, targets: &targets };
             if let Some(target) = targets.iter().filter(|t|t.center.distance(body.player.eye()) < 1000.)

@@ -2182,3 +2182,128 @@ particles are live and each client's history includes drawn effect triangles
 without dropped batches. Entrance and contact captures were inspected.
 This focused pass does not certify every campaign effect. All owned test
 processes and windows were closed, and Anode was released afterward.
+
+### Upper library and School2 test controls (24 October)
+
+The upper stair-and-gap fixture now lets each player complete the stairs and
+jump in turn, with the first continuing west along the gallery before the
+second lands. This avoids placing a waiting body in the take-off point or
+the next route waypoint; collision and landing tolerances are unchanged.
+The public 40/20 ms repeat on frozen `a3ce8a69...` reaches the flying-book
+approach with both alive, after the upper gap, gallery and paired elevator2
+boarding/ride. Its normal host-menu checkpoint at tick 105,626 is retained
+in `private/coop/school-resume-390422f07ec646cab97cefdcbba89ebb/bridge-checkpoint.json`,
+SHA-256 `6ff0424cf634b993c816f4179b6132e1431eaa3de83bf456a094bfc41746d920`.
+This checkpoint alone does not establish a completed route.
+
+The opt-in route controller now includes `School2::targets()` when aiming
+ordinary attacks. The host arena already included those legacy enemies;
+without this addition, a future School2 fixture could walk past enemies that
+normal players can fight. Build
+`2a7bbf285ac97e7299bc27ee10b161e22e6f6851035608aa0d92a5602a35921c`
+passes all 756 tests (one existing ignored), release compilation,
+`--school2-check` and `--coop-world-check`; evidence is in
+`private/coop-school2-driver-{tests,release,native,world}.log`.
+These checks do not replace the pending rendered School2 route.
+
+The book fixture now brings each jumper to the same take-off point in turn,
+and anticipates delayed guest braking on the small landing surfaces. The
+three shelf descents likewise use the authored path in turn, rather than
+giving the partner an offset destination over open air. These are ordinary
+input changes; no player positions, health or checkpoint payloads are edited.
+On `2a7bbf28...`, `private/coop/school-resume-d44435ba535244dea12798e3413b7d74`
+passes all three book jumps, the Blue-owned book scene with Red frozen,
+safe reunion and a fresh guest reconnect. Its normal-menu descent checkpoint
+has SHA-256 `7b6331a1dc4d15268932e9c76072dc3801710245d7990979119e2fb8641bdeb1`.
+
+The repeat from that unchanged checkpoint,
+`private/coop/school-resume-08cd7701e325452a98fe4f517e54879e`, passes the entire
+descent and authored exit into `skool2_start1` (epoch 2). Both clients use the
+public connection with 40/20 ms delay/jitter; 609 sent/restored states and
+17 coincident full reports agree. Both arrive alive at 12/77 Sanity, with no
+death, respawn or checkpoint rollback. Both final rendered views were inspected.
+This is resumed-segment evidence, not a complete school traversal.
+
+The combined bridge repeat
+`private/coop/school-resume-a42391b5188e4f57ac537639a54f7c94` exposed a real
+scene handoff failure: the book scene finished, but the partner placement
+search rejected the owner's low-clearance landing and kept both players
+frozen. Both clients agreed on the stalled state (2,928
+matching sent/restored states and 34 coincident full reports); neither died.
+A read-only replay of that observed world confirms the raised probe starts
+inside the shelf while a level path reaches supported ground beside Alice.
+
+The normal placement probe starts one unit above Alice and searches from
+raised candidate positions. Under a shelf, that can intersect geometry even
+though her actual body fits. Scene reunion now also tries a level sweep from
+the actual body position when the usual samples fail. It retains the same
+distance/drop limits, collision sweeps, hazard rejection and full-footprint
+support checks. Ordinary revival placement is unchanged. Low-ceiling tests
+also reject unsafe landings and intervening walls; the native regression
+checks the observed book-edge position for both owners.
+That regression runs the full original book scene before testing reunion,
+including removal of the book's old collision shape, and confirms that the
+previous raised placement search still fails at the observed position.
+
+Build `ced2c8cb5be427ef3329c06889cce29cf7aae7ef04609b1d8544504e869dc99a`
+passes 757 tests (one existing ignored), release compilation and
+`--coop-world-check`, including the original book scene and safe handoff
+with each Alice as owner. Both retain their health, the owner remains at her
+original position, and the partner remains frozen until reunion. Evidence:
+`private/coop-recipe-handoff-{tests,release,world}.log`. The frozen executable
+is `private/coop-verified-ced2c8c.exe`, SHA-256
+`289e3f9ebafc61f49e4da1aa7d3d701749c492d268920e96d811b2752b527107`.
+
+The combined public two-client repeat on that build passes from the unchanged
+bridge checkpoint through all three book jumps, the original book scene,
+reunion, a fresh guest reconnect, all shelf descents and the authored exit
+into `skool2_start1` (epoch 2). Both arrive alive at 12/77 Sanity with no death,
+respawn or checkpoint rollback. All 1,882 sent/restored states and 35 coincident
+full reports agree; both final rendered views were inspected. Evidence:
+`private/coop/school-resume-b9776816d3284d4f932228f3a25cddef`.
+This repeat enters the book scene while airborne; the native regression above
+separately covers the exact grounded position that previously froze.
+The resumed segment is complete, while both complete entrance-to-exit arrival
+orders remain open. Overall campaign progress remains about 42%.
+
+The focused player-contact/effects repeat on the same build also passes:
+`private/coop/presence-test-8556bf1b5162437486550fb981260815` records 597 matching
+sent/restored states, 36-unit player separation, an unchanged stationary
+partner, both models enabled, live ambient particles and submitted effect
+triangles without dropped batches. This is automated presentation evidence;
+it does not certify every campaign effect or replace visual review of changed art.
+
+### Automated regression runner
+
+Run `python tools/test_coop_regressions.py --data "C:\path\Alice1\bin\base"`
+inside Anode. It runs the native shared-world/scene checks, native School2
+checks and two-client player-contact/ambient-effects test. Internet joining
+with 40/20 ms delay/jitter is the default. `--exe` selects a frozen build;
+`--only world school2` selects the checks that need no desktop.
+
+Add `--school-checkpoint <ordinary-checkpoint.json> --school-resume-point bridge`
+to include the books, cutscene, fresh guest reconnect, descent and exit; other
+documented school resume points are also supported. Checkpoint bytes are copied
+unchanged through the existing resume fixture. `--first red` changes the leader.
+
+The runner writes one private `regression-suite-*/summary.json` with bounded
+pass/fail output, executable and fixture hashes, elapsed times, network/effect
+metrics, evidence locations and explicit coverage scope. It stops at the first
+failure, applies per-test time limits and cleans up its owned process tree on
+timeout/interruption. Partial or interrupted runs cannot report a suite pass.
+
+Prefer these automated assertions and compact reports for routine repeats.
+Keep captures in the evidence folder, and inspect images only for a new visual
+change, a failed check, or a problem that the current assertions cannot measure.
+A focused suite pass does not complete a campaign-matrix row.
+
+The first complete runner verification passes all four cases on `ced2c8cb...`:
+`private/coop/regression-suite-746c9472e407480682aff113ca65697d/summary.json`.
+The native world and School2 checks pass, the presence test records 623 matching
+network states and 36-unit player separation, and the bridge-to-School2 segment
+records 1,972 matching states and 67 full reports with resources/scenes retained
+after guest reconnect. All checks completed in about 261 seconds, using the
+public connection with 40/20 ms delay/jitter for the two-client tests. No images
+were opened during this suite. A separate empty-data failure probe correctly
+returned failure and stopped before the next case; its report is
+`private/coop/regression-suite-f99df7c54fc845f6956a6dc8d8722730/summary.json`.

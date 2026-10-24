@@ -5,6 +5,11 @@ The village, Pandemonium, both Fortress visits and Beyond have the complete comb
 Existing single-player route tests do not supply evidence for two-player play.
 Record build identities and reproducible evidence before changing a row to passed.
 
+Passed rows retain the build-specific evidence recorded below. Player contact
+was added afterward; earlier full traversals must be repeated with separate
+waiting/landing positions before release. The focused contact/effect checks
+in `COOP.md` do not substitute for those campaign repeats.
+
 Each visit requires both host/guest roles and both first-arrival orders, coherent enemies
 and individual consumables, single-player cutscenes with safe reunion, shared-transport
 boarding, a real gameplay death followed by timed spectating/respawn, a simultaneous wipe
@@ -685,7 +690,7 @@ both original portals and the gated return, without cheats or recovery
 | 4 | `fortress2` | `Initial` | Passed (combined evidence above): full traversal in both orders (Blue audited, Red clean exit), fresh guest rejoin before exit; both Rage, bridge and cycling-elevator boarding orders; late Rage on the cycling lift; notes/reset/rejoin with audio; nearest-visible guard damage and separate healing; both combat death/spectator/respawn roles and saved-checkpoint wipe; clear return camera and visible Rage owner |
 | 5 | `fortress1` | `fortress1_start2` | Passed (combined evidence above): both delayed public full traversals to school, correct reveal owners/frozen partners/reunions and inspected middle views, ambush activation, fresh guest rejoin before exit; nearest-visible guard damage in both roles, individual healing, both actual death/spectator/respawn roles and saved-checkpoint wipe; shared boarding N/A |
 | 6 | `skool1` | `Initial` | Partial: Red-first public traversal through five scenes, both paired lifts, book crossing and recipe; fresh guest rejoin, personal Mallets and coherent full school snapshots; nearest-visible guard damage in both roles, separate healing, both combat death/spectator/respawn roles and saved-checkpoint wipe pass. Red library-to-exit and Blue theatre-to-exit checkpoint segments pass, including the explicit upper gap jump, airborne reunion and lower shelf. Both complete entrance-to-exit arrival orders remain open. |
-| 7 | `skool2` | `Initial` | Preparation only: paired gym lever/bleachers and school machinery adapters pass native rider, obstruction and restore checks; the complete single-player route passes with these changes. Co-op quest/combat and rendered traversal are not yet verified. |
+| 7 | `skool2` | `Initial` | Component checks pass for paired gym lever/bleachers, machinery riders/obstruction/restore, legacy enemy targeting and per-player damage, shared quest pickups, personal resources and paused quest clocks. The complete single-player route also passes. Full rendered/network co-op traversal, combat and scene ownership remain open. |
 | 8 | `skool1` | `skool1_start2` | Not run |
 | 9 | `potears1` | `Initial` | Not run |
 | 10 | `potears2` | `Initial` | Not run |

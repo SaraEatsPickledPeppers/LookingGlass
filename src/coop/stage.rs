@@ -14,7 +14,7 @@ use crate::{
     movement::{Controls, Player, FIXED_DT},
     story::Story,
 };
-use anyhow::{ensure, Result};
+use anyhow::{ensure, Context, Result};
 use macroquad::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -804,6 +804,48 @@ pub fn check(assets: &mut Assets) -> Result<()> {
             && roster.players.each_ref().map(|b| b.stats.sanity()) == health,
             "Recipe owner did not land normally after reunion");
         println!("PASS co-op airborne recipe handoff {first:?}: partner on safe floor, owner gravity resumes, no health grant or damage");
+        // This ordinary book-scene entry fits under a shelf, but the old
+        // placement probe starts one unit higher and intersects its overhang.
+        // Run the original book scene: its completion removes the book's old
+        // collider, so a fresh entrance world is not a valid handoff fixture.
+        let (book, book_world, _, book_story) =
+            crate::school::cinema_check::setup(assets, &map, "book_cinematic")?;
+        stage.interactions = book;
+        stage.story = book_story;
+        stage.contacts = Contacts::new(&stage.interactions);
+        world = book_world;
+        stage.interactions.sync_coop(&mut world);
+        let edge = vec3(122.937584, 2510.9956, 696.03125);
+        ensure!(world.body_clear(edge) && !world.body_clear(edge + Vec3::Z),
+            "Recipe edge no longer exercises the low-clearance handoff");
+        roster.players[first.index()].player = Player::spawn(&world, edge + Vec3::Z * crate::movement::EYE_HEIGHT)
+            .context("Recipe edge regression is obstructed")?;
+        let waiting = vec3(222.30391, 2800.97, 716.03125);
+        roster.players[first.partner().index()].player = Player::spawn(&world,
+            waiting + Vec3::Z * crate::movement::EYE_HEIGHT).context("Recipe waiting book is obstructed")?;
+        stage.owner = Some(first);
+        stage.last_owner = first;
+        for _ in 0..9000 {
+            stage.scene_step(&mut roster, &map, &mut world, &Default::default())?;
+            if !stage.busy() { break; }
+            ensure!(stage.owner == Some(first)
+                && roster.players[first.partner().index()].player.feet.distance(waiting) < 0.1,
+                "Recipe scene moved its frozen partner or changed owner");
+        }
+        ensure!(!stage.busy() && roster.players[first.index()].player.feet.distance(edge) < 0.1,
+            "Finished recipe scene did not release its owner at the book edge: busy={} feet={:?}",
+            stage.busy(), roster.players[first.index()].player.feet);
+        let other = &roster.players[first.partner().index()].player;
+        ensure!(other.grounded && (other.feet.z-edge.z).abs() < 1.
+            && other.feet.distance(edge) >= 36. && other.feet.distance(edge) <= 110.
+            && world.body_clear(other.feet) && !stage.interactions.hazardous(other.feet),
+            "Recipe edge reunion did not find separate safe footing");
+        ensure!(roster.players.each_ref().map(|b| b.stats.sanity()) == health,
+            "Recipe edge reunion changed health");
+        ensure!(stage.story.has_seen("book_cinematic")
+            && super::placement::near(&world, edge, 32., |at| !stage.interactions.hazardous(at)).is_none(),
+            "Recipe handoff must finish the original scene and exercise the old placement failure");
+        println!("PASS co-op recipe edge handoff {first:?}: owner retained, partner supported and separate, scene releases");
     }
     Ok(())
 }
