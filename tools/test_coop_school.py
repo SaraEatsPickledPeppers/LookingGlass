@@ -278,6 +278,11 @@ class SchoolPair(PandemoniumPair):
             for goal,navigate in role_goals:
                 self.set(role,goal,navigate)
                 self.until(lambda:self.reached(role))
+                # A planned jump accepts the first grounded arrival within
+                # its landing radius. Switch to damped ordinary steering now:
+                # delayed inputs can otherwise carry the guest off the stairs
+                # and restart that jump plan during the combat wait.
+                self.set(role,goal)
                 self.secure(keep_movement=True)
                 self.until(lambda:self.reached(role),20)
                 self.set(role)
@@ -294,6 +299,8 @@ class SchoolPair(PandemoniumPair):
         self.set(self.partner)
         self.set(self.first,first_goal,navigate=True)
         self.until(lambda: self.reached(self.first),40)
+        self.set(self.first,first_goal)
+        self.until(lambda: self.reached(self.first),20)
         self.set(self.first)
         initial = {r:copy.deepcopy(obj(r)) for r in self.reports}
         clocks = {r:self.school(r)['clock'] for r in self.reports}
@@ -303,14 +310,21 @@ class SchoolPair(PandemoniumPair):
             assert obj(role)['motion'] == before['motion'], 'Lift timer advanced while partner absent'
         self.capture_pair(name+'-waiting')
         self.set(self.partner,second_goal,navigate=True)
-        index = 0 if self.partner == 'host' else 1
         # Boarding starts the shared clock before the second rider reaches the
         # planned endpoint. Stop on that host signal: following a fixed world
         # coordinate after rotation begins can walk the delayed guest off.
+        # The second player may board well before that endpoint. Requiring
+        # proximity to it keeps the jump plan running despite confirmed
+        # boarding; the shared clock and both grounded heights are sufficient.
         self.until(lambda: obj()['motion'] != initial['host']['motion'] and
-                   distance(self.bodies()[index]['player']['feet'][:2],second_goal[:2]) < 40 and
                    all(b['player']['grounded'] and b['player']['feet'][2] >= first_goal[2]-2
                        for b in self.bodies()),40)
+        # A body can touch the lift while still overlapping the fixed lower
+        # landing. Finish boarding with damped walking, not the jump plan, and
+        # release it at the first actual platform movement. Carrying remains
+        # blocked safely until both bodies have cleared the fixed landing.
+        self.set(self.partner,second_goal)
+        self.until(lambda: obj()['pose'] != initial['host']['pose'],20)
         self.set(self.partner)
         self.evidence.setdefault('lift_boarding',[]).append(dict(name=name,
             tick=self.reports['host']['frame']['tick'],motion_time=obj()['motion']['time'],
@@ -677,7 +691,14 @@ class SchoolPair(PandemoniumPair):
                 for field in ('players','owner','school','encounters'):
                     assert row[field] == other[field], f'Authoritative school {field} differs'
                 compared += 1
-        assert compared > 0, 'No coincident full school reports were observed'
+        # Short component runs need not produce coincident local report clocks.
+        # New builds record the complete shared world at each sent/restored
+        # network tick; require those comparisons instead of relying on luck.
+        if any('world_sha256' in state for rows in self.history.values() for row in rows
+               for state in row['driver']['network_states']):
+            self.verify_network_states('world_sha256', 'matching_shared_world_states')
+        else:
+            assert compared > 0, 'No coincident full school reports were observed'
         self.evidence['matching_full_school_frames'] = compared
         self.verify_network_states()
 

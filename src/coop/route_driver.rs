@@ -169,6 +169,9 @@ pub struct NetworkState {
     epoch: u64,
     tick: u64,
     sha256: String,
+    /// Includes shared movers, quest progress and scene state at this exact
+    /// sent/restored tick, independent of local diagnostic report timing.
+    world_sha256: String,
 }
 #[derive(Serialize)]
 pub struct EnemyReport<S> {
@@ -217,8 +220,10 @@ impl Driver {
         let enemies = arena.stage.interactions.encounters.as_ref().map(|c| c.snapshot());
         let bytes = serde_json::to_vec(&(frame.epoch, frame.tick, frame.checkpoint_generation,
             &frame.players, &frame.lives, enemies))?;
+        let world = serde_json::to_vec(&(frame.epoch, frame.tick, arena.stage.snapshot()))?;
         states.push_back(NetworkState { epoch:frame.epoch, tick:frame.tick,
-            sha256:format!("{:x}",Sha256::digest(bytes)) });
+            sha256:format!("{:x}",Sha256::digest(bytes)),
+            world_sha256:format!("{:x}",Sha256::digest(world)) });
         while states.len() > 64 { states.pop_front(); }
         Ok(())
     }

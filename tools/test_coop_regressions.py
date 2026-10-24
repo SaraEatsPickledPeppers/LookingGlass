@@ -1,6 +1,6 @@
 """Run focused co-op regressions and write a compact machine-readable report.
 
-Run in Anode when selecting rendered tests (presence or school). Native tests
+Run in Anode when selecting rendered tests (presence or any school route). Native tests
 can run without a desktop. Screenshots remain in private evidence folders and
 are never opened by this runner. A pass is not full campaign certification.
 """
@@ -51,27 +51,31 @@ def result_from_log(log):
     result = json.loads((folder / 'result.json').read_text())
     if result.get('passed') is not True or not re.fullmatch(r'[0-9a-f]{64}', result.get('build', '')):
         raise ValueError('Rendered test has no valid passing result/build identity')
-    fields = ('matching_sent_and_restored_states', 'matching_full_school_frames',
+    fields = ('matching_sent_and_restored_states', 'matching_shared_world_states', 'matching_full_school_frames',
               'contact_distance', 'stationary_partner_unchanged',
-              'both_models_and_particles_visible', 'checkpoint_sha256', 'resume_point')
+              'both_models_and_particles_visible', 'checkpoint_sha256', 'resume_point', 'lifts')
     metrics = {key: result['evidence'][key] for key in fields if key in result['evidence']}
     rejoin = result['evidence'].get('rejoin')
     if rejoin:
         metrics['rejoin_preserved_resources_and_scenes'] = rejoin['resources_and_completed_scenes_preserved']
-    return dict(build=result['build'], evidence=str(folder), scope=result['scope'], metrics=metrics)
+    return dict(build=result['build'], evidence=str(folder), scope=result['scope'],
+                first=result.get('first'), metrics=metrics)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--exe', type=Path, default=ROOT / 'target/release/looking-glass.exe')
     parser.add_argument('--data', type=Path, required=True)
-    parser.add_argument('--only', nargs='+', choices=('world', 'school2', 'presence', 'school'))
+    parser.add_argument('--only', nargs='+', choices=('world', 'school2', 'presence', 'school',
+                                                   'school-blue', 'school-red', 'lift-blue', 'lift-red'),
+                        help='school resumes a checkpoint; school-blue/red traverse the full first school; lift-blue/red test boarding from a staged start')
     parser.add_argument('--local', action='store_true')
     parser.add_argument('--delay-ms', type=int, default=40)
     parser.add_argument('--jitter-ms', type=int, default=20)
     parser.add_argument('--school-checkpoint', type=Path)
     parser.add_argument('--school-resume-point', choices=('theatre', 'balcony', 'spiral', 'library', 'bridge', 'descent'))
-    parser.add_argument('--first', choices=('blue', 'red'), default='blue')
+    parser.add_argument('--first', choices=('blue', 'red'), default='blue',
+                        help='Arrival order for the resumed school case; full cases name their own order')
     args = parser.parse_args()
     args.exe, args.data = args.exe.resolve(), args.data.resolve()
     if not args.exe.is_file() or not args.data.is_dir():
@@ -97,6 +101,11 @@ def main():
         'school2': ([str(args.exe), '--data', str(args.data), '--school2-check'], 180, False),
         'presence': ([sys.executable, str(ROOT / 'tools/test_coop_presence.py'), *common], 300, True),
     }
+    for first in ('blue', 'red'):
+        cases['school-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school.py'), *common,
+                                    '--first', first, '--rejoin'], 1500, True)
+        cases['lift-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school_lift.py'), *common,
+                                  '--first', first], 300, True)
     if args.school_checkpoint:
         cases['school'] = ([sys.executable, str(ROOT / 'tools/test_coop_school_resume.py'), *common,
                            '--checkpoint', str(args.school_checkpoint), '--resume-point', args.school_resume_point,

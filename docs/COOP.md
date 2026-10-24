@@ -2286,6 +2286,21 @@ to include the books, cutscene, fresh guest reconnect, descent and exit; other
 documented school resume points are also supported. Checkpoint bytes are copied
 unchanged through the existing resume fixture. `--first red` changes the leader.
 
+Use `--only school-blue school-red` for two complete, independent first-school
+entrance-to-exit runs, with Blue then Red arriving first. Each run starts from
+the normal entrance and includes a fresh guest reconnect. These cases need no
+checkpoint argument; their names select the arrival order independently of
+`--first`. They retain the route's scene, lift, personal pickup, no-death and
+network checks and each has a 25-minute timeout. Focused combat/recovery checks
+remain separate from this traversal coverage.
+
+Use `--only lift-blue lift-red` for quick spiral-lift boarding checks in both
+orders. These start two independent clients beside the lower-library lift with
+the explicit `--start-at` diagnostic spawn, then use ordinary movement for the
+approach and ride. They require a two-second partner wait, both riders reaching
+the upper landing, matching network state and no death or wipe. The staged
+start makes these component checks; they do not certify school traversal.
+
 The runner writes one private `regression-suite-*/summary.json` with bounded
 pass/fail output, executable and fixture hashes, elapsed times, network/effect
 metrics, evidence locations and explicit coverage scope. It stops at the first
@@ -2296,6 +2311,14 @@ Prefer these automated assertions and compact reports for routine repeats.
 Keep captures in the evidence folder, and inspect images only for a new visual
 change, a failed check, or a problem that the current assertions cannot measure.
 A focused suite pass does not complete a campaign-matrix row.
+
+New diagnostic builds additionally hash the complete shared stage at each
+sent/restored network tick: movers, quest state, scene ownership, contacts and
+story progress. School fixtures require at least 20 matching shared-stage hashes
+when this field is available, while retaining every available same-tick full
+report comparison and the existing player/enemy hash comparisons. Older builds
+still require coincident full reports. This makes short component checks
+independent of the two local report clocks without weakening state validation.
 
 The first complete runner verification passes all four cases on `ced2c8cb...`:
 `private/coop/regression-suite-746c9472e407480682aff113ca65697d/summary.json`.
@@ -2355,3 +2378,33 @@ Two departure clearances use ordinary movement. The final fixture SHA-256 is
 No images were opened during these repeats. This completes the resumed segment;
 both complete entrance-to-exit arrival orders remain open, and overall progress
 remains about 42%.
+
+### Full-route controls and short lift regressions
+
+The next complete Blue-first attempt exposed continued jump planning after a
+brief stair landing. Passage controls now switch to damped walking at arrival,
+as paired landings already do. Its repeat passed both stair passages, both
+personal Mallets, the balcony and every lower-library waypoint before exposing
+the lift approach. A rider can touch the lift while overlapping the fixed lower
+landing, and requiring the final planned endpoint can continue walking after
+rotation starts. The fixture now aligns the first rider, switches the second
+from jump planning to walking when boarding starts, and releases movement at
+the first actual lift pose change. Production boarding/carrying rules are
+unchanged. The waiting, both-rider upper-height and no-death checks remain.
+
+The five-case suite passes on build
+`57fd88a789fcc1474432304154723b58707a6579fe335dfbeefa8dab60992657`:
+`private/coop/regression-suite-0416f33b7f5947c39af2731d88d4d1dd/summary.json`.
+Native world and School2 checks pass, followed by the rendered contact/effects
+case (613 matching player/enemy states) and both staged lift orders. Blue-first
+passes with 278 matching player/enemy and complete shared-stage states, despite
+zero coincident local full reports; Red-first passes with 317 matching states
+and 31 coincident full reports. Both lifts wait two seconds for their partner
+and carry both players to height 64. The suite takes about 202 seconds; both
+lift cases take under 40 seconds each. All 757 Rust tests and the release build
+pass (one existing ignored test). No images were opened.
+
+The full-school runner correctly recorded the earlier failed traversal and
+stopped; these component passes do not replace it. Complete entrance-to-exit
+runs in both arrival orders and current-contact combat/recovery repeats remain
+open. Overall progress stays about 42%.

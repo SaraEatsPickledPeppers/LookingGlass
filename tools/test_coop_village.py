@@ -279,19 +279,19 @@ class Pair:
             self.until(lambda: self.processes[role].poll() is not None, 30)
             assert self.processes[role].returncode == 0
 
-    def verify_network_states(self):
+    def verify_network_states(self, field='sha256', metric='matching_sent_and_restored_states'):
         states = {}
         for role, rows in self.history.items():
             states[role] = {}
             for row in rows:
                 for state in row['driver']['network_states']:
                     key = (state['epoch'], state['tick'])
-                    previous = states[role].setdefault(key, state['sha256'])
-                    assert previous == state['sha256'], 'An authoritative tick changed after being recorded'
+                    previous = states[role].setdefault(key, state[field])
+                    assert previous == state[field], f'An authoritative {field} tick changed after being recorded'
         shared = states['host'].keys() & states['guest'].keys()
         assert len(shared) >= 20, 'Too few matching sent/restored network states'
-        assert all(states['host'][key] == states['guest'][key] for key in shared), 'Sent and restored player/enemy states disagree'
-        self.evidence['matching_sent_and_restored_states'] = len(shared)
+        assert all(states['host'][key] == states['guest'][key] for key in shared), f'Sent and restored {field} states disagree'
+        self.evidence[metric] = len(shared)
 
     def run(self):
         self.start_pair()
