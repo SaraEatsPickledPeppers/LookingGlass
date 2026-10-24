@@ -97,14 +97,31 @@ The Red-first public repeat also passes on that build/settings in
 four Red-owned scenes, three reunions, delayed boarding, both personal Cards and
 89 matching authoritative ticks. Both arrive alive (Blue 39.867 / Red 23.468),
 without respawns or checkpoint resets. Rope, boarding-wait and initial Fortress
-cinematic views were inspected; both clients and the job exit normally. Personal
-death/recovery, saved-checkpoint wipe, consumable/enemy and disconnect/rejoin
-checks remain open for this visit.
+cinematic views were inspected; both clients and the job exit normally.
+Both entrance-side hazard deaths now pass over the same public connection and
+delay/jitter settings on that build, in
+`private/coop/pandemonium-recovery-1127245225934d65ac70d7f9af173184/`.
+Red's death/respawn ticks are 6,054/7,254 and Blue's are 8,962/10,162: both clients
+agree on exactly 1,200 ticks, moving spectator cameras, 25-Sanity recovery 48 units
+from the survivor, retained inventory and the survivor's unchanged health. The
+team wipe at tick 11,170 restores the automatic checkpoint from tick 1, with full
+saved resources, initial placements and earlier quest/scene flags. Both first
+restored samples have zero horizontal displacement from the saved placements.
+Spectator/checkpoint views were inspected and both clients exit normally. This
+fixture ends at the restored checkpoint.
+Fresh-process guest rejoin near the airship followed by the authored exit also
+passes on the same build/settings in
+`private/coop/pandemonium-test-b5965aedc3274cba8065c2c111d4421f/` (Blue leads).
+Both personal resources and completed cart/key/scene flags survive; all four
+owners, three reunions and 126 matching authoritative ticks pass. Both retain
+Cards and arrive alive (Blue 45.734 / Red 15.668 Sanity), with no respawn or wipe.
+The initial Fortress cinematic views were inspected; both processes exit normally.
+Per-visit consumable and enemy coverage remains open before this row can pass.
 
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Partial: both arrival orders, deaths/spectator/respawn in both roles, saved-checkpoint wipe and fresh guest rejoin-to-exit pass; consumable/enemy evidence pending; shared boarding N/A |
-| 2 | `pandemonium` | `Initial` | Partial: native and delayed public routes in both orders pass, including rope/cart, four scenes/three reunions and personal Cards; death/rejoin/consumable/enemy matrix pending |
+| 2 | `pandemonium` | `Initial` | Partial: native and delayed public routes in both orders, rope/cart, four scenes/three reunions, personal Cards, both hazard death/respawn roles, saved-checkpoint wipe and fresh guest rejoin-to-exit pass; consumable/enemy evidence pending |
 | 3 | `fortress1` | `Initial` | Not run |
 | 4 | `fortress2` | `Initial` | Not run |
 | 5 | `fortress1` | `fortress1_start2` | Not run |

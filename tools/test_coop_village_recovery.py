@@ -14,6 +14,9 @@ from test_coop_village import Pair
 
 
 class Recovery(Pair):
+    death_goal = (-3155, 2670, -384)
+    death_navigate = False
+
     def __init__(self, args):
         super().__init__(args)
         self.allowed_deaths = set()
@@ -36,7 +39,8 @@ class Recovery(Pair):
 
     def capture_pair(self, label):
         for role, old in list(self.commands.items()):
-            self.set(role, old['goal'], old['navigate'], capture=True, epoch=old['epoch'])
+            self.set(role, old['goal'], old['navigate'], capture=True, epoch=old['epoch'],
+                     horizontal=old['horizontal'], rope=old['rope'], marker=old['marker'])
         self.until(lambda: all(self.reports[r]['route_driver']['captured'] == self.commands[r]['id']
                                for r in self.commands), 30)
         self.recovery_captures[label] = {r: f'{r}/route-capture-{self.commands[r]["id"]}.png'
@@ -50,6 +54,9 @@ class Recovery(Pair):
                 self.set(role, goal)
             self.until(lambda: all(self.reached(role) for role in roles), 40)
 
+    def survivor_goal(self, victim_index):
+        return (-2880 if victim_index == 1 else -2936, 3024, 128)
+
     def fall_and_respawn(self, victim):
         index = 0 if victim == 'host' else 1
         partner = 'guest' if victim == 'host' else 'host'
@@ -58,14 +65,14 @@ class Recovery(Pair):
         before = self.reports['host']['frame']
         starts = {r: len(rows) for r, rows in self.history.items()}
         self.allowed_deaths = {index}
-        self.set(victim, (-3155, 2670, -384))
+        self.set(victim, self.death_goal, navigate=self.death_navigate)
         self.set(partner)
         self.until(lambda: all(r['frame']['players'][index]['stats']['sanity'] <= 0
                                for r in self.reports.values()), 90)
         self.set(victim)
-        # A known supported stretch of the climb provides a moving spectator
+        # A known supported stretch provides a moving spectator
         # subject. It is ordinary slow walking, not a camera/position write.
-        self.set(partner, (-2880 if index == 1 else -2936, 3024, 128))
+        self.set(partner, self.survivor_goal(index))
         dead_at = self.reports['host']['frame']['tick']
         self.until(lambda: self.reports['host']['frame']['tick'] >= dead_at + 180)
         self.capture_pair(f'{victim}-spectating')
@@ -116,7 +123,7 @@ class Recovery(Pair):
         assert results['host']['death_tick'] == results['guest']['death_tick']
         assert results['host']['spawn_tick'] == results['guest']['spawn_tick']
         self.evidence[victim + '_recovery'] = results
-        print('PASS village real fall and ten-second spectator/25-health respawn:', victim, results, flush=True)
+        print('PASS', self.map_name, 'real traversal death and ten-second spectator/25-health respawn:', victim, results, flush=True)
 
     def wipe(self, saved):
         self.go((-2936, 3024, 128))
@@ -126,17 +133,28 @@ class Recovery(Pair):
         original = saved['frame']['combat']['stage']['world']['village']['cinema']['done']
         assert set(done) > set(original), 'World did not progress beyond the saved checkpoint'
         self.approach_fall(['host', 'guest'])
+        self.cause_wipe(saved)
+
+    def verify_wiped_world(self, report, saved):
+        village = report['combat']['stage']['world']['village']
+        expected = saved['frame']['combat']['stage']['world']['village']
+        assert village['cinema']['done'] == expected['cinema']['done'], 'Wipe retained later scene completions'
+        assert village['hatch_open'] == expected['hatch_open'], 'Wipe did not restore the shared hatch'
+
+    def cause_wipe(self, saved):
         self.allowed_deaths = {0, 1}
         self.allow_wipe = True
         for role in self.commands:
-            self.set(role, (-3155, 2670, -384))
+            self.set(role, self.death_goal, navigate=self.death_navigate)
         self.until(lambda: all(r['frame']['checkpoint_generation'] == 1 for r in self.reports.values()), 90)
         self.expected_generation = 1
         self.allow_wipe = False
         self.allowed_deaths = set()
         results = {}
+        placements = {}
         for role, report in self.reports.items():
             frame = report['frame']
+            restored = next(r for r in self.history[role] if r['checkpoint_generation'] == 1)
             assert frame['lives']['states'] == ['Alive', 'Alive']
             assert frame['players'][0]['spawned_at'] == frame['players'][1]['spawned_at'] > 0
             for body, old in zip(frame['players'], saved['frame']['players']):
@@ -145,20 +163,31 @@ class Recovery(Pair):
                     # loot::tick_with creates the current visit's empty ledger
                     # on the first resumed ordinary tick. This adds no award or
                     # item. Every resource, award and drop still compares exactly.
-                    expected_stats['loot'].setdefault('gvillage$first', {'awarded': [], 'drops': []})
+                    expected_stats['loot'].setdefault(self.map_name + '$first', {'awarded': [], 'drops': []})
                 assert body['stats'] == expected_stats, 'Wipe did not restore saved personal resources exactly'
-                assert distance(body['player']['feet'], old['player']['feet']) < 20, 'Wipe missed the saved player placement'
-            village = report['combat']['stage']['world']['village']
-            expected = saved['frame']['combat']['stage']['world']['village']
-            assert village['cinema']['done'] == expected['cinema']['done'], 'Wipe retained later scene completions'
-            assert village['hatch_open'] == expected['hatch_open'], 'Wipe did not restore the shared hatch'
+            # Even the first received frame can follow resumed held movement.
+            # Bound horizontal drift by ordinary maximum run speed and the known
+            # host ticks since restore, not an arbitrary fixed latency allowance.
+            samples = []
+            for body, old in zip(restored['players'], saved['frame']['players']):
+                elapsed = restored['tick'] - body['spawned_at']
+                assert 0 <= elapsed <= 120, 'First restored report is too late to verify checkpoint placement'
+                horizontal = distance(body['feet'][:2], old['player']['feet'][:2])
+                allowance = max(20, 2 + 320 * elapsed / 120)
+                assert horizontal <= allowance, 'Wipe missed the saved player placement'
+                assert abs(body['feet'][2] - old['player']['feet'][2]) < 20, 'Wipe restored a different platform'
+                samples.append({'elapsed_ticks': elapsed, 'horizontal_distance': horizontal,
+                                'maximum_distance': allowance})
+            placements[role] = samples
+            self.verify_wiped_world(report, saved)
             assert all(report['route_driver']['clear'])
             results[role] = frame['players'][0]['spawned_at']
         assert results['host'] == results['guest'], 'Clients disagree about the team wipe'
         self.evidence['wipe'] = {'tick': results['host'], 'saved_tick': saved['frame']['tick'],
-            'saved_resources_positions_and_scene_progress_restored': True}
+            'saved_resources_positions_and_scene_progress_restored': True,
+            'first_restored_placement_samples': placements}
         self.capture_pair('checkpoint-restored')
-        print('PASS village both-dead checkpoint restoration:', self.evidence['wipe'], flush=True)
+        print('PASS', self.map_name, 'both-dead checkpoint restoration:', self.evidence['wipe'], flush=True)
 
     def run(self):
         self.start_pair()

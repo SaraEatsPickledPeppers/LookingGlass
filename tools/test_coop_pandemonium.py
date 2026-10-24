@@ -1,8 +1,8 @@
 """Traverse Pandemonium through two independent clients and ordinary inputs.
 
 Uses the public internet invite by default, including configurable delay/jitter.
-No position, health, inventory, quest or shared-world writes. Death/rejoin checks
-remain separate from this clean full-route check. Original map markers are read
+No position, health, inventory, quest or shared-world writes. The death matrix is
+separate; --rejoin checks a fresh guest before the exit. Original map markers are read
 by each client from its own installed assets, never copied into the harness.
 """
 import argparse
@@ -140,11 +140,21 @@ class PandemoniumPair(Pair):
     def exit(self):
         for goal in [(-3968,2560,-232),(-3968,2624,-232)]:
             self.go(goal)
+        if self.args.rejoin:
+            self.rejoin_guest()
         self.set(self.partner)
         self.set(self.first, (-3968,2900,-232))
         self.until(lambda: self.pand()['departure'])
         self.wait(1)
         self.until(self.arrived, 120)
+
+    def verify_rejoined_world(self, before, report):
+        old = before['combat']['stage']['world']['pandemonium']
+        new = report['combat']['stage']['world']['pandemonium']
+        for field in ('cart','rides','key','returned','leaving','departure','exit_sent'):
+            assert new[field] == old[field], f'Rejoin changed Pandemonium {field}'
+        for field in ('beat','warning_done','return_done'):
+            assert new['cinema'][field] == old['cinema'][field], f'Rejoin changed Pandemonium scene {field}'
 
     def verify(self):
         expected = {'Elder_Gnome1_Warn_Thread','Minecart_Thread','alice_leave','Pand_End_Ship'}
@@ -199,7 +209,9 @@ class PandemoniumPair(Pair):
         (self.folder / 'result.json').write_text(json.dumps({'passed': True, 'internet': not self.args.local,
             'build': self.build, 'evidence': self.evidence,
             'first': self.args.first, 'delay_ms': self.args.delay_ms, 'jitter_ms': self.args.jitter_ms,
-            'scope': 'full Pandemonium traversal in separate clients; death/rejoin matrix remains separate'}, indent=2))
+            'scope': 'full Pandemonium traversal in separate clients' +
+                (' with fresh guest rejoin before the exit; death matrix remains separate' if self.args.rejoin
+                 else '; death/rejoin matrix remains separate')}, indent=2))
         print('PASS two-process Pandemonium: shared rope, waiting cart, four scenes, personal Cards and authored network transition.', flush=True)
 
 
@@ -209,6 +221,7 @@ if __name__ == '__main__':
     parser.add_argument('--data', type=Path, required=True)
     parser.add_argument('--first', choices=('blue','red'), default='blue')
     parser.add_argument('--local', action='store_true')
+    parser.add_argument('--rejoin', action='store_true', help='Leave/rejoin the guest before the authored airship exit')
     parser.add_argument('--delay-ms', type=int, default=40)
     parser.add_argument('--jitter-ms', type=int, default=20)
     args = parser.parse_args()

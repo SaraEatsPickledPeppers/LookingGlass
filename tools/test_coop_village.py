@@ -236,7 +236,7 @@ class Pair:
             frame = report['frame']
             assert report['visit'] == before['visit'] and frame['checkpoint_generation'] == checkpoint
             assert frame['tick'] >= before['frame']['tick']
-            assert report['combat']['stage']['world']['village']['cinema']['done'] == before['combat']['stage']['world']['village']['cinema']['done']
+            self.verify_rejoined_world(before, report)
             for body, old in zip(frame['players'], before['frame']['players']):
                 for field in ('sanity', 'will', 'owned', 'collected', 'selected',
                               'school_items', 'staff_component', 'difficulty'):
@@ -247,7 +247,10 @@ class Pair:
             'before_tick': before['frame']['tick'], 'after_tick': self.reports['guest']['frame']['tick'],
             'resources_and_completed_scenes_preserved': True}
         (self.folder / 'after-rejoin.json').write_text(json.dumps(self.reports))
-        print('PASS village guest left and rejoined near the exit with personal resources and scene progress intact.', flush=True)
+        print('PASS', self.map_name, 'guest left and rejoined near the exit with personal resources and scene progress intact.', flush=True)
+
+    def verify_rejoined_world(self, before, report):
+        assert report['combat']['stage']['world']['village']['cinema']['done'] == before['combat']['stage']['world']['village']['cinema']['done']
 
     def finish_pair(self, epoch):
         for role in self.commands:

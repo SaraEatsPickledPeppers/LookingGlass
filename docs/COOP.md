@@ -210,8 +210,7 @@ The final co-op native repeat used the authorized PC fallback while Anode was
 busy; the preceding full native render checks ran in Anode. All error logs are
 empty and all owned game processes closed. The final change only orders multiple
 co-op grip attachments; the single-player one-grip path is unchanged. The later
-public separate-client traversal evidence follows below. Individual death/recovery,
-saved-checkpoint wipe and disconnect/rejoin coverage remains open.
+public separate-client traversal, recovery and rejoin evidence follows below.
 
 Run the staged check in Anode after building:
 
@@ -260,8 +259,8 @@ inspected. The last capture is during Fortress's arrival sequence; it does not
 verify that next visit. Both client processes exit normally and the private invite
 is removed. Evidence: `private/coop/pandemonium-test-25726e42ca974a459cf70cd356606c0e/`,
 `private/coop-pandemonium-network-blue2.log`. This run used the authorized local
-desktop fallback while Anode was busy. Pandemonium's death/recovery, saved-wipe,
-consumable/enemy and disconnect/rejoin matrix remains incomplete.
+desktop fallback while Anode was busy. Later recovery/rejoin results follow below;
+the complete Pandemonium matrix still requires consumable/enemy coverage.
 
 The Red-first repeat also passes on the same build and delay/jitter settings,
 running in Anode. Both clients observe all four Red-owned scenes, three reunions,
@@ -274,6 +273,71 @@ removed. Evidence: `private/coop/pandemonium-test-a2cf6558bee64719af5fda4834594c
 `private/coop-pandemonium-network-red1.log`. Python compilation and all 19 existing
 setup/source-package checks pass. No campaign row is promoted to passed by these
 clean traversals alone.
+
+Pandemonium now has separate ordinary-input recovery and fresh-process rejoin
+checks. The recovery test follows the real entrance rope to the warning scene,
+then sends each player onto the damaging street while the survivor walks on the
+supported landing. After both individual recoveries, it sends both low-health
+players into the hazard and compares the result with the game's earlier automatic
+checkpoint. It never writes health, positions, inventories or shared world state.
+Placement is checked on each client's first restored frame, required within one
+simulation second, allowing normal horizontal movement during the recorded host
+ticks since restoration; resources
+and the selected quest/scene completion fields compare exactly. The rejoin check
+closes the guest process before the airship exit, starts a new one using the same
+invite/profile, compares both players' resources and completed scenes, then
+continues through the authored transition.
+
+```text
+python tools/test_coop_pandemonium_recovery.py --data <base-folder> --first red --delay-ms 40 --jitter-ms 20
+python tools/test_coop_pandemonium.py --data <base-folder> --first blue --rejoin --delay-ms 40 --jitter-ms 20
+```
+
+The first recovery attempt verified both ten-second respawns but its shared-wipe
+approach snagged scenery. The second attempted approach also snagged scenery;
+the test now uses the ordinary route planner to reach a point farther into the
+damaging street. The third and fourth runs reached the wipe but a fixed 20-unit
+placement assertion did not account for movement before the reports arrived.
+The verification now uses the first restored samples and bounds horizontal drift
+by the normal 320-unit/second maximum and the exact elapsed host ticks; the
+vertical platform tolerance remains 20 units. These diagnostic runs are retained
+under `private/coop/`: `pandemonium-recovery-f763a479554d4031b5e41e2a707fc4a7`,
+`pandemonium-recovery-13bddb5bb8074e8cb0d65cb96d74041e`,
+`pandemonium-recovery-1d4418c09da24a8fbe93c9f757a0a9ee` and
+`pandemonium-recovery-3f1b82a621884511bf09cd1daaa1e2c1`.
+
+The fifth recovery run passes on build
+`ec4ccf71f5a634f1c8c03ccbc6924fa3492e9fac1421dd813cd4937c06118a48`, over the
+public invite with 40 ms delay and 20 ms jitter per sender. Red dies at tick 6,054
+and revives at 7,254; Blue dies at 8,962 and revives at 10,162. Both clients agree
+on each exact ten-second interval, each 25-Sanity revival 48 units from the
+survivor, both moving spectator cameras, retained inventory and the survivor's
+unchanged health. The team wipe at tick 11,170 restores the actual automatic
+checkpoint saved at tick 1, including full personal resources and the earlier
+quest/scene flags. The first host and guest placement samples, respectively 4 and
+12 ticks after restoration, have zero horizontal displacement from the saved
+positions. Both spectator views and both restored-checkpoint views were inspected.
+Both clients and the Anode job exit normally; the invite is removed. Evidence:
+`private/coop/pandemonium-recovery-1127245225934d65ac70d7f9af173184/`,
+`private/coop-pandemonium-recovery-internet5.log`. This is the entrance-side
+hazard/recovery scenario; it ends at the restored checkpoint without an outgoing
+transition. The traversal and rejoin tests exercise the later route separately.
+
+The fresh-guest rejoin run also passes on that build and public delay/jitter
+settings. Blue leads the full route; Red closes her original process just before
+the airship and joins again in a new process. The before/after reports preserve
+both players' Sanity, Will, owned/collected items, equipped weapon, school items,
+staff components and difficulty, as well as the minecart, key and completed-scene
+flags. Both continue into Fortress with their personal Cards (Blue 45.734 / Red
+15.668 Sanity), without deaths, respawns or checkpoint resets. All four owners,
+three reunions and 126 matching authoritative ticks pass. The final initial
+Fortress cinematic views were inspected; both clients and the Anode job exit
+normally, and the invite is removed. Evidence:
+`private/coop/pandemonium-test-b5965aedc3274cba8065c2c111d4421f/`,
+`private/coop-pandemonium-rejoin-internet1.log`. The game source is unchanged from
+the preceding 740-test build; this checkpoint extends the independent-client
+harnesses and records their evidence. Per-visit consumable/enemy checks remain
+open before Pandemonium can be marked passed in the campaign matrix.
 
 The native enemy combat foundation now supplies two live targets to each enemy
 and keeps damage, knockback and Will drain separate for Blue and Red. Closest
