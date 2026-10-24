@@ -56,6 +56,8 @@ pub struct Frame {
     pub lives: Lives,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub combat: Option<Box<super::arena::Snapshot>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sounds: Option<super::audio::Batch>,
 }
 impl Frame {
     pub fn validate(&self) -> Result<()> {
@@ -66,6 +68,7 @@ impl Frame {
             ensure!(body.spawned_at <= self.tick, "Co-op spawn is in the future.");
             ensure!(body.warped_at <= self.tick, "Co-op relocation is in the future.");
         }
+        if let Some(sounds) = &self.sounds { sounds.validate(self.tick)?; }
         self.lives.validate()
     }
 }
@@ -212,6 +215,7 @@ impl Roster {
             players: self.players.clone(),
             lives: self.lives.clone(),
             combat: None,
+            sounds: None,
         }
     }
 }

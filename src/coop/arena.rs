@@ -37,6 +37,7 @@ pub struct Arena {
     initial: crate::npc::Snapshot,
     checkpoint_characters: Option<[crate::character::Snapshot; 2]>,
     alive: [bool; 2],
+    world_audio: crate::audio::world::State,
 }
 impl Arena {
     pub fn load(assets: &mut Assets, map: &Bsp, world: &mut World, visit: &Visit, staged: bool) -> Result<Self> {
@@ -53,6 +54,8 @@ impl Arena {
         let catalog = Catalog::load(assets)?;
         let pickups =
             inventory::pickups_for_visit(map, &visit.map, visit.entry.as_deref(), &catalog);
+        let mut world_audio = crate::audio::world::State::default();
+        world_audio.update(crate::audio::world::collect(&stage.interactions,&mut Vec::new()));
         Ok(Self {
             stage,
             npcs,
@@ -66,6 +69,7 @@ impl Arena {
                 Character::load_for_player(assets, PlayerId::Red)?,
             ],
             alive: [true; 2],
+            world_audio,
         })
     }
     pub fn reset_characters(&mut self, bodies: &[Body; 2]) {
@@ -173,7 +177,16 @@ impl Arena {
             }
         }
         let feet = roster.players.each_ref().map(|b| b.player.feet);
+        let movement_audio = roster.players.each_ref().map(|b|
+            (b.player.jumps,b.player.landings,b.player.immersion.level));
         roster.move_players(world, inputs);
+        for (body,(jumps,landings,water)) in roster.players.iter().zip(movement_audio) {
+            let at = Some(body.player.eye());
+            if body.player.jumps != jumps { self.stage.sounds.emit(roster.tick,"sound/character/alice/jump.wav",at,1.,false); }
+            if body.player.landings != landings { self.stage.sounds.emit(roster.tick,"sound/character/alice/small_land.wav",at,1.,false); }
+            if water == 0 && body.player.immersion.level > 0 { self.stage.sounds.emit(roster.tick,"sound/character/alice/splash1.wav",at,1.,false); }
+            if water > 0 && body.player.immersion.level == 0 { self.stage.sounds.emit(roster.tick,"sound/character/alice/leavewater.wav",at,1.,false); }
+        }
         self.stage.contacts(roster, world, feet)?;
         if self.stage.busy() { return self.finish(roster, map, world, true); }
         for (index, body) in roster.players.iter_mut().enumerate() {
@@ -260,9 +273,6 @@ impl Arena {
                     self.stage.accept(events, PlayerId::ALL[index], roster, world);
                 }
             }
-            // These transient queues are consumed even when sound is disabled.
-            character.take_audio();
-            character.take_world_audio();
             if self.stage.busy() { return self.finish(roster, map, world, true); }
         }
         let targets = roster.players.each_ref().map(|body| combat::PlayerTarget {
@@ -274,6 +284,7 @@ impl Arena {
         if let Some(encounters) = &mut self.stage.interactions.encounters {
             feedback.append(encounters.update_players(world_dt, world, targets));
         }
+        self.stage.sounds.feedback(roster.tick,&feedback);
         for (body, hit) in roster.players.iter_mut().zip(feedback.players) {
             body.stats.damage(hit.damage);
             body.player.knockback(hit.impulse);
@@ -317,6 +328,8 @@ impl Arena {
         }
         roster.finish_tick_with(world, cinematic, |at| !self.stage.interactions.hazardous(at))?;
         if generation != roster.checkpoint_generation {
+            self.stage.sounds.clear();
+            self.world_audio = crate::audio::world::State::default();
             if let Some(saved) = &self.checkpoint_characters {
                 for (character, state) in self.characters.iter_mut().zip(saved) {
                     character.restore(state)?;
@@ -343,6 +356,23 @@ impl Arena {
             }
         }
         self.sync_cast();
+        if let Some((time,finished)) = self.stage.interactions.beyond.as_ref().and_then(|b|b.rage_scene()) {
+            let owner = self.stage.speaker().index();
+            self.characters[owner].rage_scene(time,finished,&roster.players[owner].player);
+        }
+        for (character,body) in self.characters.iter_mut().zip(&roster.players) {
+            for cue in character.take_audio() {
+                self.stage.sounds.emit(roster.tick,&cue.path,Some(body.player.eye()),cue.volume,true);
+            }
+            for (path,origin) in character.take_world_audio() {
+                self.stage.sounds.emit(roster.tick,path,Some(origin),1.,false);
+            }
+        }
+        let clocks = crate::audio::world::collect(&self.stage.interactions,&mut Vec::new());
+        for (path,origin) in self.world_audio.update(clocks) {
+            let origin = (path != "sound/character/alice/death_fall.wav").then_some(origin);
+            self.stage.sounds.emit(roster.tick,path,origin,1.,false);
+        }
         Ok(())
     }
 }

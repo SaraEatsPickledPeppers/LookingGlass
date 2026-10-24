@@ -35,9 +35,13 @@ pub struct Snapshot {
     pub last_owner: PlayerId,
     pub transition: Option<(String, Option<String>)>,
     pub notices: [Option<Notice>; 2],
+    #[serde(default)]
+    pub voice_running: bool,
 }
 
 pub struct Stage {
+    pub sounds: super::audio::Journal,
+    pub voice_running: bool,
     pub interactions: Interactions,
     pub story: Story,
     pub hints: crate::cheshire::Hints,
@@ -72,6 +76,8 @@ impl Stage {
         let owner = controls_scene(&interactions).then_some(PlayerId::Blue);
         let contacts = Contacts::new(&interactions);
         let mut stage = Self {
+            sounds: super::audio::Journal::default(),
+            voice_running: false,
             interactions,
             story,
             hints,
@@ -95,6 +101,7 @@ impl Stage {
             last_owner: self.last_owner,
             transition: self.transition.clone(),
             notices: self.notices.clone(),
+            voice_running: self.voice_running,
         }
     }
     pub fn restore(&mut self, state: &Snapshot, map: &Bsp, world: &mut World) -> Result<()> {
@@ -121,6 +128,7 @@ impl Stage {
         self.last_owner = state.last_owner;
         self.transition = state.transition.clone();
         self.notices = state.notices.clone();
+        self.voice_running = state.voice_running;
         self.interactions.sync_coop(world);
         Ok(())
     }
@@ -149,6 +157,7 @@ impl Stage {
     }
 
     pub fn accept(&mut self, events: Events, id: PlayerId, roster: &mut Roster, world: &World) {
+        self.sounds.events(roster.tick, &events);
         apply(
             &events,
             id,
@@ -168,6 +177,7 @@ impl Stage {
     /// controller-owned camera/motion scene freezes and later reunites the pair.
     pub fn speech_step(&mut self, roster: &mut Roster, world: &World, advance: bool) {
         let ready = self.interactions.prepare_story(&mut self.story);
+        self.voice_running = ready;
         self.story.tick(if ready { FIXED_DT } else { 0. }, advance);
         self.interactions.sync_cinematic_story(&self.story);
         for name in self.story.take_completed() {
@@ -329,6 +339,7 @@ impl Stage {
             paths,
             |activation| {
                 last = activation.player;
+                self.sounds.events(roster.tick, &activation.events);
                 apply(
                     &activation.events,
                     activation.player,

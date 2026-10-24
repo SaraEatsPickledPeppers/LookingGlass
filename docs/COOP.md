@@ -1384,7 +1384,7 @@ The shared Beyond controller now advances once per host tick and checks both
 living bodies before committing a moving support. Either player can operate the
 musical levers; the actual final operator owns the original single-Alice scene,
 including when the partner also tries a lever on that tick. Note replay outputs
-advance once for the world. Sound playback in co-op is still pending.
+advance once for the world. Sound playback was added in the follow-up below.
 
 The rolling bridge waits for both living players to reach the stable tiles before
 rolling the rear tile away. The Rage pickup waits for both to board the lift,
@@ -1419,9 +1419,90 @@ entrance-only checks pass in `private/coop-beyond-world5.log`,
 The complete Rust suite passes: 740 passed, no failures, one existing ignored
 test (`private/coop-beyond-adapter-tests5.log`).
 
-This adds no completed campaign row: full Beyond traversal, audible puzzle
-notes, rendered delayed internet play, combat, recovery and rejoin checks remain.
+This adapter milestone added no completed campaign row. Full Beyond traversal,
+combat and recovery remain open; the focused sound/rejoin evidence follows below.
 The overall estimate remains about 41%, with three of 39 visits fully verified.
+
+## Co-op sound and dialogue
+
+The host now publishes a bounded journal of numbered interaction, movement,
+weapon, enemy and cinematic sound cues. Each client consumes new cues once,
+even when snapshots repeat or intermediate snapshots are skipped. Old cues are
+not replayed on joining, travel or checkpoint rollback. Continuous music and
+loops are reconstructed from shared state; original story voices follow the
+host's line and elapsed position, including cinematic speech holds. Each client
+uses its own camera for spatial listening. The single-player/menu mixer is
+paused while the co-op viewer owns playback.
+
+The first delayed public sound fixture passed on build
+`0944f2141e72b2011c2a77d06e90d71289b5dcd5ed3e1488cb4fe5b44369a9ba`:
+`private/coop/beyond-audio-1dbe4744e4984a3394b41ce156a4aead/`.
+It stages only the initial feet outside the musical demonstration trigger, then
+uses ordinary movement and E inputs through two real clients. Red triggers the
+original demonstration; Blue and Red each operate the reset lever. Both clients
+receive exactly the same three numbered notes in each sequence. A fresh guest
+process rejoins without replaying the completed demonstration, with resources
+and puzzle progress intact. The fixture compares 675 actual sent/restored states
+at 40 ms delay plus 20 ms jitter per sender and captures both rendered views.
+
+All three app-only WAV recordings contain nonzero output. Cross-correlation
+against locally read original note recordings also identifies all three notes
+in order in the initial guest's recording (approximately 3.65, 4.73 and 5.75
+seconds). This corroborates real mixer output beyond cue metadata; it is not a
+subjective listening or full sound-fidelity assessment. Original assets and
+recordings remain private. Anode's session has no isolated audio endpoint, so
+this fixture used the authorized main desktop; its owned windows were closed.
+
+The four focused journal/voice-cursor tests pass, including collapsed snapshots
+at 30/60/144 Hz, join/travel/wipe/expiry boundaries, bounded bursts, malformed
+wire fields and dialogue cursor changes. The complete suite on this build
+passes with 744 tests, no failures and one existing ignored test. Native
+Beyond co-op checks additionally verify the three-note reset order for either
+operator. Single-player Beyond state/cinematics and existing co-op world/scene
+checks pass. Evidence: `private/coop-audio-tests1.log`,
+`private/coop-audio-all-tests1.log`, `private/coop-audio-beyond-native1.log`,
+`private/coop-audio-sp-beyond1.log` and `private/coop-audio-world1.log`.
+The original audio asset/clock check also passes: 336 referenced files decoded,
+38 music cues and 900 ambient emitters; two original missing references are
+reported (`alice/idle_move2.wav`, `icewand/icw_idle.wav`). The live musical
+fixture reports no missing cues (`private/coop-audio-assets1.log`).
+
+Final build `10aa2112129158e4810cf5856895fd6d32b2eac586afa20a29104acc3f293fc4`
+also passes the full 744-test suite and native Beyond checks
+(`private/coop-audio-all-tests2.log`, `private/coop-audio-beyond-native2.log`).
+This follow-up corrects camera-directed stereo listening and clears reaction
+gating/swim ambience on world restore. Its unskipped village opening test passes
+in `private/coop/village-voice-0e430b62bac8415a8ecf762320d21940/`: both public
+clients observe all six original lines in the same order, one voice start per
+line, elapsed positions matching the host story, and held dialogue during the
+original camera choreography. It compares 1,136 sent/restored states under the
+same delay/jitter. Both 30-second app recordings contain the first Rabbit voice:
+correlation with the locally read original is above 0.96. The recordings stop at
+the capture limit; the full six-line sequence is verified by runtime observations
+and playback logs, not a complete six-line acoustic comparison. The driver now
+supports watching dialogue without generating its usual advance presses.
+
+The final build also passes the musical fixture with Blue arriving first,
+both reset operators and a fresh guest process:
+`private/coop/beyond-audio-d97405d188c34927aa4e24529f05f29f/`
+(`private/coop-audio-internet3.log`). It again verifies identical numbered notes,
+no historical replay, nonzero output without missing cues, independent app
+recordings and matching sent/restored state. Both runs close their owned windows
+and remove their invite files. The initial rejected launch (audio capture lacked
+the required frame limit) is retained in `private/coop-audio-internet1.log`;
+the harness now supplies that limit before launch.
+
+Reproduce the musical fixture with:
+
+```text
+python tools/test_coop_audio.py --data <base-folder> --first red
+python tools/test_coop_voice.py --data <base-folder>
+```
+
+This is a staged musical demonstration/reset/rejoin check, not a full Beyond
+route. Remote pain/pickup cue fidelity, menu-to-game audio handoff, rendered Rage
+presentation and the remaining campaign traversal/combat/recovery checks still
+need verification. No additional campaign visit or percentage point is credited.
 
 ## Reproducing transport checks
 

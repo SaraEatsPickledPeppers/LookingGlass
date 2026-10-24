@@ -64,6 +64,11 @@ class Pair:
                 '--no-audio', '--profile', str(profile), '--coop-host' if role == 'host' else '--coop-join',
                 str(self.invite), '--coop-route-driver', str(profile / 'route-command.json'),
                 '--coop-delay-ms', str(self.args.delay_ms), '--coop-jitter-ms', str(self.args.jitter_ms)]
+        if getattr(self.args, 'audio', False):
+            args.remove('--no-audio')
+            args += ['--audio-capture', str(self.folder / (role + suffix + '.wav')), '--frames', '36000']
+        if role == 'host' and getattr(self, 'start_at', None) is not None:
+            args += ['--start-at', ' '.join(map(str, self.start_at))]
         if role == 'host' and self.args.local:
             args += ['--coop-local']
         self.processes[role] = subprocess.Popen(args, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
@@ -168,7 +173,7 @@ class Pair:
         if not self.arrived():
             self.set(partner, goal, navigate)
             self.until(lambda: self.arrived() or all(self.reached(r) for r in self.commands))
-        print('PASS network village leg', goal, flush=True)
+        print('PASS network', self.map_name, 'leg', goal, flush=True)
 
     def wait(self, seconds):
         if self.arrived():
@@ -256,7 +261,7 @@ class Pair:
             'before_tick': before['frame']['tick'], 'after_tick': self.reports['guest']['frame']['tick'],
             'resources_and_completed_scenes_preserved': True}
         (self.folder / 'after-rejoin.json').write_text(json.dumps(self.reports))
-        print('PASS', self.map_name, 'guest left and rejoined near the exit with personal resources and scene progress intact.', flush=True)
+        print('PASS', self.map_name, 'guest left and rejoined at the same position with personal resources and scene progress intact.', flush=True)
 
     def verify_rejoined_world(self, before, report):
         assert report['combat']['stage']['world']['village']['cinema']['done'] == before['combat']['stage']['world']['village']['cinema']['done']

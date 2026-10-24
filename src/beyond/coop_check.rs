@@ -252,6 +252,10 @@ fn interactions(assets: &mut Assets, map: &Bsp) -> Result<()> {
             stage.before_move(&mut roster,map,&mut world,&control,FIXED_DT)?;
         }
         ensure!(stage.interactions.beyond.as_ref().unwrap().state.solved && stage.owner == Some(first), "Either-player lever sequence/scene ownership failed");
+        let sounds = stage.sounds.batch(roster.tick);
+        sounds.validate(roster.tick)?;
+        ensure!(sounds.cues.iter().map(|c|c.path.as_str()).collect::<Vec<_>>() == SOUNDS,
+            "Shared musical notes did not enter the sound journal once in their played order");
         println!("PASS Beyond levers first {first:?}: players share the three-note sequence and final operator owns its scene");
     }
     Ok(())

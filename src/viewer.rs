@@ -907,6 +907,7 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
             use crate::menu::Action;
             match action {
                 Action::Coop => {
+                    audio.update(0., pos, yaw, true, true);
                     let visit = crate::coop::protocol::Visit {
                         epoch: 1, map: maps[current].clone(), entry: entry_spawn.clone(),
                         difficulty: stats.difficulty,

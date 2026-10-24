@@ -26,6 +26,10 @@ struct Command {
     run: bool,
     #[serde(default)]
     jump: bool,
+    #[serde(default)]
+    use_aim: Option<Vec2>,
+    #[serde(default)]
+    watch_dialogue: bool,
     navigate: bool,
     attack: bool,
     capture: bool,
@@ -41,6 +45,11 @@ impl Command {
         ensure!(!(self.run || self.jump) || !self.navigate && self.rope.is_none(),
             "Explicit run/jump needs straight movement, not a planned route or rope command");
         if let Some(rope) = &self.rope { rope.validate()?; }
+        if let Some(aim) = self.use_aim {
+            ensure!(aim.is_finite() && aim.x.abs() <= std::f32::consts::TAU && aim.y.abs() <= 1.56
+                && self.goal.is_none() && self.marker.is_none() && self.rope.is_none()
+                && !self.navigate && !self.attack && !self.run && !self.jump, "Invalid control-use command");
+        }
         Ok(())
     }
 }
@@ -147,6 +156,7 @@ pub struct Driver {
     step_at: Instant,
     jumped: bool,
     rope_used: bool,
+    control_used: bool,
     location: Option<(u64, u64, u64)>,
     pub report: Report,
 }
@@ -169,7 +179,7 @@ impl Driver {
         let now = Instant::now();
         Self { path, command: None, modified: None, polled: now, refreshed: now, used: now,
             worker: None, plan: VecDeque::new(), step_tick: 0, step_at: now, jumped: false, rope_used: false,
-            location: None, report: Report::default() }
+            control_used: false, location: None, report: Report::default() }
     }
     pub fn poll(&mut self, now: Instant) {
         if now.duration_since(self.polled) < Duration::from_millis(50) { return; }
@@ -187,6 +197,7 @@ impl Driver {
             Ok(Some((modified, command))) => {
                 if self.command.as_ref().is_none_or(|old| old.id != command.id) {
                     self.plan.clear(); self.jumped = false; self.rope_used = false; self.location = None;
+                    self.control_used = false;
                     self.report.error = None;
                 }
                 self.report.command = Some(command.id);
@@ -216,7 +227,8 @@ impl Driver {
                 && b.stats.collected.contains(&p.id)));
         self.report.scene = arena.stage.interactions.village.as_ref().and_then(|v|v.cinema.scene_id())
             .or_else(|| arena.stage.interactions.pandemonium.as_ref().and_then(|p|p.scene_id()))
-            .or_else(|| arena.stage.interactions.fortress.as_ref().and_then(|f|f.state.cinema.scene_id())).map(str::to_owned);
+            .or_else(|| arena.stage.interactions.fortress.as_ref().and_then(|f|f.state.cinema.scene_id()))
+            .or_else(|| arena.stage.interactions.beyond.as_ref().and_then(|b|b.scene_id())).map(str::to_owned);
         self.report.speech = arena.stage.story.busy() && !arena.stage.busy();
         self.report.guards = arena.stage.interactions.encounters.iter().flat_map(|cast| &cast.actors).enumerate()
             .filter_map(|(index, actor)| {
@@ -295,12 +307,18 @@ impl Driver {
             self.report.phase = "waiting for command"; return;
         };
         if !body.stats.alive() { self.report.phase = "spectating"; return; }
-        if arena.stage.story.busy() && arena.stage.owner == Some(local)
+        if !command.watch_dialogue && arena.stage.story.busy() && arena.stage.owner == Some(local)
             && now.duration_since(self.used) >= Duration::from_millis(250) {
             keys.uses += 1; self.used = now;
         }
         if arena.stage.busy() {
             self.plan.clear(); self.jumped = false; self.report.phase = "scene";
+            return;
+        }
+        if let Some(aim) = command.use_aim {
+            keys.yaw = aim.x; keys.pitch = aim.y;
+            if !self.control_used { keys.uses += 1; self.control_used = true; }
+            self.report.phase = "using control"; self.report.reached = true;
             return;
         }
         if let Some(rope) = &command.rope {
@@ -430,6 +448,11 @@ mod tests {
         let base=serde_json::json!({"id":1,"heartbeat":1,"epoch":1,"goal":null,"navigate":false,"attack":true,"capture":false,"finish":false});
         let old:Command=serde_json::from_value(base.clone()).unwrap(); assert!(old.validate().is_ok());
         assert!(old.rope.is_none() && old.marker.is_none() && !old.horizontal && !old.run && !old.jump);
+        assert!(old.use_aim.is_none() && !old.watch_dialogue);
+        let mut using = base.clone(); using["use_aim"] = serde_json::json!([0.,0.]); using["attack"] = false.into();
+        assert!(serde_json::from_value::<Command>(using.clone()).unwrap().validate().is_ok());
+        using["use_aim"] = serde_json::json!([0.,2.]);
+        assert!(serde_json::from_value::<Command>(using).unwrap().validate().is_err());
         let mut jumping=base.clone(); jumping["jump"]=true.into(); jumping["run"]=true.into();
         assert!(serde_json::from_value::<Command>(jumping.clone()).unwrap().validate().is_ok());
         jumping["navigate"]=true.into();

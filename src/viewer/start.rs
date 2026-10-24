@@ -27,6 +27,7 @@ pub async fn choose(
             .await
         {
             Action::Coop => {
+                audio.update(0., Vec3::ZERO, 0., true, true);
                 let visit = crate::coop::protocol::Visit {
                     combat_preview: false,
                     epoch: 1, map: "gvillage".into(), entry: None,

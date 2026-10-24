@@ -200,15 +200,25 @@ rolling-bridge boarding, the later elevator's saved boarding wait without freezi
 other machinery, survivor-only use, and either player's Rage pickup/scene/reunion
 and musical-lever operation. Each player retains an individual Rage pickup.
 These are focused fixtures, not entrance-to-exit routes or rendered/network proof.
-Puzzle audio, complete traversal/combat, death/wipe/rejoin and public two-process
-checks remain open, so the completed count stays three of 39.
+The subsequent sound fixture on build `0944f214` adds public two-process evidence
+for Red's musical demonstration, both reset-lever operators, identical numbered
+notes, actual mixer recordings and a fresh guest rejoin without old-note replay
+(`private/coop/beyond-audio-1dbe4744e4984a3394b41ce156a4aead/`). It compares 675
+sent/restored states with 40 ms delay plus 20 ms jitter per sender. The start is
+staged outside the musical trigger. Complete traversal/combat, death/wipe and
+rejoin-to-exit remain open, so the completed count stays three of 39.
+The final `10aa2112` build also passes the same musical fixture with Blue first
+(`private/coop/beyond-audio-d97405d188c34927aa4e24529f05f29f/`) and a separate
+unskipped six-line village opening with both clients' actual audio output
+(`private/coop/village-voice-0e430b62bac8415a8ecf762320d21940/`). These focused
+checks add sound evidence without granting another full campaign row.
 
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Passed (combined evidence above): both arrival orders, all scenes/reunions, nearest-visible guard damage in both roles, individual health/Blade pickups, matching encounter/player states, both death/spectator/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit; shared boarding N/A |
 | 2 | `pandemonium` | `Initial` | Passed (combined evidence above): native and delayed public routes in both orders, rope/cart, four scenes/three reunions, personal Cards/healing rewards, nearest-visible guard damage in both roles, full-route encounter/player comparison, both hazard death/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit |
 | 3 | `fortress1` | `Initial` | Passed (combined evidence above): both delayed public route orders, original scene/reunion, independent portals, paired split supports, upper jumps and exit, fresh guest rejoin, nearest-visible Boojum selection/damage in both roles, separate healing, coherent enemies, both combat death/spectator/respawn roles and saved-checkpoint wipe; shared boarding N/A |
-| 4 | `fortress2` | `Initial` | Partial: native paired lift/boarding, rolling-bridge wait, either-player levers and Rage scene/personal pickups pass; full routes, sound, combat/recovery and public two-process verification remain open |
+| 4 | `fortress2` | `Initial` | Partial: native paired lift/boarding, rolling-bridge wait, either-player levers and Rage scene/personal pickups; staged delayed public musical notes/reset/rejoin with real audio pass. Full routes, combat/recovery and remaining rendered/network verification are open |
 | 5 | `fortress1` | `fortress1_start2` | Not run |
 | 6 | `skool1` | `Initial` | Not run |
 | 7 | `skool2` | `Initial` | Not run |

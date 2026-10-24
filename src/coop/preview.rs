@@ -38,6 +38,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
     show_mouse(false);
     let _ = std::fs::remove_file(crate::preferences::path("coop-live.json"));
     let mut hosting = None;
+    let mut audio = super::audio::Playback::new(options);
     let result = async {
         let prefs = crate::preferences::Preferences::load();
         let mut setup_input = crate::input::Input::default();
@@ -111,6 +112,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         ui.toast("Opening Wonderland for two...", screen_height() * 0.5);
         next_frame().await;
         let mut scene = crate::render::Scene::load_for(assets, &visit.map, visit.difficulty)?;
+        audio.load(assets,&visit.map,&scene.map);
         let mut arena = super::arena::Arena::load(assets, &scene.map, &mut scene.world, &visit, visit.combat_preview)?;
         if let Some(saved) = &resumed {
             arena.restore_checkpoint(saved.checkpoint.frame.combat.as_ref().unwrap(), &scene.map, &mut scene.world)?;
@@ -244,6 +246,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 arena = next_arena;
                 level_art = next_art;
                 visit = next;
+                audio.load(assets,&visit.map,&scene.map);
                 checkpoint_pending = launch.host && automatic_checkpoints && !visit.combat_preview;
                 if let Some(host) = &mut host { host.loaded(visit.epoch)?; }
                 if let Some(guest) = &mut guest { guest.loaded(visit.epoch)?; }
@@ -444,7 +447,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         fixture_checkpoint_saved = true;
                         println!("PASS co-op checkpoint fixture: saved shared visit history and distinct player resources with a good backup");
                     }
-                    let frame = roster.frame(visit.epoch, host.acknowledged_input());
+                    let mut frame = roster.frame(visit.epoch, host.acknowledged_input());
+                    frame.sounds = Some(arena.stage.sounds.batch(frame.tick));
                     if frame.tick >= last_sent + 6 {
                         let mut network = frame.clone();
                         network.combat = Some(Box::new(arena.snapshot()));
@@ -496,6 +500,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 let (follow_eye, follow_target, show_local) = camera.update(&scene.world, watched_body.player.feet, direction, 180., elapsed);
                 let scripted = arena.stage.camera(&scene.world);
                 let (camera_eye, target, up) = scripted.map_or((follow_eye, follow_target, Vec3::Z), |c| (c.eye, c.target, c.up));
+                let listening = target - camera_eye;
+                audio.update(assets,&arena,frame,&scene.world,local,camera_eye,listening.y.atan2(listening.x),elapsed,playing)?;
                 let view = Camera3D { position: camera_eye, target, up,
                     fovy: if scripted.is_some() { arena.stage.scene_fovy(screen_width() / screen_height()) } else { 60_f32.to_radians() },
                     z_near: 2., z_far: 30000., ..Default::default() };
@@ -560,6 +566,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         "pid": std::process::id(), "build": env!("LOOKING_GLASS_BUILD"), "playing": playing, "frame": frame, "focused": focused,
                         "camera_player": watched, "camera": camera_eye, "camera_target": target,
                         "camera_subject_feet": camera_subject_feet,
+                        "audio": audio.report,
                         "combat": arena.snapshot(), "visit": visit, "completed_visits": if launch.host { Some(campaign.completed()) } else { None },
                         "route_driver": route_driver.as_ref().map(|d| &d.report) })) {
                         let _ = std::fs::write(path, bytes);
@@ -709,5 +716,6 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
     }
     let _ = std::fs::remove_file(crate::preferences::path("coop-live.json"));
     show_mouse(true);
-    result
+    let audio_result = audio.finish();
+    result.and(audio_result)
 }
