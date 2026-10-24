@@ -197,6 +197,59 @@ fn elevator(assets: &mut Assets, map: &Bsp) -> Result<()> {
     }
     Ok(())
 }
+fn late_rage(assets: &mut Assets, map: &Bsp) -> Result<()> {
+    let catalog = Catalog::load(assets)?;
+    let pickups = inventory::pickups(map,"fortress2",&catalog);
+    for first in PlayerId::ALL {
+        for skip in [false,true] {
+            let (mut stage,mut world,mut roster) = setup(assets,map)?;
+            let b = stage.interactions.beyond.as_mut().unwrap();
+            b.state.last_started = Some(0.);
+            b.state.age = 4.5;
+            b.rebuild(map)?;
+            stage.interactions.sync_coop(&mut world);
+            let a = first.index(); let other = first.partner().index();
+            roster.players[a].player = player(&world,vec3(-160.,3552.,88.))?;
+            roster.players[other].player = player(&world,vec3(-96.,3552.,88.))?;
+            let waiting = roster.players[other].player.feet;
+            let before = lift_origin(stage.interactions.beyond.as_ref().unwrap());
+            stage.collect_pickups(&mut roster,&world,&pickups);
+            ensure!(stage.owner == Some(first), "Late Rage fixture did not collect the box");
+            let b = stage.interactions.beyond.as_mut().unwrap();
+            b.rebuild(map)?;
+            ensure!(lift_origin(b) == before, "Late Rage jumped the cycling elevator");
+            stage.interactions.sync_coop(&mut world);
+            ensure!(roster.players.iter().all(|p|world.body_clear(p.player.feet)), "Late Rage embedded a rider");
+            let mut count = 0;
+            while stage.busy() && count < 2400 {
+                if count == 120 {
+                    let paused = serde_json::to_value(stage.snapshot())?;
+                    stage.interactions.advance_school(0.,map,&mut world,&mut roster.players[a].player)?;
+                    ensure!(paused == serde_json::to_value(stage.snapshot())?, "Paused late Rage advanced");
+                    let saved = serde_json::from_slice(&serde_json::to_vec(&stage.snapshot())?)?;
+                    stage.restore(&saved,map,&mut world)?;
+                }
+                if skip && count == 240 {
+                    ensure!(stage.interactions.skip_cinematic(map,&mut world,&mut roster.players[a].player,&mut stage.story)?,
+                        "Late Rage skip rejected");
+                }
+                step(&mut stage,&mut roster,map,&mut world,inputs())?;
+                count += 1;
+                if stage.busy() {
+                    ensure!(roster.players[other].player.feet == waiting, "Late Rage moved its hidden partner");
+                    ensure!(world.body_clear(roster.players[a].player.feet), "Late Rage embedded its owner");
+                }
+            }
+            ensure!(!stage.busy() && (skip || count >= 1400), "Late Rage never completed its scene");
+            for _ in 0..120 { step(&mut stage,&mut roster,map,&mut world,inputs())?; }
+            let b = stage.interactions.beyond.as_ref().unwrap();
+            ensure!(roster.players.iter().all(|p| p.player.grounded && world.body_clear(p.player.feet)
+                && b.aboard("ragelift",p.player.feet)), "Late Rage failed to reunite both riders on the lift");
+            println!("PASS Beyond late Rage first {first:?}, skip {skip}: continuous lift, pause/save/restore, frozen partner and supported reunion");
+        }
+    }
+    Ok(())
+}
 fn interactions(assets: &mut Assets, map: &Bsp) -> Result<()> {
     let catalog = Catalog::load(assets)?;
     let pickups = inventory::pickups(map,"fortress2",&catalog);
@@ -266,5 +319,6 @@ pub fn check(assets: &mut Assets) -> Result<()> {
     carry(&map)?;
     bridge(assets,&map)?;
     elevator(assets,&map)?;
+    late_rage(assets,&map)?;
     interactions(assets,&map)
 }

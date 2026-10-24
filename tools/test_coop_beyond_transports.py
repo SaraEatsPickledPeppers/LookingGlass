@@ -1,7 +1,7 @@
 """Exercise Beyond passenger boarding through two real internet clients.
 
-The Rage probe walks from the normal entrance. The bridge probe stages only its
-initial placement on the approach, then uses ordinary inputs. Neither probe is
+The Rage probe walks from the normal entrance. Other probes stage only their
+initial placement on an approach, then use ordinary inputs. None of the probes is
 a full campaign route; no machinery, resources or scene state is injected.
 """
 import argparse
@@ -18,6 +18,10 @@ class BeyondTransports(BeyondPair):
         self.evidence_prefix = 'beyond-' + args.probe + '-'
         if args.probe == 'bridge':
             self.start_at = (1456,576,0)
+        elif args.probe in ('elevator','late-rage'):
+            # The actual upper return landing contains the authored LastStart
+            # trigger. No machinery or completed-puzzle state is injected.
+            self.start_at = (-160,4576,384)
         super().__init__(args)
         source = Path(__file__).read_bytes()
         (self.folder/'fixture-transports-source.py').write_bytes(source)
@@ -115,10 +119,103 @@ class BeyondTransports(BeyondPair):
         self.evidence['bridge'] = dict(first=self.args.first,waited_for_partner=True,one_completed_move=True)
         print('PASS rolling bridge waits for trailing player, then advances with both safely aboard.',flush=True)
 
+    def elevator_wait(self,label,rider):
+        index = self.index(rider)
+        before = {role:dict(age=self.beyond(role)['age'],wait=self.beyond(role).get('lift_wait',0),
+                    z=self.bodies(role)[index]['player']['feet'][2]) for role in self.reports}
+        for role in self.commands:
+            self.set(role)
+        # Each delayed client must actually report two seconds of observation;
+        # reaching a host-only deadline can leave the guest's last report short.
+        self.until(lambda: all(self.beyond(role)['age'] >= old['age']+2
+                               for role,old in before.items()),10)
+        for role,old in before.items():
+            now = self.beyond(role)
+            elapsed = now['age']-old['age']
+            assert elapsed > 1.8, 'Boarding barrier stopped the shared world clock'
+            assert abs(now.get('lift_wait',0)-old['wait']-elapsed) < .1, 'Lift moved during a partial boarding'
+            assert abs(self.bodies(role)[index]['player']['feet'][2]-old['z']) < .1, 'Waiting rider moved vertically'
+        assert self.waiting_notice(rider)
+        self.capture_pair(label)
+        self.evidence[label] = before
+
+    def elevator_board(self):
+        self.until(lambda: all(self.beyond(r)['last_started'] is not None for r in self.reports),10)
+        self.capture_pair('upper-return-trigger')
+        for goal in [(-352,4380,0),(-352,3800,0)]:
+            self.go(goal,horizontal=True,together=True)
+        self.secure()
+        self.capture_pair('lower-lift-approach')
+        # Stay to either side of the uncollected Rage pickup. Its separate
+        # original transformation/descent is covered by the Rage probe.
+        for role,x in [(self.first,-224),(self.partner,-96)]:
+            self.set(role,(x,3800,0))
+            self.until(lambda: self.reached(role),15)
+            self.set(role,(x,3680,0))
+            self.until(lambda: self.reached(role),15)
+            self.set(role)
+        self.set(self.first,(-224,3552,16),horizontal=True)
+        self.until(lambda: self.reached(self.first),20)
+        self.elevator_wait('elevator-waits-for-partner',self.first)
+        self.set(self.partner,(-96,3552,16),horizontal=True)
+        self.until(lambda: self.reached(self.partner),20)
+        self.wait(.2)
+
+    def elevator(self):
+        self.elevator_board()
+        self.until(lambda: min(b['player']['feet'][2] for b in self.bodies()) > 200,12)
+        assert abs(self.bodies()[0]['player']['feet'][2]-self.bodies()[1]['player']['feet'][2]) < .1
+        self.capture_pair('elevator-paired-rise')
+        self.until(lambda: min(b['player']['feet'][2] for b in self.bodies()) > 360,12)
+        # Normal difficulty omits the two short Easy-only side bridges. Jump
+        # the actual gap to the broad outer landing, with a short ordinary runup.
+        self.set(self.first,(-544,3552,384),jump=True,run=True,
+                 runup=dict(millis=100,wish=[-1,0]))
+        self.until(lambda: self.reached(self.first),15)
+        self.elevator_wait('elevator-waits-for-disembarking-partner',self.partner)
+        self.set(self.partner,(224,3552,384),jump=True,run=True,
+                 runup=dict(millis=100,wish=[1,0]))
+        self.until(lambda: self.reached(self.partner),15)
+        self.wait(.5)
+        before = {role:dict(age=self.beyond(role)['age'],wait=self.beyond(role).get('lift_wait',0)) for role in self.reports}
+        self.until(lambda: all(self.beyond(role)['age'] >= old['age']+2
+                               for role,old in before.items()),10)
+        for role,old in before.items():
+            now = self.beyond(role)
+            assert now['age'] > old['age']+1.8 and now.get('lift_wait',0) == old['wait'], 'Empty lift did not resume its clock'
+            assert now.get('rage_started') is None, 'Cycling lift probe accidentally collected Rage'
+            assert all(b['player']['grounded'] and abs(b['player']['feet'][2]-384) < .2 for b in self.bodies(role))
+        self.capture_pair('elevator-both-disembarked')
+        self.evidence['elevator'] = dict(first=self.args.first,authored_start_trigger=True,
+            boarding_wait=True,paired_rise=True,disembarking_wait=True,empty_clock_resumed=True)
+        print('PASS cycling elevator: authored activation, boarding wait, paired rise, disembarking wait and empty return clock.',flush=True)
+
+    def late_rage(self):
+        self.elevator_board()
+        self.set(self.first,(-160,3552,16),horizontal=True)
+        self.until(lambda: all(r['combat']['stage']['owner'] is not None for r in self.reports.values()),15)
+        assert all(r['combat']['stage']['owner'] == self.args.first.title() for r in self.reports.values())
+        self.hold(5)
+        assert all(self.beyond(r)['cinema']['time'] > 4 for r in self.reports), 'Late Rage froze its original scene clock'
+        self.capture_pair('late-rage-scene-middle')
+        self.scene_done()
+        self.wait(1)
+        assert all(b['player']['grounded'] for r in self.reports for b in self.bodies(r))
+        assert all('fortress2:37' in self.bodies(r)[self.index(self.first)]['stats']['collected'] for r in self.reports)
+        for role,rows in self.history.items():
+            assert sum(bool(old['owner']) and not row['owner'] for old,row in zip(rows,rows[1:])) == 1
+            other = self.index(self.partner)
+            for old,row in zip(rows,rows[1:]):
+                if old['owner'] and row['owner']:
+                    assert old['players'][other]['feet'] == row['players'][other]['feet'], 'Hidden late-Rage partner moved'
+        self.capture_pair('late-rage-reunion')
+        self.evidence['late_rage'] = dict(owner=self.args.first,cycling_before_pickup=True,grounded_reunion=True)
+        print('PASS late Rage collected during an already cycling elevator ride and safe paired reunion.',flush=True)
+
     def run(self):
         self.start_pair()
         self.section = self.args.probe
-        getattr(self,self.args.probe)()
+        getattr(self,self.args.probe.replace('-','_'))()
         self.verify_network_states()
         assert all(b['spawned_at'] == 0 for rows in self.history.values() for r in rows for b in r['players'])
         self.finish_pair(1)
@@ -126,14 +223,14 @@ class BeyondTransports(BeyondPair):
             internet=not self.args.local,first=self.args.first,delay_ms=self.args.delay_ms,
             jitter_ms=self.args.jitter_ms,evidence=self.evidence,
             scope=('Normal entrance to Rage pickup and lift descent' if self.args.probe == 'rage'
-                   else 'Staged bridge approach and ordinary boarding inputs') + '; no full-route credit'),indent=2))
+                   else 'Staged ' + self.args.probe + ' approach and ordinary boarding inputs') + '; no full-route credit'),indent=2))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--exe',type=Path,default=ROOT/'target/debug/looking-glass.exe')
     parser.add_argument('--data',type=Path,required=True)
-    parser.add_argument('--probe',choices=('rage','bridge'),required=True)
+    parser.add_argument('--probe',choices=('rage','bridge','elevator','late-rage'),required=True)
     parser.add_argument('--first',choices=('blue','red'),default='red')
     parser.add_argument('--local',action='store_true')
     parser.add_argument('--delay-ms',type=int,default=40)

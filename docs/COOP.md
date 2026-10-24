@@ -123,7 +123,7 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after completing the village, Pandemonium and first Fortress verification rows: **about 41%** (previously 40%). Credited
+Overall estimate after completing the village, Pandemonium, first Fortress and Beyond verification rows: **about 41%**. Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
 9/15 for two-player movement/presentation, paired school supports, dry/swimming arrival placement, complete delayed village/Pandemonium traversal in separate clients and rendered independent rope controls, and 7/20 for native targeting, host-owned
 weapons/damage, personal resources, timed respawns and full saved-state team wipes,
@@ -131,10 +131,10 @@ plus 8/20 for shared world replication, ordered contacts, the verified theatre
 ownership/reunion slice, school boarding barriers, visit history and restart/backup
 restoration of shared checkpoints, and native traversal of all six village scenes
 and all four Pandemonium scenes with either player arriving first (also verified through public internet clients).
-Full-campaign verification now earns 60/39 points (about 1.54/20), for the village,
-Pandemonium and first Fortress visit's complete combined evidence. Total credited
-points are about 40.54, rounded to 41%. Standalone policy tests receive no campaign
-credit; 36 visits remain open.
+Full-campaign verification now earns 80/39 points (about 2.05/20), for the village,
+Pandemonium, first Fortress and Beyond visits' complete combined evidence. Total
+credited points are about 41.05, rounded to 41%. Standalone policy tests receive
+no campaign credit; 35 visits remain open.
 
 Pandemonium now uses each replicated player's own rope grip in co-op, while the
 single-player controller and saved grip remain unchanged. The host advances its
@@ -1710,10 +1710,48 @@ probe. Evidence: `private/coop-beyond-route-tests5.log`,
 `private/coop-beyond-source-tests4.log` and `private/coop-beyond-source-identity5.json`.
 
 Internet joining and 40/20 ms delay/jitter are the defaults. Both full traversal
-orders, combat/resources and death/wipe now have the evidence above. The
-cycling elevator's rendered/network probe is still open; its native checks
-alone do not complete the row.
-Overall credit remains 41%.
+orders, combat/resources and death/wipe have the evidence above.
+
+Cycling-elevator rendered checks now pass in both boarding orders on `cf86b004`:
+`private/coop/beyond-elevator-d57b738905834aa6a1ab2d1c730c3c59/` (Red, 811 matching
+sent/restored states) and `private/coop/beyond-elevator-da651fab20844150a026e2a640f1ebc2/`
+(Blue, 775). `--probe elevator` stages the initial upper return landing inside
+the authored activation trigger, then walks down, boards, rides and dismounts
+through ordinary controls. It verifies two seconds of boarding and dismounting
+wait in each client's own reports, continuing world time, paired ascent, safe
+running jumps to the Normal-difficulty outer ledges and the empty lift's resumed
+clock. Waiting/dismount/final views were inspected in both orders. Earlier
+fixture failures retain a wall-bound approach, an incorrect Easy-only landing,
+and a host-only observation deadline that ended before the delayed guest's full
+wait. These probes grant transport evidence, not standalone full-route credit.
+
+The additional `--probe late-rage` exposed a real freeze on `cf86b004` in
+`private/coop/beyond-late-rage-e16f3f79bbe141f387b6d401f0030397/`: collecting the
+box after cycling began changed the lift's phase, obstructed both bodies and
+left the original scene at time zero. The stopped run retains those reports.
+Build `ef3db23edd407fcac578bb0676a3af94c984bdd9882aab117864395ccbd73989` derives the
+cycle's initial descent from whether Rage preceded the return trigger. A later
+pickup cannot restart that descent or shift the cycle. Existing saved timestamps
+suffice; no save field or format changes. The original early pickup is unchanged.
+The phase regression, all 746 Rust tests (one existing ignored), and native
+co-op checks pass. Both owners watch and skip the late scene with pause/save/
+restore, frozen partners, clear bodies and a supported paired reunion. Original
+Rage watch/skip/save/legacy cases on all difficulties and Beyond's other world/
+cinematic regressions also pass. Logs: `private/coop-beyond-validation-tests8.log`,
+`private/coop-beyond-adapter-check8.log`, `private/coop-beyond-items-check8.log`
+and `private/coop-beyond-world-check8.log`.
+Both corrected late-pickup public repeats pass under 40/20 ms delay/jitter:
+`private/coop/beyond-late-rage-510a52db30ac4a858ec444cd09c10e84/` with Red first
+(932 matching states), and `private/coop/beyond-late-rage-0dedcf3a803a4016babffde8b517a11c/`
+with Blue first (927). Both check the advancing original scene, a frozen hidden
+partner, one reunion and grounded bodies. The middle-scene owner and paired
+reunion views were inspected in each run. The rendered clients match the source
+identity in `private/coop-beyond-source-identity8.json`. Debug/release builds and
+seven source-package tests pass (`private/coop-beyond-validation-build8.log`,
+`private/coop-beyond-validation-release8.log`, `private/coop-beyond-source-tests8.log`).
+Together with the earlier full routes, combat, recovery and rejoin evidence,
+these checks complete Beyond's row: four of 39 visits are fully verified.
+Overall weighted credit is about 41.05%, still reported as 41%.
 
 ## Reproducing transport checks
 

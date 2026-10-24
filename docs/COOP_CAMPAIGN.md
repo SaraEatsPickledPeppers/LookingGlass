@@ -1,7 +1,7 @@
 # Co-op campaign verification matrix
 
 Source: `campaign::route()` in `src/campaign.rs`. Return visits are separate requirements.
-The village, Pandemonium and first Fortress visit have the complete combined co-op evidence below.
+The village, Pandemonium, first Fortress and Beyond visits have the complete combined co-op evidence below.
 Existing single-player route tests do not supply evidence for two-player play.
 Record build identities and reproducible evidence before changing a row to passed.
 
@@ -287,15 +287,34 @@ views were inspected in each run: the owning Alice is visible with the correct
 clothing and transformation pose, and the partner is hidden. The final build
 passes 745 Rust tests, debug/release builds, seven source-package tests and
 the Fortress cinematic plus native Fortress/Beyond co-op regressions.
-Cycling-elevator rendered/network coverage remains open, so the full row is
-not yet passed.
+Cycling-elevator public checks now pass with both first riders on `cf86b004`,
+under the same 40/20 ms delay/jitter: `beyond-elevator-d57b738905834aa6a1ab2d1c730c3c59`
+(Red, 811 matching states) and `beyond-elevator-da651fab20844150a026e2a640f1ebc2`
+(Blue, 775). These staged upper-return approaches use the authored activation
+trigger, then ordinary descent, boarding, riding and running dismount jumps.
+They verify boarding wait, paired rise, dismount wait and empty return clock;
+waiting/dismount/final views were inspected. Normal's actual outer landing is
+used; the short side bridges exist only on Easy.
+
+A further late-Rage pickup probe exposed a phase-reset freeze on `cf86b004`
+(`beyond-late-rage-e16f3f79bbe141f387b6d401f0030397`). `ef3db23e` now preserves a
+cycle already started before the pickup, using the existing saved timestamps.
+Both public repeats pass: `beyond-late-rage-510a52db30ac4a858ec444cd09c10e84` (Red,
+932 matching states) and `beyond-late-rage-0dedcf3a803a4016babffde8b517a11c` (Blue,
+927). Scene-owner and paired reunion views were inspected; the original scene
+advances, the hidden partner stays still and both resume supported on the lift.
+Native watch/skip/pause/save/restore cases pass for both owners, alongside
+original Rage/legacy/difficulty and Beyond world/cinematic regressions, all 746
+Rust tests (one ignored), debug/release builds and seven source-package tests.
+Logs and full identities are in `COOP.md`. Combined with the full traversal,
+combat, resource, death/wipe and reconnect evidence above, Beyond's row passes.
 
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Passed (combined evidence above): both arrival orders, all scenes/reunions, nearest-visible guard damage in both roles, individual health/Blade pickups, matching encounter/player states, both death/spectator/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit; shared boarding N/A |
 | 2 | `pandemonium` | `Initial` | Passed (combined evidence above): native and delayed public routes in both orders, rope/cart, four scenes/three reunions, personal Cards/healing rewards, nearest-visible guard damage in both roles, full-route encounter/player comparison, both hazard death/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit |
 | 3 | `fortress1` | `Initial` | Passed (combined evidence above): both delayed public route orders, original scene/reunion, independent portals, paired split supports, upper jumps and exit, fresh guest rejoin, nearest-visible Boojum selection/damage in both roles, separate healing, coherent enemies, both combat death/spectator/respawn roles and saved-checkpoint wipe; shared boarding N/A |
-| 4 | `fortress2` | `Initial` | Partial: full traversal in both orders (Blue audited, Red clean exit), fresh guest rejoin before exit; both Rage boarding/descent and bridge waiting orders; notes/reset/rejoin with audio; nearest-visible guard damage and separate healing; both combat death/spectator/respawn roles and saved-checkpoint wipe; fixed return camera and visible Rage owner. Cycling-elevator rendered/network coverage remains open |
+| 4 | `fortress2` | `Initial` | Passed (combined evidence above): full traversal in both orders (Blue audited, Red clean exit), fresh guest rejoin before exit; both Rage, bridge and cycling-elevator boarding orders; late Rage on the cycling lift; notes/reset/rejoin with audio; nearest-visible guard damage and separate healing; both combat death/spectator/respawn roles and saved-checkpoint wipe; clear return camera and visible Rage owner |
 | 5 | `fortress1` | `fortress1_start2` | Not run |
 | 6 | `skool1` | `Initial` | Not run |
 | 7 | `skool2` | `Initial` | Not run |

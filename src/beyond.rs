@@ -394,7 +394,12 @@ impl Beyond {
             p.z += self.arch_height(index(n, "arch").unwrap());
         } else if n == "ragelift" {
             p.z -= 320.;
-            if let Some(start) = s.rage_started {
+            // Starting the return cycle fixes its initial descent and phase.
+            // A Rage box collected later still plays its scene, but must not
+            // reinterpret an already moving elevator as a pre-lowered one.
+            let initial_rage = s.rage_started
+                .filter(|rage| s.last_started.is_none_or(|last| *rage <= last));
+            if let Some(start) = initial_rage {
                 p.z -= 48.
                     * match s.rage_lift {
                         Some(RageLift::Waiting) => 0.,
@@ -404,8 +409,8 @@ impl Beyond {
             }
             if let Some(start) = s.last_started {
                 let t = (s.age as f64 - start as f64 - s.lift_wait).max(0.) as f32;
-                let delay = if s.rage_started.is_some() { 0. } else { 4. };
-                if s.rage_started.is_none() {
+                let delay = if initial_rage.is_some() { 0. } else { 4. };
+                if initial_rage.is_none() {
                     p.z -= 48. * ramp(t, 0., 4.);
                 }
                 if t > delay {
@@ -1034,3 +1039,43 @@ pub const SOUNDS: [&str; 3] = [
     "sound/ambience/special/door_machine_tone4.wav",
     "sound/ambience/special/door_machine_tone5.wav",
 ];
+
+#[cfg(test)]
+mod lift_tests {
+    use super::*;
+
+    fn machine(state: State) -> Beyond {
+        Beyond { cinema_data: None, state, objects: Vec::new(),
+            points: BTreeMap::new(), levers: Vec::new() }
+    }
+
+    #[test]
+    fn late_rage_does_not_rephase_a_cycling_elevator() {
+        for wait in [0., 2.25] {
+            for phase in [4.5, 6.5, 9., 10.5, 13.5] {
+                let state = State { age: 10. + wait as f32 + phase,
+                    last_started: Some(10.), lift_wait: wait, ..State::default() };
+                let mut original = machine(state.clone());
+                let mut collected = machine(state);
+                let mut stats = crate::inventory::Stats::default();
+                stats.collected.insert("fortress2:37".into());
+                stats.powers.rage = 42.;
+                assert!(collected.pickup(&stats));
+                assert_eq!(collected.scene_id(), Some("Fortress2_Rage_Pickup"));
+                for tick in 0..1200 {
+                    let base = vec3(-160.,3552.,192.);
+                    assert_eq!(original.pose("ragelift",base), collected.pose("ragelift",base),
+                        "Late pickup changed the lift at phase {phase}, wait {wait}, tick {tick}");
+                    if tick == 600 {
+                        // Scene completion and a saved/reloaded state cannot
+                        // apply the initial 48-unit descent a second time.
+                        collected.state.rage_lift = Some(RageLift::Lowering(collected.state.age));
+                        collected.state = serde_json::from_slice(&serde_json::to_vec(&collected.state).unwrap()).unwrap();
+                    }
+                    original.state.age += 1. / 120.;
+                    collected.state.age += 1. / 120.;
+                }
+            }
+        }
+    }
+}
