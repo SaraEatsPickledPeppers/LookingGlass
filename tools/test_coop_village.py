@@ -41,10 +41,12 @@ class Pair:
             self.set(role)
 
     def set(self, role, goal=None, navigate=False, capture=False, finish=False, epoch=1,
-            horizontal=False, rope=None, marker=None):
+            horizontal=False, rope=None, marker=None, attack=None):
         self.serial += 1
+        if attack is None:
+            attack = self.commands.get(role, {}).get('attack', True)
         self.commands[role] = dict(id=self.serial, heartbeat=1, epoch=epoch,
-                                  goal=goal, navigate=navigate, attack=True,
+                                  goal=goal, navigate=navigate, attack=attack,
                                   capture=capture, finish=finish, horizontal=horizontal, rope=rope, marker=marker)
 
     def start(self, role):
@@ -98,6 +100,7 @@ class Pair:
                    'checkpoint_generation': frame['checkpoint_generation'], 'lives': frame['lives'],
                    'camera_player': report['camera_player'], 'camera_target': report['camera_target'],
                    'camera_subject_feet': report['camera_subject_feet'],
+                   'encounters': stage['world']['encounters'],
                    'owner': stage['owner'], 'scene': driver['scene'], 'driver': driver,
                    'players': [{'feet': b['player']['feet'], 'health': b['stats']['sanity'],
                        'stats': b['stats'],
@@ -181,7 +184,7 @@ class Pair:
         self.start('guest')
         self.until(lambda: len(self.reports) == 2, 120)
 
-    def route_to_cliff(self):
+    def route_to_guard(self):
         self.wait(6)
         for goal in [(-4180,5900,16),(-4192,5416,-52),(-4412,5328,-52),(-4780,5392,-120),(-4968,5424,-120)]: self.go(goal)
         self.wait(6)
@@ -193,7 +196,11 @@ class Pair:
         self.wait(6)
         for goal in [(-4784,4784,-120),(-4512,4800,-96),(-4288,4808,-136),(-3984,4712,-176),(-3972,4332,-160),(-3960,4056,-224),(-3968,3840,-272),(-3776,3832,-208),(-3544,3856,-136)]: self.go(goal)
         self.wait(15)
-        for goal in [(-3208,4040,-56),(-2800,3872,-96),(-2808,3520,-96)]: self.go(goal, True)
+        for goal in [(-3208,4040,-56),(-2800,3872,-96)]: self.go(goal, True)
+
+    def route_to_cliff(self):
+        self.route_to_guard()
+        self.go((-2808,3520,-96), True)
         # Confirm each real landing before the next jump. A single open-loop
         # plan for the whole climb can keep steering over a drop after network
         # timing makes its first jump miss the small intermediate ledge.
@@ -261,6 +268,20 @@ class Pair:
             self.until(lambda: self.processes[role].poll() is not None, 30)
             assert self.processes[role].returncode == 0
 
+    def verify_network_states(self):
+        states = {}
+        for role, rows in self.history.items():
+            states[role] = {}
+            for row in rows:
+                for state in row['driver']['network_states']:
+                    key = (state['epoch'], state['tick'])
+                    previous = states[role].setdefault(key, state['sha256'])
+                    assert previous == state['sha256'], 'An authoritative tick changed after being recorded'
+        shared = states['host'].keys() & states['guest'].keys()
+        assert len(shared) >= 20, 'Too few matching sent/restored network states'
+        assert all(states['host'][key] == states['guest'][key] for key in shared), 'Sent and restored player/enemy states disagree'
+        self.evidence['matching_sent_and_restored_states'] = len(shared)
+
     def run(self):
         self.start_pair()
         self.route_to_cliff()
@@ -316,13 +337,15 @@ class Pair:
             other = host.get((guest['epoch'],guest['tick']))
             if other:
                 assert other['players'] == guest['players'] and other['owner'] == guest['owner'], 'Authoritative client states disagree'
+                assert other['encounters'] == guest['encounters'], 'Authoritative enemy states disagree'
                 compared += 1
-        assert compared >= 5, f'Only {compared} comparable network frames were observed'
+        self.verify_network_states()
         self.evidence['matching_authoritative_ticks'] = compared
         print('Compared', compared, 'matching authoritative ticks.', flush=True)
 
     def close(self):
         (self.folder / 'history.json').write_text(json.dumps(self.history))
+        (self.folder / 'observations.json').write_text(json.dumps(self.evidence, indent=2))
         (self.folder / 'captures.json').write_text(json.dumps(self.capture_commands, indent=2))
         for process in self.processes.values():
             if process.poll() is None:

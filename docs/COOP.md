@@ -123,15 +123,17 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after the native and internet Pandemonium routes: **39%** (previously 38%). Credited
+Overall estimate after completing the village verification matrix: **about 40%** (previously 39%). Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
 9/15 for two-player movement/presentation, paired school supports, dry/swimming arrival placement, complete delayed village/Pandemonium traversal in separate clients and rendered independent rope controls, and 7/20 for native targeting, host-owned
 weapons/damage, personal resources, timed respawns and full saved-state team wipes,
 plus 8/20 for shared world replication, ordered contacts, the verified theatre
 ownership/reunion slice, school boarding barriers, visit history and restart/backup
 restoration of shared checkpoints, and native traversal of all six village scenes
-and all four Pandemonium scenes with either player arriving first (also verified through public internet clients). Full-campaign verification remains at zero. Standalone
-policy tests receive no campaign credit; no campaign-matrix row has passed its full requirements.
+and all four Pandemonium scenes with either player arriving first (also verified through public internet clients).
+Full-campaign verification now earns 20/39 of a point (about 0.51/20), for the village's
+complete combined evidence. Total credited points are about 39.51, rounded to 40%.
+Standalone policy tests receive no campaign credit; 38 campaign visits remain open.
 
 Pandemonium now uses each replicated player's own rope grip in co-op, while the
 single-player controller and saved grip remain unchanged. The host advances its
@@ -260,7 +262,8 @@ verify that next visit. Both client processes exit normally and the private invi
 is removed. Evidence: `private/coop/pandemonium-test-25726e42ca974a459cf70cd356606c0e/`,
 `private/coop-pandemonium-network-blue2.log`. This run used the authorized local
 desktop fallback while Anode was busy. Later recovery/rejoin results follow below;
-the complete Pandemonium matrix still requires consumable/enemy coverage.
+consumable and first-guard checks now follow in the encounter section. A full-route
+repeat with encounter-state comparison remains open for Pandemonium.
 
 The Red-first repeat also passes on the same build and delay/jitter settings,
 running in Anode. Both clients observe all four Red-owned scenes, three reunions,
@@ -336,8 +339,8 @@ normally, and the invite is removed. Evidence:
 `private/coop/pandemonium-test-b5965aedc3274cba8065c2c111d4421f/`,
 `private/coop-pandemonium-rejoin-internet1.log`. The game source is unchanged from
 the preceding 740-test build; this checkpoint extends the independent-client
-harnesses and records their evidence. Per-visit consumable/enemy checks remain
-open before Pandemonium can be marked passed in the campaign matrix.
+harnesses and records their evidence. Later focused consumable/guard checks are
+recorded below; the full-route encounter comparison still prevents marking Pandemonium passed.
 
 The native enemy combat foundation now supplies two live targets to each enemy
 and keeps damage, knockback and Will drain separate for Blue and Red. Closest
@@ -926,8 +929,8 @@ six-reunion results are recorded below. Those runs took 22,512 fixed ticks, endi
 the leader at 70 Sanity and the partner at 100, and performs no deaths, checkpoint
 resets, test resource grants or test teleports. Only production scenes relocate players.
 This is a single-process, two-body traversal, not a separate-process network test
-or a passed campaign-matrix row. The full village network/death/rejoin matrix remains
-pending. That earlier native repeat passed with build identity
+or, by itself, a passed campaign-matrix row. Later network/death/rejoin and combat
+evidence completes that row. That earlier native repeat passed with build identity
 `06ad4947fcada8789a50aa239b059306b4453fbd2328cf4459ff1f041dccd5c5` in
 `private/coop/village-route-2/coop-village/`, including per-reunion captures.
 Blue's third/fifth handoffs and Red's climb handoff were visually inspected.
@@ -1039,8 +1042,8 @@ The Blue-leading repeat passes on the same build and network settings in
 at 100 Sanity, all six scene owners/reunions and personal Blades pass, 81 matching
 authoritative ticks agree, and ordinary speech includes 49 host/51 guest moving
 sample pairs without a warp. Both processes and the helper exit cleanly. Thus both
-network arrival orders are verified. The village death/rejoin matrix remains
-unfinished; these results do not mark the campaign row complete. The 19 synthetic
+network arrival orders are verified. At that checkpoint the death/rejoin matrix was
+unfinished; the later recovery and combat evidence completes the row. The 19 synthetic
 packaging/setup checks also pass.
 
 Run the native check in Anode (it needs a graphics context), with an isolated profile:
@@ -1132,8 +1135,68 @@ school items, staff components and difficulty for both players in both clients.
 Evidence: `private/coop/village-test-49531ea8bd3f460da591f2be6a8c4465/`, on the
 same `f6304f3344c2f6d0340da41879fb00c4c7d37ada0076df301d49ae75a49f331d` build.
 The source change and harnesses also pass 734 Rust tests (one pre-existing ignored),
-19 packaging/setup checks and Python compilation. Village consumable/enemy coverage
-and the remaining 38 visits still prevent claiming full campaign support.
+19 packaging/setup checks and Python compilation. The later focused checks below
+complete the village's consumable/enemy evidence; 38 visits still prevent claiming
+full campaign support.
+
+### Public encounter and personal-consumable checks
+
+`tools/test_coop_village_combat.py` and `tools/test_coop_pandemonium_combat.py` use
+normal starts, independent processes/profiles and ordinary walking/weapon inputs.
+They approach a real guard with attacks disabled, verify that it selects/damages
+the nearer visible Alice, swap the players and repeat, defeat it with the Blade,
+then observe each player's separate healing pickup. They default to the public
+invite connection with 40 ms delay and 20 ms jitter per sender. For example:
+
+```powershell
+python tools/test_coop_village_combat.py --data C:\Alice\base --first blue
+python tools/test_coop_pandemonium_combat.py --data C:\Alice\base --first red
+```
+
+Both pass in Anode on build
+`fe1f5fd905c8262e13dc3bae6e86dfef7a57752504c84d2575e52c1d87bd7a0b`:
+
+- Village: `private/coop/village-combat-44b591c1f47d453aa0afd3b9514fb7df/`.
+  Both checked guard hits deal 12 only to the selected player; the placed shard
+  independently heals each Alice from 88 to 100. All 3,986 comparable sent/restored
+  states and 146 coincident full reports agree. Both attack views, the guest's
+  retained pickup after Blue collects, and the final healed view were inspected.
+- Pandemonium: `private/coop/pandemonium-combat-ac557b2cbaa240d4a61b04df68220399/`.
+  The normal rope/cart lead to the first club guard; Red and then Blue are selected
+  and take the checked hits while the distant partner remains unchanged. Its drop
+  heals Blue 57.733 to 72.733 and then Red 87.667 to 100 independently. All 2,438
+  comparable sent/restored states and six coincident full reports agree. Both attack
+  views and the guest pickup view were inspected. Later enemies/the exit are outside
+  this focused fixture, so a full-route encounter-comparison repeat remains open.
+
+The opt-in route driver records the guard's host-selected target, distances and
+line of sight. Guests do not run AI to produce a second target choice. A bounded
+64-entry SHA-256 history records players, lives, checkpoint generation and
+`Encounters` state at actual host send/guest restore points. The harness compares
+these exact ticks regardless of the two local report clocks; this does not claim
+coverage of other NPC/controller fields. It also compares full encounter/player
+records when local report ticks coincide. These observations never enter the
+input protocol or alter game state. Regular clients without the driver keep no
+such history. All 740 Rust tests pass (one pre-existing ignored), and the normal
+executable builds successfully.
+
+`tools/check_coop_rewards.py` independently checks both clients' retained histories
+for separated collection and healing, unchanged partner resources and retained
+personal enemy drops. Explicit `--map-pickup` IDs also check placed consumables.
+It verifies the earlier Blue-first and Red-first Pandemonium full-route histories
+on build `ec4ccf71f5a634f1c8c03ccbc6924fa3492e9fac1421dd813cd4937c06118a48`:
+`private/coop-pandemonium-personal-rewards1.json` and
+`private/coop-pandemonium-personal-rewards-red1.json`. Negative checks reject absent
+healing, shared removal of enemy drops, and missing guest observations.
+
+Development trials are retained as failures: the first village approach stopped
+outside melee range (`village-combat-8271af180b1347ad96aa67325be8c4bc`); its next
+drop chase entered the damaging street (`village-combat-fa63edb33a6f497b9619dbb479222605`).
+The successful test uses the supported route's placed shard. The first Pandemonium
+trial completed its gameplay checks but had only three coincident local report
+ticks (`pandemonium-combat-d99e90f584e24341aa3486dabf794c3d`), motivating the bounded
+send/restore observations. No health, inventory or enemy behavior was changed to
+make these tests pass. Successful clients/helpers close normally and remove invites.
 
 ## Reproducing transport checks
 

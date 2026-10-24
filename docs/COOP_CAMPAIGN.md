@@ -1,9 +1,9 @@
 # Co-op campaign verification matrix
 
 Source: `campaign::route()` in `src/campaign.rs`. Return visits are separate requirements.
-No visit has passed co-op verification yet. Existing single-player route tests do not
-supply evidence for two-player play. Record a build identity and reproducible evidence
-before changing a row to passed.
+The village is the first visit with the complete combined co-op evidence below.
+Existing single-player route tests do not supply evidence for two-player play.
+Record build identities and reproducible evidence before changing a row to passed.
 
 Each visit requires both host/guest roles and both first-arrival orders, coherent enemies
 and individual consumables, single-player cutscenes with safe reunion, shared-transport
@@ -64,8 +64,23 @@ build in `private/coop/village-test-49531ea8bd3f460da591f2be6a8c4465/` (Blue lea
 40 ms delay + 20 ms jitter). Both personal Blades and completed scenes survive;
 all six owners/reunions and 63 matching authoritative player-state samples pass.
 Both enter Pandemonium alive (Blue 100 / Red 92 Sanity), without a respawn or wipe.
-Both final views were inspected and all owned processes/helpers closed. Per-visit
-consumable and enemy evidence remains open before this row can be marked passed.
+Both final views were inspected and all owned processes/helpers closed.
+The remaining enemy/consumable requirements now pass on build
+`fe1f5fd905c8262e13dc3bae6e86dfef7a57752504c84d2575e52c1d87bd7a0b`, in
+`private/coop/village-combat-44b591c1f47d453aa0afd3b9514fb7df/` (public internet,
+40 ms delay + 20 ms jitter per sender). Its sole live guard selects nearer Blue,
+then nearer Red, with both visible. Each checked hit removes 12 Sanity from the
+selected player and leaves the distant partner unchanged. After defeating it
+with ordinary Blade attacks, both follow the normal ledges to the placed health
+shard: Blue heals 88 to 100 while Red stays at 88 and retains her pickup; Red then
+heals to 100 without changing Blue's resources. Both clients observe separate
+collection. All 3,986 comparable sent/restored player, lives, checkpoint and
+encounter states match; 146 coincident full local reports also agree. Both attack
+views, the guest's still-available pickup, and the final healed view were inspected.
+Both clients/helpers close normally and the invite is removed. Combined with the
+earlier full-route/recovery/rejoin evidence, this completes the village row. The
+latest runtime changes only add opt-in test observations; they change neither
+single-player behavior nor the previously verified scene/recovery mechanics.
 
 Pandemonium partial traversal: the normal-start native two-body route now reaches
 the authored Fortress exit with either player first. Both runs verify all four
@@ -116,12 +131,34 @@ Both personal resources and completed cart/key/scene flags survive; all four
 owners, three reunions and 126 matching authoritative ticks pass. Both retain
 Cards and arrive alive (Blue 45.734 / Red 15.668 Sanity), with no respawn or wipe.
 The initial Fortress cinematic views were inspected; both processes exit normally.
-Per-visit consumable and enemy coverage remains open before this row can pass.
+Both clients' retained histories also verify individual consumable rewards in the
+Blue-first rejoin run and the Red-first route above. `tools/check_coop_rewards.py`
+requires separate collection and healing, unchanged partner resources, and an
+uncollected partner copy remaining in that player's loot ledger. Both clients
+observe the same reward IDs. In the Blue-first run, the first guard's drop heals
+Blue from 93.667 to 100, then Red from 84.533 to 99.533; collecting either copy
+does not change the other player's resources. The later ranged guard's drop also
+passes. Evidence: `private/coop-pandemonium-personal-rewards1.json` and
+`private/coop-pandemonium-personal-rewards-red1.json`, on the same `ec4ccf71` build.
+The first club guard now also passes a focused public-internet encounter check
+on build `fe1f5fd905c8262e13dc3bae6e86dfef7a57752504c84d2575e52c1d87bd7a0b`,
+in `private/coop/pandemonium-combat-ac557b2cbaa240d4a61b04df68220399/`.
+Both Alices are visible; the guard selects and damages nearer Red, then nearer
+Blue after their ordinary movement swaps positions. The distant partner's health
+stays unchanged during each checked hit. After the Blade defeats the guard,
+Blue heals 57.733 to 72.733 while Red retains her copy and resources; Red then
+heals 87.667 to 100 without changing Blue's resources. Both clients independently
+observe these grants. All 2,438 comparable sent/restored player, lives, checkpoint
+and encounter states match; six coincident full local reports match as well.
+Both target views and the guest pickup view were inspected, and both clients exit
+normally. The normal entrance rope/cart are included, but later guards and the
+exit are outside this focused fixture. A full-route repeat with the new encounter
+state comparison remains open before this row can pass.
 
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
-| 1 | `gvillage` | `Initial` | Partial: both arrival orders, deaths/spectator/respawn in both roles, saved-checkpoint wipe and fresh guest rejoin-to-exit pass; consumable/enemy evidence pending; shared boarding N/A |
-| 2 | `pandemonium` | `Initial` | Partial: native and delayed public routes in both orders, rope/cart, four scenes/three reunions, personal Cards, both hazard death/respawn roles, saved-checkpoint wipe and fresh guest rejoin-to-exit pass; consumable/enemy evidence pending |
+| 1 | `gvillage` | `Initial` | Passed (combined evidence above): both arrival orders, all scenes/reunions, nearest-visible guard damage in both roles, individual health/Blade pickups, matching encounter/player states, both death/spectator/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit; shared boarding N/A |
+| 2 | `pandemonium` | `Initial` | Partial: native and delayed public routes in both orders, rope/cart, four scenes/three reunions, personal Cards and independently collected healing rewards, first guard targets/damages both roles with matching encounter state, both hazard death/respawn roles, saved-checkpoint wipe and fresh guest rejoin-to-exit pass; full-route repeat with encounter comparison pending |
 | 3 | `fortress1` | `Initial` | Not run |
 | 4 | `fortress2` | `Initial` | Not run |
 | 5 | `fortress1` | `fortress1_start2` | Not run |

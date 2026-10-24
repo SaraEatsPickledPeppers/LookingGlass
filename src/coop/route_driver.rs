@@ -97,6 +97,27 @@ pub struct Report {
     pub expected: Option<Vec3>,
     pub plan_remaining: usize,
     pub jumps: u64,
+    /// Read-only encounter diagnostics. Selection exists only on the host;
+    /// guests restore enemy presentation without running another AI simulation.
+    pub guards: Vec<GuardReport>,
+    pub network_states: VecDeque<NetworkState>,
+}
+#[derive(Serialize)]
+pub struct NetworkState {
+    epoch: u64,
+    tick: u64,
+    sha256: String,
+}
+#[derive(Serialize)]
+pub struct GuardReport {
+    name: String,
+    active: bool,
+    feet: Vec3,
+    health: f32,
+    state: crate::combat::State,
+    selected_player: Option<usize>,
+    distance: [f32; 2],
+    line_of_sight: [bool; 2],
 }
 struct Worker {
     id: u64,
@@ -122,6 +143,20 @@ pub struct Driver {
     pub report: Report,
 }
 impl Driver {
+    /// Compare actual sent/restored states, independent of the two report clocks.
+    /// Only the opt-in local harness keeps this bounded diagnostic history.
+    pub fn record_state(&mut self, frame: &Frame, arena: &Arena) -> Result<()> {
+        use sha2::{Digest, Sha256};
+        let states = &mut self.report.network_states;
+        if states.back().is_some_and(|s| (s.epoch,s.tick) == (frame.epoch,frame.tick)) { return Ok(()); }
+        let enemies = arena.stage.interactions.encounters.as_ref().map(|c| c.snapshot());
+        let bytes = serde_json::to_vec(&(frame.epoch, frame.tick, frame.checkpoint_generation,
+            &frame.players, &frame.lives, enemies))?;
+        states.push_back(NetworkState { epoch:frame.epoch, tick:frame.tick,
+            sha256:format!("{:x}",Sha256::digest(bytes)) });
+        while states.len() > 64 { states.pop_front(); }
+        Ok(())
+    }
     pub fn new(path: PathBuf) -> Self {
         let now = Instant::now();
         Self { path, command: None, modified: None, polled: now, refreshed: now, used: now,
@@ -174,6 +209,21 @@ impl Driver {
         self.report.scene = arena.stage.interactions.village.as_ref().and_then(|v|v.cinema.scene_id())
             .or_else(|| arena.stage.interactions.pandemonium.as_ref().and_then(|p|p.scene_id())).map(str::to_owned);
         self.report.speech = arena.stage.story.busy() && !arena.stage.busy();
+        self.report.guards = arena.stage.interactions.encounters.iter().flat_map(|cast| &cast.actors)
+            .filter_map(|actor| {
+                let crate::encounters::Enemy::Guard(guard) = &actor.enemy else { return None; };
+                let center = guard.target(0).center;
+                Some(GuardReport {
+                    name: actor.name.clone(), active: actor.active && actor.enabled,
+                    feet: guard.feet, health: guard.health, state: guard.state,
+                    selected_player: guard.opponents.selected_player,
+                    distance: frame.players.each_ref().map(|b| center.distance(b.player.eye())),
+                    line_of_sight: frame.players.each_ref().map(|b| {
+                        let trace = world.sweep(center, b.player.eye(), Vec3::splat(0.5));
+                        b.stats.alive() && !b.stats.ignores_alice() && !trace.start_solid && trace.fraction >= 1.
+                    }),
+                })
+            }).collect();
     }
     pub fn sample(&mut self, frame: &Frame, arena: &Arena, world: &World, map: &crate::bsp::Bsp, local: PlayerId, keys: &mut Input, now: Instant) {
         Self::neutral(keys);

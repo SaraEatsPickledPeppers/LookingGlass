@@ -105,9 +105,12 @@ class PandemoniumPair(Pair):
         self.capture_pair('waiting-for-minecart-partner')
         self.set(self.partner, (-5024,1368,32))
         self.until(lambda: self.pand()['cart'] != 'Waiting')
-        self.wait(65)
+        self.wait_for_minecart()
         assert self.pand()['cart'] == 'Finished' and self.pand()['rides'] == 1
         print('PASS network minecart: waits for both, one original ride.', flush=True)
+
+    def wait_for_minecart(self):
+        self.wait(65)
 
     def key_and_return(self):
         self.go((-3264,-560,440))
@@ -192,8 +195,9 @@ class PandemoniumPair(Pair):
             other = host.get((guest['epoch'],guest['tick']))
             if other:
                 assert other['players'] == guest['players'] and other['owner'] == guest['owner'], 'Authoritative client states disagree'
+                assert other['encounters'] == guest['encounters'], 'Authoritative enemy states disagree'
                 compared += 1
-        assert compared >= 5, f'Only {compared} comparable frames observed'
+        self.verify_network_states()
         self.evidence['matching_authoritative_ticks'] = compared
         print('Compared', compared, 'matching authoritative ticks.', flush=True)
 

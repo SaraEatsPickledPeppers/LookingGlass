@@ -205,7 +205,10 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 guest.poll(now)?;
                 if let Some(next) = guest.take_visit() { pending_visit = Some(next); }
                 if let Some(mut frame) = guest.take_frame() {
-                    if let Some(combat) = frame.combat.take() { arena.replicate(&combat, &scene.map, &mut scene.world)?; }
+                    if let Some(combat) = frame.combat.take() {
+                        arena.replicate(&combat, &scene.map, &mut scene.world)?;
+                        if let Some(driver) = &mut route_driver { driver.record_state(&frame, &arena)?; }
+                    }
                     display = Some(frame);
                 }
             }
@@ -445,7 +448,10 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                     if frame.tick >= last_sent + 6 {
                         let mut network = frame.clone();
                         network.combat = Some(Box::new(arena.snapshot()));
-                        if host.send_frame(network)? { last_sent = frame.tick; }
+                        if host.send_frame(network)? {
+                            if let Some(driver) = &mut route_driver { driver.record_state(&frame, &arena)?; }
+                            last_sent = frame.tick;
+                        }
                     }
                     display = Some(frame);
                     if checkpoint_pending && !arena.stage.busy() && !arena.stage.story.busy()
