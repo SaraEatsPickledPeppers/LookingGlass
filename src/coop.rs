@@ -8,6 +8,8 @@ pub mod audio;
 pub mod campaign;
 pub mod checkpoint;
 mod placement;
+mod separation;
+mod effects;
 pub(crate) mod codec;
 pub mod hosting;
 pub mod invite;

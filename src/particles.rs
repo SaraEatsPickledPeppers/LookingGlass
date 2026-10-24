@@ -464,6 +464,9 @@ fn random(seed: &mut u32) -> f32 {
     (*seed >> 8) as f32 / 16777216.
 }
 impl Steam {
+    pub fn counts(&self) -> (usize, usize, usize) {
+        (self.emitters.len(), self.emitters.iter().filter(|e|e.enabled).count(), self.puffs.len())
+    }
     /// Emission and living puffs for a placed entity, used by mechanism checks.
     pub fn emission(&self, id: crate::entity::Id) -> Option<(bool, usize)> {
         self.emitters.iter().any(|e|e.id==id.0).then(|| (

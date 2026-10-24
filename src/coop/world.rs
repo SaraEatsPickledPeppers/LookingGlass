@@ -157,6 +157,7 @@ impl Roster {
     /// Shared combat resolves after movement and before the one death-policy step.
     pub fn move_players(&mut self, world: &World, inputs: [(Controls, Input); 2]) {
         self.tick += 1;
+        let previous = self.players.each_ref().map(|body| body.player.feet);
         for (body, (controls, look)) in self.players.iter_mut().zip(inputs) {
             if !body.stats.alive() {
                 continue;
@@ -177,6 +178,7 @@ impl Roster {
                 body.stats.damage(10000.);
             }
         }
+        super::separation::resolve(world, &mut self.players, previous);
     }
     #[cfg(test)]
     pub fn finish_tick(&mut self, world: &World) -> Result<()> {

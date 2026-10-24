@@ -119,6 +119,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         }
         let mut level_art = crate::viewer::LevelArt::default();
         level_art.prepare(assets, &scene, &arena.stage.interactions, false)?;
+        let mut effects = super::effects::Effects::load(assets, &scene.map)?;
         let hud = crate::hud::Hud::load(assets)?;
         let mut pickup_art = crate::powerups::Art::load(assets)?;
         let (eye, initial_yaw) = crate::interaction::spawn(&scene.map, visit.entry.as_deref());
@@ -251,6 +252,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 scene = next_scene;
                 arena = next_arena;
                 level_art = next_art;
+                effects = super::effects::Effects::load(assets, &scene.map)?;
                 visit = next;
                 audio.load(assets,&visit.map,&scene.map);
                 checkpoint_pending = launch.host && automatic_checkpoints && !visit.combat_preview;
@@ -512,7 +514,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                     fovy: if scripted.is_some() { arena.stage.scene_fovy(screen_width() / screen_height()) } else { 60_f32.to_radians() },
                     z_near: 2., z_far: 30000., ..Default::default() };
                 set_camera(&view);
-                crate::lighting::select(vec![], camera_eye, &scene.world);
+                effects.update(assets, &scene.map, &scene.world, &arena, frame, local, camera_eye)?;
+                crate::lighting::select(effects.lights(&arena), camera_eye, &scene.world);
                 crate::render_fx::begin_view(&view, frame.tick as f32 * FIXED_DT, &scene.atmosphere, false);
                 arena.stage.interactions.presentation.apply(&mut scene);
                 let transforms = arena.stage.draw_transforms(&scene.world);
@@ -526,6 +529,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 let rage_actor = arena.stage.interactions.beyond.as_ref()
                     .and_then(|b| b.rage_scene())
                     .and_then(|(_, finished)| (!finished).then_some(arena.stage.speaker().index()));
+                let mut visible_players = [false; 2];
                 for (index, (character, body)) in arena.characters.iter_mut().zip(&visual.players).enumerate() {
                     character.power_appearance(&body.stats);
                     character.water_appearance(&body.player);
@@ -534,10 +538,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         (arena.stage.owner.is_none() || index == watched.index())
                         && (index != watched.index() || show_local)
                         && camera_eye.distance(body.player.feet + Vec3::Z * 32.) > 48.
-                        // Close partners can pass through one another in tight
-                        // passages. Show the watched body instead of overlapping skins.
-                        && (index == watched.index() || body.player.feet.distance(watched_body.player.feet) > 24.)
                     };
+                    visible_players[index] = show_body;
                     if show_body {
                         character.draw_replica(body.player.feet, frame.players[index].player.feet, false);
                     }
@@ -550,8 +552,15 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 if let Some(loot) = personal.loot.get(&arena.visit_key) {
                     pickup_art.draw(&loot.pickups(&arena.visit_key), personal, &arena.visit_key, &scene.atmosphere, camera_eye, frame.tick as f32 * FIXED_DT);
                 }
-                scene.draw(camera_eye, frame.tick as f32 * FIXED_DT, false, true, &transforms);
+                scene.draw_with_particles(camera_eye, listening.normalize_or_zero(),
+                    frame.tick as f32 * FIXED_DT, false, &transforms, &effects.steam);
+                if let Some(encounters) = &arena.stage.interactions.encounters { encounters.draw_waves(); }
+                if let Some(school) = &arena.stage.interactions.school2 {
+                    for boojum in &school.boojums { boojum.draw_waves(); }
+                }
                 level_art.effects(&arena.stage.interactions, camera_eye, &scene.atmosphere);
+                crate::lighting::flares(camera_eye, listening.normalize_or_zero());
+                let effect_batches = crate::render_fx::finish();
                 presented = Some(visual);
                 set_default_camera();
                 let fade = arena.stage.fade();
@@ -580,6 +589,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         "camera_player": watched, "camera": camera_eye, "camera_target": target,
                         "camera_subject_feet": camera_subject_feet,
                         "audio": audio.report,
+                        "presentation": { "visible_players": visible_players,
+                            "particles": effects.steam.counts(), "effect_batches": effect_batches },
                         "network_timing": guest.as_ref().map(|g| g.input_timing()),
                         "frame_timing": {"frame_ms": get_frame_time()*1000., "guest_poll_ms": guest_poll_ms, "replicate_ms": replicate_ms},
                         "combat": arena.snapshot(), "visit": visit, "completed_visits": if launch.host { Some(campaign.completed()) } else { None },

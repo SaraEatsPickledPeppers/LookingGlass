@@ -1990,3 +1990,57 @@ Input timing keeps at most 128 send timestamps and resets on a visit transition.
 These observations do not change controls, packet ordering or authoritative
 simulation. The school fixture retains them in its private history to distinguish
 connection delay from slow client updates during a traversal.
+
+The unchanged theatre checkpoint also passes through the school exit with Blue
+arriving first on build
+`f2ff00f9d7e31835bfc705351276cfba5f631d0657aa3bdd597ade6014ac6d08`.
+This two-process public-internet run used 40/20 ms delay/jitter on each sender,
+both paired lifts, the upper gap and flying books, the recipe reunion, fresh
+guest rejoin and lower-library descent. The final audit compares 10,092 actual
+sent/restored states and 192 full school frames; both players remain alive,
+ending at 21/77 Sanity without a checkpoint wipe. Guest input round trip was
+226 ms median, 254 ms at the 95th percentile and 474 ms maximum. Evidence:
+`private/coop/school-resume-ca7c14ed54954d9281665968c4070126`.
+This is checkpoint-to-exit evidence only. An earlier return-stair recovery in
+the segment means it must not be described as a recovery-free full traversal.
+The overall estimate remains about 42%, with 5/39 campaign visits complete.
+
+## Player contact and effect presentation
+
+Co-op no longer hides the partner merely because the two bodies are close.
+The host resolves ordinary player contact at 36 units of horizontal separation,
+with vertical clearance for different floors. An approaching player yields;
+their stationary partner is not pushed. Corrections are checked against walls,
+ground support and swimming depth, and leave rope, ledge and scripted motion
+under their existing controllers. Dead bodies do not obstruct living players.
+
+Each client now loads the original level emitters, follows the shared world
+switches and mechanism positions, and filters collectible emitters using its
+own player's inventory. Checkpoint changes reset old particles. Co-op supplies
+ambient, weapon and enemy lights, draws Boojum waves, and flushes the sorted
+transparent-effect pass before drawing the interface. Previously that final
+pass was never flushed, so even queued weapon and scene effects were absent.
+
+The focused two-client check is `tools/test_coop_presence.py`; it uses ordinary
+movement at the village entrance after its original opening scene. Diagnostics
+in `coop-live.json` include visible-player flags, emitter/live-particle counts,
+and rendered/dropped effect counts. Counts complement inspected captures;
+they are not proof that every effect in every campaign visit has been reviewed.
+Existing full-route fixtures which ask both players to stand on exactly the
+same waypoint need separate stopping positions before their next route pass.
+
+Verified build:
+`612b892a490afa1b06b6ac182c7323edcf933eef841e294941d508f2e9294980`.
+All 755 Rust tests pass (one existing ignored), as does `--coop-world-check`,
+including both school lift boarding orders and the exact near-top landing
+regression. Logs: `private/coop-presence-{tests,world,release}.log`.
+The two-client public-internet presence test passes with 40/20 ms delay/jitter:
+`private/coop/presence-test-8d280ef631054daf89433b9ea789b384`.
+It compares 614 sent/restored states, checks each approaching player without
+moving the stationary partner, confirms enabled models and live particles in
+both windows, and observes rendered effect triangles without dropped effects.
+The contact and entrance captures were inspected. The two preceding attempts
+retain a premature test during the entry scene and an invalid requirement for
+visible effects at every camera angle; neither receives a pass. This focused
+regression adds no completed campaign visits. The existing traversal evidence
+predates player contact and must be repeated before release.
