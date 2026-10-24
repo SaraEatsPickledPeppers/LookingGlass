@@ -48,6 +48,10 @@ struct Command {
     arrival_radius: f32,
     navigate: bool,
     attack: bool,
+    /// Opt-in route tactic. Sends normal weapon/attack inputs and spends the
+    /// player's actual Will; old fixtures retain their Blade-only behavior.
+    #[serde(default)]
+    prefer_cards: bool,
     capture: bool,
     finish: bool,
 }
@@ -441,7 +445,10 @@ impl Driver {
                 .min_by(|a,b|a.center.distance_squared(body.player.eye()).total_cmp(&b.center.distance_squared(body.player.eye()))) {
                 let delta = target.center-body.player.eye();
                 keys.yaw = delta.y.atan2(delta.x); keys.pitch = (delta.z/delta.length().max(1.)).asin().clamp(-1.56,1.56);
-                keys.weapon = Some(0); keys.primary = delta.length()<80.; keys.alternate = !keys.primary;
+                let cards = command.prefer_cards && body.stats.copies(1) > 0
+                    && body.stats.will() >= crate::route::fight::CARD_COST;
+                keys.weapon = Some(if cards { 1 } else { 0 });
+                keys.primary = cards || delta.length()<80.; keys.alternate = !keys.primary;
             }
         }
         if let Some(index) = command.beyond_step {
@@ -604,7 +611,7 @@ mod tests {
         let old:Command=serde_json::from_value(base.clone()).unwrap(); assert!(old.validate().is_ok());
         assert!(old.rope.is_none() && old.marker.is_none() && !old.horizontal && !old.run && !old.jump);
         assert!(old.use_aim.is_none() && !old.watch_dialogue && old.beyond_step.is_none());
-        assert!(old.speed_limit.is_none());
+        assert!(old.speed_limit.is_none() && !old.prefer_cards);
         assert_eq!(old.arrival_radius,8.);
         for radius in [0.99,8.01] {
             let mut input=base.clone(); input["arrival_radius"]=radius.into();

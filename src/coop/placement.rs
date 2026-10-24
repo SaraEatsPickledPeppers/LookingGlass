@@ -30,6 +30,21 @@ pub fn reunion(world: &World, owner: &Player, safe: impl Fn(Vec3) -> bool) -> Op
                 }
             }
         }
+        // A small landing can fit a partner between the eight coarse spokes,
+        // especially when the scene owner stands near its edge. Search finer
+        // angles before leaving the completed scene locked. Keep the owner in
+        // place and retain every wall, full-footprint, drop and hazard check.
+        for radius in [40., 48., 56., 64., 80., 96.] {
+            for index in 0..32 {
+                let angle = index as f32 * std::f32::consts::TAU / 32.;
+                let point = owner.feet + vec3(angle.cos(), angle.sin(), 0.) * radius;
+                for step in [18., 0.] {
+                    if let Some(player) = beside_with_step(world, owner.feet, point, drop, step, &safe) {
+                        return Some(player);
+                    }
+                }
+            }
+        }
         None
     })
 }
@@ -138,6 +153,18 @@ fn supported(world: &World, feet: Vec3) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn scene_reunion_finds_supported_space_between_coarse_search_directions() {
+        let world = World::fixture(&[(vec3(-20., -10., -100.), vec3(90., 35., 0.))]);
+        let owner = Player::spawn(&world, Vec3::Z * (EYE_HEIGHT + 0.03125)).unwrap();
+        assert!(owner.grounded);
+        assert!(near(&world, owner.feet, 32., |_| true).is_none());
+        let partner = reunion(&world, &owner, |_| true).unwrap();
+        assert!(partner.grounded && supported(&world, partner.feet));
+        assert!((40. ..=110.).contains(&partner.feet.distance(owner.feet)));
+        assert!(partner.feet.y >= 10. && partner.feet.y <= 15.);
+        assert!(reunion(&world, &owner, |_| false).is_none());
+    }
     #[test]
     fn scene_reunion_can_sweep_under_a_low_ceiling_without_crossing_walls() {
         for ceiling in [56.5, 64.] {

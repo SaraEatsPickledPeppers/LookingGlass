@@ -225,7 +225,9 @@ impl Stage {
     pub fn collect_pickups(&mut self, roster: &mut Roster, world: &World, pickups: &[crate::inventory::Pickup]) {
         let feet: Vec<_> = roster.players.iter().filter(|b| b.stats.alive()).map(|b| b.player.feet).collect();
         let rage_ready = self.interactions.beyond.as_ref().is_none_or(|b| b.rage_boarding_ready(&feet));
+        let mut dice_collector = None;
         for (index, body) in roster.players.iter_mut().enumerate().filter(|(_, b)| b.stats.alive()) {
+            let dice_before = body.stats.copies(6);
             for pickup in pickups {
                 if pickup.id == "fortress2:37" && !rage_ready {
                     if !body.stats.collected.contains(&pickup.id)
@@ -238,6 +240,21 @@ impl Stage {
                     crate::inventory::collect(&mut body.stats, std::slice::from_ref(pickup), body.player.feet, world);
                 }
             }
+            // Match the ordinary viewer's pickup trigger, once for the shared
+            // story while keeping each player's weapon collection personal.
+            let event = crate::school2::cinema::DICE;
+            if body.stats.copies(6) > dice_before && !self.story.has_seen(event)
+                && self.story.trigger(event) {
+                dice_collector = Some(PlayerId::ALL[index]);
+            }
+        }
+        if let Some(id) = dice_collector {
+            if let Some(school) = &mut self.interactions.school2 {
+                school.begin_queued_dice(&self.story);
+            }
+            // Begin and bind together, before the next speech tick can choose
+            // an earlier speaker instead of the actual first collector.
+            self.accept(Events::default(), id, roster, world);
         }
         self.pickup_scenes(roster, world);
     }
@@ -587,6 +604,7 @@ fn apply(
 /// Authored school scene, with each player owning the real trigger in turn.
 /// This is a focused scene fixture, not a traversal or campaign completion claim.
 pub fn check(assets: &mut Assets) -> Result<()> {
+    super::school2_pickup_check::check(assets)?;
     let map = Bsp::parse(&assets.read("maps/skool1.bsp")?)?;
     let visit = Visit {
         epoch: 1,

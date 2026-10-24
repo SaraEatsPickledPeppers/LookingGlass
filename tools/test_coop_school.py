@@ -73,6 +73,21 @@ class SchoolPair(PandemoniumPair):
         anchor = self.bodies()[index]['player']['feet']
         incoming = self.bodies()[1-index]['player']['feet']
         candidates = self.reports['host']['route_driver']['neighbors'][index]
+        def clears_partner(point):
+            if min(abs(anchor[2]-incoming[2]),abs(point[2]-incoming[2])) >= 56:
+                return True
+            # Neighbors describe supported world geometry, not occupancy by
+            # the other player. Keep both the endpoint and straight approach
+            # outside their body; allow an existing close contact to move away.
+            if distance(point[:2],incoming[:2]) < 40:
+                return False
+            delta = [point[i]-anchor[i] for i in range(2)]
+            length2 = sum(v*v for v in delta)
+            along = max(0,min(1,sum((incoming[i]-anchor[i])*delta[i]
+                                   for i in range(2))/length2)) if length2 else 0
+            nearest = [anchor[i]+along*delta[i] for i in range(2)]
+            return distance(nearest,incoming[:2]) >= min(39,distance(anchor[:2],incoming[:2]))-.1
+        candidates = [p for p in candidates if clears_partner(p)]
         assert candidates, f'No supported waiting spot near {anchor}'
         # Prefer stepping sideways so the other player can pass in either
         # direction, including when returning from a personal pickup.
@@ -82,7 +97,7 @@ class SchoolPair(PandemoniumPair):
         self.evidence.setdefault('waiting_spots',[]).append(dict(role=role,anchor=anchor,goal=endpoint,
             tick=self.reports['host']['frame']['tick']))
         for _ in range(3):
-            self.set(role,endpoint,speed_limit=20,arrival_radius=2.0)
+            self.set(role,endpoint,speed_limit=20,arrival_radius=3.0)
             self.until(lambda:self.reached(role),15)
             self.set(role)
             # An arrival report can precede the last in-flight walking input.
@@ -186,8 +201,12 @@ class SchoolPair(PandemoniumPair):
                 return distance(self.bodies()[first_index]['player']['feet'],anchor) > 8
             # In-flight attacks can still move the leader. Replan from the new
             # supported position instead of walking into their occupied slot.
-            for planned in (navigate,False):
-                self.set(self.partner,endpoint,planned,horizontal=False)
+            for planned,refine in ((navigate,False),(False,True)):
+                # The broad arrival radius can stop partway down a slope,
+                # outside the unchanged two-unit final height tolerance.
+                # Refine with ordinary slow walking before releasing input.
+                self.set(self.partner,endpoint,planned,horizontal=False,
+                    speed_limit=20 if refine else None,arrival_radius=3.0 if refine else 8.0)
                 best = distance(self.bodies()[partner_index]['player']['feet'],endpoint)
                 progress_tick = self.reports['host']['frame']['tick']
                 def approached():
@@ -269,7 +288,7 @@ class SchoolPair(PandemoniumPair):
             self.go(goal,navigate)
             self.secure()
 
-    def passage(self,goals,after_reunion=None,speed_limit=None):
+    def passage(self,goals,after_reunion=None,speed_limit=None,partner_done=None):
         # Narrow stairs have no same-height waiting spot at each bend. Let one
         # player finish the passage and step aside before the other follows
         # exactly the same ordinary route. An authored scene may already have
@@ -293,13 +312,29 @@ class SchoolPair(PandemoniumPair):
                 # delayed inputs can otherwise carry the guest off the stairs
                 # and restart that jump plan during the combat wait.
                 self.set(role,goal,speed_limit=speed_limit)
+                if role == self.first:
+                    self.clear_departure(goal)
+                    self.set(role,goal,speed_limit=speed_limit)
                 self.secure(keep_movement=True)
+                if role == self.first:
+                    # A cutscene can reunite the waiting partner across this
+                    # landing's final approach. Clear it with ordinary input
+                    # before refining the owner's arrival after combat.
+                    self.clear_departure(goal)
+                    self.set(role,goal,speed_limit=speed_limit)
                 self.until(lambda:self.reached(role),20)
                 self.set(role)
                 self.evidence.setdefault('passage_stops',[]).append(dict(role=role,goal=goal,
                     feet=self.bodies()[0 if role == 'host' else 1]['player']['feet'],
                     tick=self.reports['host']['frame']['tick']))
             if role == self.first:
+                # A scene may already have delivered the waiting player's
+                # personal pickup. A caller can verify that outcome directly
+                # instead of forcing a second approach across an occupied pad.
+                if partner_done is not None and self.bodies()[partner_index]['warped_at'] > old_warp and partner_done():
+                    self.evidence.setdefault('passage_partner_completed',[]).append(dict(
+                        role=self.partner,warped_at=self.bodies()[partner_index]['warped_at'],goals=goals))
+                    break
                 self.move_aside(role)
         print('PASS school passage',goals,flush=True)
 
@@ -518,8 +553,8 @@ class SchoolPair(PandemoniumPair):
             self.go(goal,navigate,fight=False)
         # The switchback has no supported side-by-side stopping point. Finish
         # it and clear the landing before the second player takes the stairs.
-        self.passage([((-2256,2544,-480),False),((-2304,2624,-342),True),
-                      ((-2304,2800,-256),True)])
+        self.passage([((-2340,2368,-480),False),((-2256,2544,-480),False),
+                      ((-2304,2624,-342),True),((-2304,2800,-256),True)],speed_limit=20)
         self.capture_pair('theatre-and-shelf-reunion')
 
     def route(self):

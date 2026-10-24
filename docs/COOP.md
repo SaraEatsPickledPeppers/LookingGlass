@@ -2308,7 +2308,7 @@ slowly onto the narrow lower support, and approaches the
 upper step before its short jump. This avoids treating the entire descent and
 climb as a running navigation plan. Both players must finish grounded on the
 upper landing with matching shared-world states and no death/wipe/respawn.
-Short school waiting moves request a two-unit stopping radius and a slower
+Short school waiting moves request a three-unit stopping radius and a slower
 walking input, so a supported spot on a small step is actually reached. Other
 walks retain the original eight-unit default. Slow inputs on the narrow stair
 supports limit overshoot while delayed feedback is in flight. Planned
@@ -2487,3 +2487,127 @@ control overshoot. Their failing summaries retain client positions, commands,
 last supported targets and a bounded log excerpt automatically. They receive
 no traversal credit. No images were opened for these checks. Full first-school
 traversal in both arrival orders remains open; the estimate stays about 42%.
+
+### School Two network route under verification
+
+`tools/test_coop_school2.py` follows the native School Two route from the normal
+entrance using two independent clients. It covers the personal Demon Dice
+altar, the gym lever and bleachers, upper-gym battle, laboratory rescue,
+Jumbogrow, both authored portals, greenhouse growth, quest rewards and the
+gated return to `skool1_start2`. Inputs use the existing controller; the fixture
+does not write positions, health, inventory or quest state. Its complete route
+still needs runtime verification in both arrival orders.
+
+The regression runner accepts `--only school2-blue school2-red` for complete
+route attempts, with a fresh guest reconnect after the greenhouse. The existing
+`--only school2` still means the native School Two checks. Use
+`--only dice-blue dice-red` for the partial normal-entrance route through both
+personal Dice pickups and the return from the altar. This partial route has
+no staged spawn, but does not certify the whole visit. Each case retains exact
+build/fixture identities, explicit scope, bounded runtime and failure details.
+
+The fixture observes School Two's original enemy pools and waits for both
+ordinary and legacy Boojum waves to clear. Verification requires matching
+shared-world states, the expected scene owners, frozen partners and safe
+reunions, personal Dice collection and no death/respawn/wipe. The full route
+also requires two portal traversals per player, completed quest rewards and
+the correct return entry; consumed Jumbogrow is not mistaken for a missing
+final reward.
+
+The first-school entrance repeat exposed a waiting target only 2.35 units
+beyond a wall contact. The existing final criterion allowed three units, but
+the controller still requested two. Those tolerances now agree without
+relaxing the final grounded/height checks. That repeat passed the theatre and
+healing section, then stopped on the later stair climb. The theatre stair
+inputs now align both players at the same approach and use the slower landing
+controls; that latest adjustment still needs a complete repeat.
+
+The first School Two entrance probe completed both physical Dice pickups and
+the return stairs, but correctly failed its scene check: co-op collection had
+omitted the ordinary game's `dice_cat` pickup trigger, so the scene and its
+guard ambush never ran. Collection now starts the original scene and binds it
+to the first collector. Each player still receives their own Dice; collecting
+the second copy cannot replay the scene or replace its owner.
+
+The native `--coop-world-check` regression exercises that path with either
+player collecting first. It checks personal inventory, ownership, the frozen
+partner, serialized/restored scene state, supported reunion, ambush activation
+and no replay on the second collection. Both orders passed on source build
+`ea619c58d85f926afd043ed7011fb9b2419de8a8a4da7beee0e8406f5cfdffd9`.
+This component stages the collector at the real altar; the two-client route
+must independently reach it from the ordinary entrance.
+
+School Two route attempts now write `milestone-dice.json` and
+`milestone-gym.json` only after their complete prefix checks pass. Each is
+explicitly marked `full_visit: false`. If a later section fails, the suite
+reports those verified components alongside the failure, without converting
+the attempt into a full-level pass. Routine triage uses these JSON results,
+shared-world hashes and bounded log excerpts; saved captures are opened only
+when the failure calls for visual inspection.
+
+The same build passed the full native School Two check as well as the co-op
+world check (`private/coop/regression-suite-5975a9b630154110b9d70187f436487a`).
+The Red-first internet attempt observed the restored scene and ambush in both
+clients and both personal pickups, then failed before completing the return
+path. Its waiting-point selector had treated supported map geometry as free
+of the other Alice. Waiting targets and straight approaches now account for
+the partner's occupied space. A recorded-state replay of the failure chooses
+the available unoccupied target. Final paired approaches also use slow,
+tighter steering so their broad arrival radius cannot stop short on a slope;
+the final grounded, distance and height requirements are unchanged. These
+controller changes affect automated route input only.
+
+For faster iteration at the altar, `--only altar-red altar-blue` runs a focused
+component with an explicit initial spawn on the lower landing before the gap.
+It still walks/jumps, collects both personal pickups, runs the scene and
+ambush, and returns over the gap. Results identify the staged spawn and never
+count as entrance traversal or a full visit. `dice-blue/red` retain the normal
+entrance; `school2-blue/red` retain the complete route.
+
+School Two's test controller requests owned Playing Cards when the player can
+pay their ordinary Will cost, falling back to the Blade when they cannot.
+Other fixtures keep the previous Blade-only default. This uses ordinary
+weapon selection and attack inputs, without adding inventory or resources.
+The fixture records each player's minimum Will and uses ordinary steering to
+hold grounded waiting positions against enemy knockback. Death still fails a
+clean traversal, including in staged components.
+
+A shorter Blue-first repeat exposed a genuine handoff lock at a recorded Dice
+pickup near the altar edge. The dialogue and camera had completed, but the
+partner-placement search's eight directions missed the available supported
+space. Scene reunion now tries a finer bounded search if the original search
+fails, keeping the owner at their original position. It retains wall sweeps,
+full-footprint support, hazard checks, separation and the same drop limits;
+ordinary death respawn placement is unchanged. A narrow-landing unit fixture
+and both-owner native checks at the recorded map position cover this case.
+
+Build `6205a876066a49c68cb95683de217453de2193d943afb1ee7bdc3436558558c8`
+passed 758 unit checks (one existing ignored test), the release build and the
+native co-op world suite, including both owners at the recorded altar edge
+(`private/coop/regression-suite-94a51d0cf5f644b190b9720c57a80d12`). Its
+Blue-first staged network component passed in 64.72 seconds in
+`private/coop/regression-suite-9c7e919e3c804389a68d2b86f61641ae`.
+
+The fixture now accepts the second player's actual personal pickup after a
+scene reunion instead of forcing another approach when it is already complete.
+Both inventories and an observed reunion are required for that branch; the
+scene, combat, return and coherence checks still run. An unnecessary attempt
+to swap positions on the narrow altar has also been removed.
+
+An intermittent delayed-client opening jump remains unresolved: in
+`private/coop/regression-suite-bf553370d4b14ebdaa57bdf6449a6e69`, Red fell
+before any Dice scene, and the run correctly failed. Successful selected runs
+do not establish robust latency coverage or a complete School Two visit.
+Full first-school and School Two routes in both orders remain open. Overall
+progress remains about 42%, with five of 39 full campaign visits verified.
+
+With the final fixture, the same `6205a876...` build passed both staged altar
+orders over the public internet with 40 ms injected delay and 20 ms jitter:
+`private/coop/regression-suite-ccd5f7d9a50d40d18315215b42954577/summary.json`.
+Blue-first took 56.94 seconds with 628 matching player/enemy and shared-world
+states; Red-first took 53.38 seconds with 558. Both finished at 100/100 health
+without death, respawn or checkpoint restoration. Minimum Will was 46/52 and
+61/58 respectively, confirming ordinary personal resource expenditure.
+These are short, explicitly staged component passes, not full routes or a
+resolution of the intermittent delayed-jump failure recorded above. No images
+were opened during this work.

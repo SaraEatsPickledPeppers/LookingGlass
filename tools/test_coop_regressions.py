@@ -58,7 +58,8 @@ def result_from_log(log):
         raise ValueError('Rendered test has no valid passing result/build identity')
     fields = ('matching_sent_and_restored_states', 'matching_shared_world_states', 'matching_full_school_frames',
               'contact_distance', 'stationary_partner_unchanged',
-              'both_models_and_particles_visible', 'checkpoint_sha256', 'resume_point', 'lifts')
+              'both_models_and_particles_visible', 'checkpoint_sha256', 'resume_point', 'lifts',
+              'minimum_will', 'final_health', 'staged_initial_spawn')
     metrics = {key: result['evidence'][key] for key in fields if key in result['evidence']}
     rejoin = result['evidence'].get('rejoin')
     if rejoin:
@@ -75,6 +76,13 @@ def failure_from_log(log, rendered):
     try:
         folder = evidence_from_log(log)
         result['evidence'] = str(folder)
+        components = []
+        for path in sorted(folder.glob('milestone-*.json')):
+            milestone = json.loads(path.read_text())
+            if milestone.get('passed') is True and milestone.get('full_visit') is False:
+                components.append({k: milestone.get(k) for k in ('phase', 'scope', 'build', 'first')})
+        if components:
+            result['completed_components'] = components
         reports = json.loads((folder / 'last-reports.json').read_text())
         result['clients'] = {}
         for role in ('host', 'guest'):
@@ -110,8 +118,9 @@ def main():
     parser.add_argument('--data', type=Path, required=True)
     parser.add_argument('--only', nargs='+', choices=('world', 'school2', 'presence', 'school',
                                                    'school-blue', 'school-red', 'lift-blue', 'lift-red',
-                                                   'stairs-blue', 'stairs-red'),
-                        help='school resumes a checkpoint; school-blue/red traverse the full first school; lift/stairs-blue/red are staged component checks')
+                                                   'stairs-blue', 'stairs-red', 'school2-blue', 'school2-red',
+                                                   'dice-blue', 'dice-red', 'altar-blue', 'altar-red'),
+                        help='school resumes a checkpoint; school-blue/red and school2-blue/red are full routes; lift/stairs/altar are staged; dice is a partial School Two entrance route')
     parser.add_argument('--local', action='store_true')
     parser.add_argument('--delay-ms', type=int, default=40)
     parser.add_argument('--jitter-ms', type=int, default=20)
@@ -151,6 +160,12 @@ def main():
                                   '--first', first], 300, True)
         cases['stairs-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school_stairs.py'), *common,
                                     '--first', first], 300, True)
+        cases['school2-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school2.py'), *common,
+                                     '--first', first, '--rejoin'], 1500, True)
+        cases['dice-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school2.py'), *common,
+                                  '--first', first, '--stop-after', 'dice'], 900, True)
+        cases['altar-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school2.py'), *common,
+                                   '--first', first, '--stop-after', 'dice', '--stage-at-altar'], 300, True)
     if args.school_checkpoint:
         cases['school'] = ([sys.executable, str(ROOT / 'tools/test_coop_school_resume.py'), *common,
                            '--checkpoint', str(args.school_checkpoint), '--resume-point', args.school_resume_point,

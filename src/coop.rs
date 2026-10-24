@@ -27,6 +27,7 @@ pub mod village_check;
 pub mod pandemonium_check;
 pub mod pandemonium_route;
 pub mod route_driver;
+mod school2_pickup_check;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
