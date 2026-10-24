@@ -64,6 +64,8 @@ class Pair:
                 '--no-audio', '--profile', str(profile), '--coop-host' if role == 'host' else '--coop-join',
                 str(self.invite), '--coop-route-driver', str(profile / 'route-command.json'),
                 '--coop-delay-ms', str(self.args.delay_ms), '--coop-jitter-ms', str(self.args.jitter_ms)]
+        if getattr(self, 'entry', None) is not None:
+            args += ['--entry', self.entry]
         if getattr(self.args, 'audio', False):
             args.remove('--no-audio')
             args += ['--audio-capture', str(self.folder / (role + suffix + '.wav')), '--frames', '36000']

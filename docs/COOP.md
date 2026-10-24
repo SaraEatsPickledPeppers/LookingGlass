@@ -1753,6 +1753,37 @@ Together with the earlier full routes, combat, recovery and rejoin evidence,
 these checks complete Beyond's row: four of 39 visits are fully verified.
 Overall weighted credit is about 41.05%, still reported as 41%.
 
+The next visit's traversal now passes in both orders on the same `ef3db23e`
+build. `tools/test_coop_fortress_return.py --data <base> --first red --rejoin`
+starts at the actual `fortress1_start2` entrance and follows the upper wall with
+ordinary navigation, Blade attacks and the running jump into the rocking school
+window. `--first blue` repeats the other trigger order. Internet joining with
+40/20 ms delay/jitter remains the default; neither run stages a mid-level start
+or writes gameplay state. The shared harness now accepts an optional authored
+entrance; existing first-visit fixtures retain their previous arguments.
+
+Red's public run is `private/coop/fortress-return-0e72ab5bd10a471fbcf6fe4dc06c87fc/`
+(1,047 matching sent/restored states); Blue's is
+`private/coop/fortress-return-a66cad4ce4344e68b5ae5169cf15ad47/` (1,064).
+Each verifies the proper owner of `Fortress1_Boojum_Attack`, a frozen partner,
+one safe reunion, the activated ambush, no respawns/wipes, and a fresh guest
+rejoin preserving resources/placement/completed scene state before the outgoing
+trigger. Both players enter `skool1_start1` at 100 Sanity in both runs. Reunion,
+window approach and both school entrance views were inspected. The scene's
+automatic capture is its opening white fade, so a middle-reveal capture still
+needs inspection. Earlier fixture attempts stopped while trying to throw the
+Blade at a guard from behind the corner parapet; the passing route completes
+the ordinary approach before waiting for that fight. Failed evidence remains
+in `fortress-return-bcef832fb66d498e96ac997201cce2b1` and
+`fortress-return-47dcb81c92b6468d99b36ea883a07a05`.
+
+These are traversal/reconnect results. The return visit's dedicated nearest-
+visible targeting, personal consumable and both death/respawn/wipe checks remain
+open, together with the middle-reveal view. No fifth-row completion credit is
+claimed. Seven source-package tests and Python syntax checks pass in
+`private/coop-fortress-return-source-tests1.log`; the game source/build remains
+the validated `ef3db23e` above.
+
 ## Reproducing transport checks
 
 Build with `cargo build --locked`, then run:

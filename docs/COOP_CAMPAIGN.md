@@ -309,13 +309,27 @@ Rust tests (one ignored), debug/release builds and seven source-package tests.
 Logs and full identities are in `COOP.md`. Combined with the full traversal,
 combat, resource, death/wipe and reconnect evidence above, Beyond's row passes.
 
+Fortress return traversal passes on `ef3db23e` with Red first in
+`private/coop/fortress-return-0e72ab5bd10a471fbcf6fe4dc06c87fc/` (1,047 matching
+sent/restored states) and Blue first in
+`private/coop/fortress-return-a66cad4ce4344e68b5ae5169cf15ad47/` (1,064).
+Both use the authored return entrance, public 40/20 ms delay/jitter and ordinary
+movement/combat/jump inputs. The reveal has the correct first owner, a frozen
+partner and one safe reunion; the ambush activates. A second guest process
+rejoins before the school window with resources and scene state preserved.
+Both reach `skool1_start1` at 100 Sanity without death or checkpoint reset.
+Reunion/window/school entrance views were inspected. The scene capture is the
+opening white fade; its middle view remains to be checked. Dedicated targeting,
+individual resources and both death/respawn/wipe cases also remain open, so this
+is partial row evidence. Reproduce with `tools/test_coop_fortress_return.py`.
+
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Passed (combined evidence above): both arrival orders, all scenes/reunions, nearest-visible guard damage in both roles, individual health/Blade pickups, matching encounter/player states, both death/spectator/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit; shared boarding N/A |
 | 2 | `pandemonium` | `Initial` | Passed (combined evidence above): native and delayed public routes in both orders, rope/cart, four scenes/three reunions, personal Cards/healing rewards, nearest-visible guard damage in both roles, full-route encounter/player comparison, both hazard death/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit |
 | 3 | `fortress1` | `Initial` | Passed (combined evidence above): both delayed public route orders, original scene/reunion, independent portals, paired split supports, upper jumps and exit, fresh guest rejoin, nearest-visible Boojum selection/damage in both roles, separate healing, coherent enemies, both combat death/spectator/respawn roles and saved-checkpoint wipe; shared boarding N/A |
 | 4 | `fortress2` | `Initial` | Passed (combined evidence above): full traversal in both orders (Blue audited, Red clean exit), fresh guest rejoin before exit; both Rage, bridge and cycling-elevator boarding orders; late Rage on the cycling lift; notes/reset/rejoin with audio; nearest-visible guard damage and separate healing; both combat death/spectator/respawn roles and saved-checkpoint wipe; clear return camera and visible Rage owner |
-| 5 | `fortress1` | `fortress1_start2` | Not run |
+| 5 | `fortress1` | `fortress1_start2` | Partial: both delayed public full traversals to school, correct reveal owners/frozen partners/reunions, ambush activation, fresh guest rejoin before exit; both finish at 100 Sanity. Middle-reveal view, focused targeting/resources and both death/respawn/wipe roles remain open |
 | 6 | `skool1` | `Initial` | Not run |
 | 7 | `skool2` | `Initial` | Not run |
 | 8 | `skool1` | `skool1_start2` | Not run |
