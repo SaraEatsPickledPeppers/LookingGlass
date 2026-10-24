@@ -99,11 +99,23 @@ class SchoolPair(PandemoniumPair):
         # clients still walk normally, with unchanged collision and landing rules.
         self.set(self.first)
         self.wait(.4)
-        # An enemy hit can knock the leader into the partner's chosen slot.
-        # Finish the nearby encounter before measuring the waiting positions.
-        self.secure()
+        # Fight while steering back toward the reached goal. Neutral movement
+        # lets successive enemy hits push Alice off a narrow landing before
+        # the partner follows. These remain ordinary movement/attack inputs.
+        self.set(self.first,goal,horizontal=horizontal)
+        self.secure(keep_movement=True)
+        if self.arrived():
+            return
+        self.until(lambda:self.reached(self.first),20)
+        self.set(self.first)
+        self.wait(.4)
         first_index = 0 if self.first == 'host' else 1
         partner_index = 1-first_index
+        def leader_at_goal(report):
+            player = report['frame']['players'][first_index]['player']
+            return (player['grounded'] and distance(player['feet'][:2],goal[:2]) < 42 and
+                    (horizontal or abs(player['feet'][2]-goal[2]) < 35))
+        assert all(leader_at_goal(r) for r in self.reports.values()), 'Leader left the requested route landing'
         for attempt in range(8):
             self.set(self.partner)
             self.until(lambda:self.arrived() or self.bodies()[first_index]['player']['grounded'],15)
@@ -130,14 +142,23 @@ class SchoolPair(PandemoniumPair):
                     break
             self.set(self.partner)
             self.wait(.4)
-            if not displaced():
+            settled = all(
+                r['frame']['players'][partner_index]['player']['grounded'] and
+                distance(r['frame']['players'][partner_index]['player']['feet'][:2],endpoint[:2]) < 8 and
+                abs(r['frame']['players'][partner_index]['player']['feet'][2]-endpoint[2]) < 2
+                for r in self.reports.values())
+            # A late walking input can carry the guest past an endpoint that
+            # was reached in its previous report. Correct from the settled
+            # position, retaining the same final distance/height checks.
+            if not displaced() and settled:
                 break
         else:
-            raise AssertionError('Leader repeatedly displaced before partner could reach a safe endpoint')
+            raise AssertionError('Pair did not settle at a safe endpoint after eight attempts')
         # The final straight walk keeps navigation's broad arrival from passing
         # an adjacent stair or an occupied stopping point as the destination.
         for report in self.reports.values():
             bodies = report['frame']['players']
+            assert leader_at_goal(report), 'Leader left the requested route landing'
             assert bodies[partner_index]['player']['grounded']
             assert distance(bodies[partner_index]['player']['feet'][:2],endpoint[:2]) < 8
             assert abs(bodies[partner_index]['player']['feet'][2]-endpoint[2]) < 2
@@ -151,10 +172,13 @@ class SchoolPair(PandemoniumPair):
                 feet=[b['player']['feet'] for b in r['frame']['players']]) for role,r in self.reports.items()})
             self.pump()
 
-    def secure(self):
+    def secure(self,keep_movement=False):
         if self.arrived():
             return
-        self.wait(.5)
+        if keep_movement:
+            self.hold(.5)
+        else:
+            self.wait(.5)
         def safe():
             for r in self.reports.values():
                 if any(e['active'] and e['health'] > 0 and any(v and d < 700
@@ -172,14 +196,23 @@ class SchoolPair(PandemoniumPair):
             self.go(goal,navigate)
             self.secure()
 
-    def passage(self,goals):
+    def passage(self,goals,after_reunion=None):
         # Narrow stairs have no same-height waiting spot at each bend. Let one
         # player finish the passage and step aside before the other follows
-        # exactly the same ordinary route. Never skip the intermediate stops.
+        # exactly the same ordinary route. An authored scene may already have
+        # transported the waiting partner beyond the passage.
+        partner_index = 0 if self.partner == 'host' else 1
+        old_warp = self.bodies()[partner_index]['warped_at']
         for role in (self.first,self.partner):
             other = 'guest' if role == 'host' else 'host'
             self.set(other)
-            for goal,navigate in goals:
+            role_goals = goals
+            if role == self.partner and after_reunion is not None and self.bodies()[partner_index]['warped_at'] > old_warp:
+                self.evidence.setdefault('passage_reunions',[]).append(dict(role=role,
+                    warped_at=self.bodies()[partner_index]['warped_at'],
+                    feet=self.bodies()[partner_index]['player']['feet']))
+                role_goals = after_reunion
+            for goal,navigate in role_goals:
                 self.set(role,goal,navigate)
                 self.until(lambda:self.reached(role))
                 self.set(role)
@@ -207,9 +240,17 @@ class SchoolPair(PandemoniumPair):
         self.capture_pair(name+'-waiting')
         self.set(self.partner,second_goal,navigate=True)
         index = 0 if self.partner == 'host' else 1
-        self.until(lambda: all(distance(self.bodies(r)[index]['player']['feet'][:2],second_goal[:2]) < 24
-                               and self.bodies(r)[index]['player']['grounded'] for r in self.reports),40)
+        # Boarding starts the shared clock before the second rider reaches the
+        # planned endpoint. Stop on that host signal: following a fixed world
+        # coordinate after rotation begins can walk the delayed guest off.
+        self.until(lambda: obj()['motion'] != initial['host']['motion'] and
+                   distance(self.bodies()[index]['player']['feet'][:2],second_goal[:2]) < 40 and
+                   all(b['player']['grounded'] and b['player']['feet'][2] >= first_goal[2]-2
+                       for b in self.bodies()),40)
         self.set(self.partner)
+        self.evidence.setdefault('lift_boarding',[]).append(dict(name=name,
+            tick=self.reports['host']['frame']['tick'],motion_time=obj()['motion']['time'],
+            feet=[b['player']['feet'] for b in self.bodies()]))
         def at_top():
             return all(b['player']['feet'][2] >= top-1 and b['player']['grounded']
                        for r in self.reports for b in self.bodies(r))
@@ -270,6 +311,9 @@ class SchoolPair(PandemoniumPair):
             self.until(lambda: self.reached(role),20)
             assert abs(self.bodies(role)[index]['player']['feet'][2]-64) < 2, 'Missed the lower library shelf'
             self.set(role)
+            if role == self.first:
+                self.wait(.4)
+                self.move_aside(role)
         self.capture_pair('lower-library-landing')
         self.secure()
 
@@ -326,6 +370,9 @@ class SchoolPair(PandemoniumPair):
             # Release run before touchdown: grounded acceleration is much
             # stronger and a delayed running correction can cross the ledge.
             self.set(role,goal)
+            # Releasing run does not remove airborne momentum. Keep the same
+            # braking lead until touchdown instead of abruptly shortening it.
+            self.commands[role]['input_lead'] += .30
             self.until(landed,20)
             self.set(role)
             self.wait(.5)
@@ -412,7 +459,16 @@ class SchoolPair(PandemoniumPair):
                    ((700,3440,-256),False),((208,3440,-288),False),
                    ((208,4160,-264),False),((144,4230,-288),False)])
         self.lift('library_spiral_lift',(144,4360,-264),(192,4360,-264),64)
-        self.legs([((272,4160,64),False),((700,4096,64),False),((884,4056,64),False),
+        self.checkpoint_stop('spiral')
+        self.after_spiral_lift()
+
+    def after_spiral_lift(self):
+        # Leave the rotating platform through its narrow authored landing in
+        # turn. A sideways partner endpoint cuts diagonally across open air.
+        departure = tuple(self.bodies()[0 if self.first == 'host' else 1]['player']['feet'])
+        self.passage([(departure,False),((272,4160,64),False),((700,4096,64),False)],
+                     after_reunion=[((700,4096,64),False)])
+        self.legs([((884,4056,64),False),
                    ((0,4096,64),False),((0,3500,64),False)])
         self.checkpoint_stop('library')
         self.upper_library_route()
@@ -564,7 +620,7 @@ if __name__ == '__main__':
     parser.add_argument('--first',choices=('blue','red'),default='red')
     parser.add_argument('--local',action='store_true')
     parser.add_argument('--rejoin',action='store_true')
-    parser.add_argument('--checkpoint-stops',nargs='*',choices=('theatre','balcony','library','bridge','descent'),default=[],
+    parser.add_argument('--checkpoint-stops',nargs='*',choices=('theatre','balcony','spiral','library','bridge','descent'),default=[],
                         help='Hold neutral inputs for up to 180 seconds for a normal menu checkpoint; create continue-<stop> in the evidence folder to resume')
     parser.add_argument('--delay-ms',type=int,default=40)
     parser.add_argument('--jitter-ms',type=int,default=20)

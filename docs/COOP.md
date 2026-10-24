@@ -2119,3 +2119,66 @@ The complete single-player School2 regression also passes on this build:
 53,236 ticks, nine jumps, 23 throws, 149 cards, 170 combat damage and 27 final
 Sanity, with both original portals, all quest items and the gated return.
 `private/coop-school2-combat-route.log` records the no-cheats/no-recovery run.
+
+### First-school traversal follow-up (24 October)
+
+The collision-aware route now retains airborne braking when releasing run,
+checks that delayed walking inputs have actually settled at each paired
+endpoint, and stops the joiner near a clear boarding position once the host
+starts the lift. It keeps the existing ground/height/distance and both-riders
+arrival assertions. In `school-resume-cefce6a0...`, waiting for both clients to
+report a fixed world destination kept Red walking after the spiral rotated;
+in `0c08caab...`, stopping at the first boarding signal left her too close to
+the central column. Both failures remain in private evidence.
+
+The revised boarding passes in `private/coop/school-resume-43cbe3f3d87340a6b71ea483ca6ed55c`
+on frozen build `d4869cdf...`: both players wait/ride to upper-floor height,
+and both top captures were inspected. Red subsequently falls when the paired
+endpoint shortcuts the narrow exit; this is not a successful route. The next
+repeat, `private/coop/school-resume-f392612e7c114c5397f9902d577fa37e`, passes
+the balcony, library approach and spiral boarding/ride again, then deliberately
+stops at a normal menu save before the exit. Its 4,628 matching network states
+and 157 coincident full reports agree; both remain alive at 98/100 Sanity.
+The unchanged checkpoint at tick 65,443 is retained as `spiral-checkpoint.json`
+(SHA-256 `890a3d4a3044949b4c1d87d87acf807b3077169aaa896e3556d4543e1ccf5436`).
+
+The fixture now supports `--resume-point spiral` and a `spiral` checkpoint
+stop. Departure follows the narrow exit in turn and recognizes an authored
+cutscene reunion, so the waiting partner continues from the safe reunion
+point instead of walking back toward the now-departed lift.
+Lower-shelf descent also clears the first landing before the partner follows;
+that later segment still needs verification. No additional campaign visit is
+credited by these partial tests.
+
+Build `a3ce8a69...` restores that unchanged checkpoint and completes the shelf
+scene with both players safely reunited on the upper floor. In
+`private/coop/school-resume-a6daea30dc114453800d1ed5aa4adba3`, the subsequent
+library approach fails: enemy knockback pushes the stationary leader off the
+ledge, and the fixture incorrectly chooses a partner destination on that
+lower floor. Its 4,610 matching network states and 98 full reports agree,
+but it receives no traversal credit and no library checkpoint was saved.
+Paired legs now steer back toward the reached goal while fighting and verify
+the leader remains near the requested goal and height before and after the
+partner follows. The existing strict partner landing checks remain in place.
+
+The corrected repeat, `private/coop/school-resume-4d2e9c6bcada436bbf63b18329256e5a`,
+passes the lift departure, shelf scene/reunion and three upper-floor library
+legs on the same `a3ce8a69...` build over the public connection with 40/20 ms
+delay/jitter. Both remain alive at 70/100 Sanity, on the intended floor at
+height 64.03125. All 2,608 matching states and five coincident full reports
+agree. The host's normal ESC menu saves a checkpoint at tick 79,790, confirmed
+in the UI and retained byte-for-byte as `library-checkpoint.json` (SHA-256
+`886ec09f0cad157e3080524af516418f464b2b7b2755eabe264582591e08d757`).
+The test then deliberately stops; this is a verified partial segment, not a
+completed first-school traversal. Upper stairs, books and descent remain open
+on the current player-contact build.
+
+The focused player-contact/effects regression also passes on `a3ce8a69...`
+in Anode: `private/coop/presence-test-85c43af39d0d4a8997a601be0b6c430c`.
+Both independent clients use the public connection with 40/20 ms delay/jitter;
+615 sent/restored states match. Each approaching player stops at 36 units,
+the stationary partner stays fixed, both models remain enabled, ambient
+particles are live and each client's history includes drawn effect triangles
+without dropped batches. Entrance and contact captures were inspected.
+This focused pass does not certify every campaign effect. All owned test
+processes and windows were closed, and Anode was released afterward.

@@ -37,9 +37,9 @@ class SchoolResume(SchoolPair):
         expected = {'Book_Ingredients_Exit'}
         if self.args.resume_point != 'descent':
             expected.add('book_cinematic')
-        if self.args.resume_point in ('theatre','balcony','library'):
+        if self.args.resume_point in ('theatre','balcony','spiral','library'):
             expected.add('Skool1_Book_Win')
-        if self.args.resume_point in ('theatre','balcony'):
+        if self.args.resume_point in ('theatre','balcony','spiral'):
             expected.add('shelf_cinematic')
         assert self.captures == expected, self.captures
         for role,rows in self.history.items():
@@ -91,6 +91,8 @@ class SchoolResume(SchoolPair):
         elif self.args.resume_point == 'balcony':
             self.balcony_gap()
             self.library_route()
+        elif self.args.resume_point == 'spiral':
+            self.after_spiral_lift()
         elif self.args.resume_point == 'library':
             self.upper_library_route()
         elif self.args.resume_point == 'bridge':
@@ -111,11 +113,11 @@ if __name__ == '__main__':
     parser.add_argument('--exe',type=Path,default=ROOT/'target/release/looking-glass.exe')
     parser.add_argument('--data',type=Path,required=True)
     parser.add_argument('--checkpoint',type=Path,required=True)
-    parser.add_argument('--resume-point',choices=('theatre','balcony','library','bridge','descent'),required=True)
+    parser.add_argument('--resume-point',choices=('theatre','balcony','spiral','library','bridge','descent'),required=True)
     parser.add_argument('--first',choices=('blue','red'),default='red')
     parser.add_argument('--local',action='store_true')
     parser.add_argument('--rejoin',action='store_true')
-    parser.add_argument('--checkpoint-stops',nargs='*',choices=('theatre','balcony','library','bridge','descent'),default=[])
+    parser.add_argument('--checkpoint-stops',nargs='*',choices=('theatre','balcony','spiral','library','bridge','descent'),default=[])
     parser.add_argument('--delay-ms',type=int,default=40)
     parser.add_argument('--jitter-ms',type=int,default=20)
     args = parser.parse_args()
