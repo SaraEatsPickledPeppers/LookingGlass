@@ -1258,6 +1258,9 @@ impl Interactions {
                 encounters.activate("rage_guard2");
             }
         }
+        if let Some(b) = &mut self.beyond {
+            events.merge(b.update());
+        }
         if let Some(p) = &mut self.pool {
             events.merge(p.scene_update());
         }
@@ -1307,9 +1310,6 @@ impl Interactions {
                     }
                 }
             }
-        }
-        if let Some(b) = &mut self.beyond {
-            events.merge(b.update());
         }
         let use_pressed = use_pressed && !rope_use;
         events.merge(self.level_update(world, player, aim, use_pressed));

@@ -197,13 +197,42 @@ impl Stage {
             }
         }
     }
-    pub fn village_pickup(&mut self, roster: &mut Roster, world: &World) {
+    pub fn collect_pickups(&mut self, roster: &mut Roster, world: &World, pickups: &[crate::inventory::Pickup]) {
+        let feet: Vec<_> = roster.players.iter().filter(|b| b.stats.alive()).map(|b| b.player.feet).collect();
+        let rage_ready = self.interactions.beyond.as_ref().is_none_or(|b| b.rage_boarding_ready(&feet));
+        for (index, body) in roster.players.iter_mut().enumerate().filter(|(_, b)| b.stats.alive()) {
+            for pickup in pickups {
+                if pickup.id == "fortress2:37" && !rage_ready {
+                    if !body.stats.collected.contains(&pickup.id)
+                        && crate::inventory::touches_pickup(body.player.feet, pickup.origin, world) {
+                        self.notices[index] = Some(Notice {
+                            text: "Waiting for both players to board".into(), until: roster.tick + 120,
+                        });
+                    }
+                } else {
+                    crate::inventory::collect(&mut body.stats, std::slice::from_ref(pickup), body.player.feet, world);
+                }
+            }
+        }
+        self.pickup_scenes(roster, world);
+    }
+    fn pickup_scenes(&mut self, roster: &mut Roster, world: &World) {
+        let feet: Vec<_> = roster.players.iter().filter(|b| b.stats.alive()).map(|b| b.player.feet).collect();
         for id in PlayerId::ALL {
             if self.busy() { break; }
             let body = &roster.players[id.index()];
             if !body.stats.alive() { continue; }
             if let Some(village) = &mut self.interactions.village {
                 village.cinema.sync_pickups(&body.stats, &mut self.story);
+                self.accept(Events::default(), id, roster, world);
+            }
+            let body = &mut roster.players[id.index()];
+            if self.interactions.beyond.as_mut().is_some_and(|b| {
+                if !b.rage_boarding_ready(&feet) || !b.pickup(&body.stats) { return false; }
+                b.bind_rage_player(&mut body.player, body.yaw);
+                true
+            }) {
+                self.story.trigger("Fortress2_Rage_Pickup");
                 self.accept(Events::default(), id, roster, world);
             }
         }
@@ -236,7 +265,7 @@ impl Stage {
                 if self.busy() { return Ok(()); }
             }
         }
-        let events = self.interactions.doors_pair(
+        let (events, scene_owner) = self.interactions.doors_pair(
             dt,
             map,
             world,
@@ -249,10 +278,25 @@ impl Stage {
                 ))
             }),
         )?;
+        // The whole pair's input has already run. Bind the actual activating
+        // player before accepting either event, including an empty Blue event.
+        if let Some(owner) = scene_owner {
+            self.owner = Some(owner);
+            self.last_owner = owner;
+        }
         for (id, events) in PlayerId::ALL.into_iter().zip(events) {
             self.accept(events, id, roster, world);
         }
         if !self.busy() {
+            let feet: Vec<_> = roster.players.iter().filter(|b| b.stats.alive())
+                .map(|b| b.player.feet).collect();
+            if self.interactions.beyond.as_ref().is_some_and(|b| b.waiting_for_partner(&feet)) {
+                for (index, _) in roster.players.iter().enumerate().filter(|(_, b)| b.stats.alive()) {
+                    self.notices[index] = Some(Notice {
+                        text: "Waiting for both players to board".into(), until: roster.tick + 120,
+                    });
+                }
+            }
             let mut bodies = roster
                 .players
                 .iter_mut()
@@ -352,6 +396,7 @@ impl Stage {
                 let Some(player) =
                     world::safe_near_with(world, roster.players[owner.index()].player.feet, |at| {
                         !self.interactions.hazardous(at)
+                            && self.interactions.beyond.as_ref().is_none_or(|b| b.reunion_safe(at))
                     })
                 else {
                     return Ok(());

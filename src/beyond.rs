@@ -12,6 +12,7 @@ use macroquad::prelude::*;
 use std::collections::BTreeMap;
 pub mod cinema;
 pub mod cinema_check;
+pub mod coop_check;
 
 pub fn supported(e: &BTreeMap<String, String>) -> bool {
     e.get("classname").is_some_and(|c| c == "script_object")
@@ -30,6 +31,7 @@ fn ramp(t: f32, start: f32, duration: f32) -> f32 {
 fn index(n: &str, prefix: &str) -> Option<usize> {
     n.strip_prefix(prefix)?.parse().ok()
 }
+fn no_lift_wait(wait: &f64) -> bool { *wait == 0. }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub enum RageLift {
@@ -62,6 +64,10 @@ pub struct State {
     slide: Option<Slide>,
     pub raised: Option<f32>,
     pub last_started: Option<f32>,
+    // Co-op boarding delays only the elevator, never the other puzzles. Use
+    // the exact difference of f32 map ages in f64 so a long wait cannot drift.
+    #[serde(default, skip_serializing_if = "no_lift_wait")]
+    lift_wait: f64,
     last_cycle: u8,
     last_from: Option<[Vec3; 3]>,
     pub last_open: bool,
@@ -94,6 +100,7 @@ impl Default for State {
             slide: None,
             raised: None,
             last_started: None,
+            lift_wait: 0.,
             last_cycle: 0,
             last_from: None,
             last_open: false,
@@ -396,7 +403,7 @@ impl Beyond {
                     };
             }
             if let Some(start) = s.last_started {
-                let t = s.age - start;
+                let t = (s.age as f64 - start as f64 - s.lift_wait).max(0.) as f32;
                 let delay = if s.rage_started.is_some() { 0. } else { 4. };
                 if s.rage_started.is_none() {
                     p.z -= 48. * ramp(t, 0., 4.);
@@ -452,6 +459,33 @@ impl Beyond {
             .iter()
             .filter(|o| self.solid(&o.name))
             .map(|o| o.collider.clone())
+    }
+    fn aboard(&self, name: &str, feet: Vec3) -> bool {
+        self.objects.iter().any(|o| o.name == name && self.solid(name)
+            && crate::moving::aboard(&o.collider, feet))
+    }
+    pub fn rage_boarding_ready(&self, feet: &[Vec3]) -> bool {
+        self.state.rage_started.is_some()
+            || !feet.is_empty() && feet.iter().all(|at| self.aboard("ragelift", *at))
+    }
+    /// The later cycling elevator waits when just part of the living team is
+    /// aboard. With nobody aboard it can return to either landing normally.
+    pub fn waiting_for_partner(&self, feet: &[Vec3]) -> bool {
+        self.state.last_started.is_some()
+            && feet.iter().any(|at| self.aboard("ragelift", *at))
+            && !feet.iter().all(|at| self.aboard("ragelift", *at))
+    }
+    pub fn reunion_safe(&self, feet: Vec3) -> bool {
+        !self.state.cinema.as_ref().is_some_and(|c| c.beat == cinema::Beat::Rage)
+            || self.aboard("ragelift", feet)
+    }
+    pub fn boarding_ready(&self, thread: &str, feet: &[Vec3]) -> Option<bool> {
+        let direction = match thread { "GS_Move" => 1, "GS_MoveBack" => -1, _ => return None };
+        let departing_slot = (self.state.walkway as i8 - direction) as u8;
+        // The rear tile rolls underneath the bridge. Both players must reach
+        // the two stationary tiles before either front/back trigger moves it.
+        Some(!feet.is_empty() && feet.iter().all(|at| self.state.step_slots.iter().enumerate()
+            .any(|(index, slot)| *slot != departing_slot && self.aboard(&format!("gs_step{}", index+1), *at))))
     }
     pub fn transforms(&self) -> impl Iterator<Item = (usize, Vec3, Quat)> + '_ {
         self.objects
@@ -561,6 +595,7 @@ impl Beyond {
                 s.last_from = Some(last_from);
                 s.last_cycle = if n == "LastOpenB" { 1 } else { 2 };
                 s.last_started = Some(s.age);
+                s.lift_wait = 0.;
                 message = Some("Watch the correct door and try again.");
             }
             "Get_Diamond1" | "HubAmbush" | "boo3" | "Arch_Spawn_Cards2" => (),
@@ -713,6 +748,9 @@ impl Beyond {
                 "Invalid machinery timer"
             );
         }
+        ensure!(s.lift_wait.is_finite() && s.lift_wait >= 0.
+            && s.lift_wait <= s.last_started.map_or(0., |start| s.age as f64 - start as f64),
+            "Invalid elevator boarding delay");
         ensure!(
             s.step_slots.iter().all(|v| (1..=10).contains(v)) && s.last_cycle <= 2,
             "Invalid machinery state"
@@ -809,12 +847,30 @@ impl Beyond {
         player: &mut Player,
         fixed: &[Collider],
     ) -> Result<()> {
-        if dt <= 0. {
+        if !dt.is_finite() || dt <= 0. {
             return Ok(());
         }
         self.scene_hold(player);
+        self.advance_machinery(dt, map, world, &mut [&mut *player], fixed, false)?;
+        self.scene_finish_step(world, player)
+    }
+    /// One clock and an atomic carry for all freely controlled co-op bodies.
+    /// Original scenes still advance through the one-Alice path above.
+    pub fn advance_players(
+        &mut self, dt: f32, map: &Bsp, world: &mut World,
+        players: &mut [&mut Player], fixed: &[Collider],
+    ) -> Result<()> {
+        if !dt.is_finite() || dt <= 0. { return Ok(()); }
+        let feet: Vec<_> = players.iter().map(|p| p.feet).collect();
+        let pause_lift = self.waiting_for_partner(&feet);
+        self.advance_machinery(dt, map, world, players, fixed, pause_lift)
+    }
+    fn advance_machinery(
+        &mut self, dt: f32, map: &Bsp, world: &mut World,
+        players: &mut [&mut Player], fixed: &[Collider], pause_lift: bool,
+    ) -> Result<()> {
         let old = self.state.clone();
-        let rider = self
+        let riders: Vec<_> = players.iter().map(|player| self
             .objects
             .iter()
             .find(|o| {
@@ -831,8 +887,11 @@ impl Beyond {
                     && hit.fraction < 1.
                     && hit.normal.z > 0.65
             })
-            .map(|o| (o.model, o.name.clone(), o.base, self.pose(&o.name, o.base)));
+            .map(|o| (o.model, o.name.clone(), o.base, self.pose(&o.name, o.base)))).collect();
         self.state.age += dt.min(0.1);
+        if pause_lift {
+            self.state.lift_wait += self.state.age as f64 - old.age as f64;
+        }
         if let Some(c) = &mut self.state.cinema {
             c.time = (c.time + dt.min(0.1)).min(c.beat.duration() + 0.5);
         }
@@ -847,42 +906,39 @@ impl Beyond {
             self.state.slide = None;
         }
         self.rebuild(map)?;
-        let mut feet = player.feet;
-        if let Some((model, n, base, (p0, r0))) = rider {
-            let (p1, r1) = self.pose(&n, base);
-            feet = p1 + r1 * r0.inverse() * (feet - p0);
-            if let Some((f, _)) = self
-                .objects
-                .iter()
-                .find(|o| o.model == model)
-                .and_then(|o| o.collider.rider_feet(feet))
-            {
-                feet = f;
-            }
-        }
         world.set_dynamic(fixed.iter().cloned().chain(self.colliders()).collect());
-        // At adjoining tiles, the upright body can touch both supports. Let a
-        // departing support move away; resolve a small lip as a normal step.
-        if !world.body_clear(feet) && world.body_clear(player.feet) {
-            feet = player.feet;
-        }
-        if !world.body_clear(feet) {
-            for height in [1., 2., 4., 8., 12., 18.] {
-                let candidate = feet + Vec3::Z * height;
-                if world.body_clear(candidate) {
-                    feet = candidate;
-                    break;
+        let proposed: Vec<_> = players.iter().zip(riders).map(|(player, rider)| {
+            let mut feet = player.feet;
+            if let Some((model, n, base, (p0, r0))) = rider {
+                let (p1, r1) = self.pose(&n, base);
+                feet = p1 + r1 * r0.inverse() * (feet - p0);
+                if let Some((f, _)) = self.objects.iter().find(|o| o.model == model)
+                    .and_then(|o| o.collider.rider_feet(feet)) {
+                    feet = f;
                 }
             }
-        }
-        if world.body_clear(feet) {
-            player.feet = feet;
+            // Keep the original adjoining-tile/step handling for each rider.
+            if !world.body_clear(feet) && world.body_clear(player.feet) {
+                feet = player.feet;
+            }
+            if !world.body_clear(feet) {
+                for height in [1., 2., 4., 8., 12., 18.] {
+                    let candidate = feet + Vec3::Z * height;
+                    if world.body_clear(candidate) {
+                        feet = candidate;
+                        break;
+                    }
+                }
+            }
+            feet
+        }).collect();
+        if proposed.iter().all(|feet| world.body_clear(*feet)) {
+            for (player, feet) in players.iter_mut().zip(proposed) { player.feet = feet; }
         } else {
             self.state = old;
             self.rebuild(map)?;
         }
         world.set_dynamic(fixed.iter().cloned().chain(self.colliders()).collect());
-        self.scene_finish_step(world, player)?;
         Ok(())
     }
 }

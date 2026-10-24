@@ -127,9 +127,9 @@ impl Interactions {
                 self.triggers[trigger].volume.touches(*at + PLAYER_CENTER, *at + PLAYER_CENTER, PLAYER_HALF)
             }));
         }
-        self.school
+        self.beyond.as_ref().and_then(|b| b.boarding_ready(thread, feet)).or_else(|| self.school
             .as_ref()
-            .and_then(|s| s.boarding_ready(thread, feet))
+            .and_then(|s| s.boarding_ready(thread, feet)))
     }
 
     /// The reviewed adapters advance shared machinery once and carry all living
@@ -141,6 +141,19 @@ impl Interactions {
         world: &mut World,
         players: &mut [&mut Player],
     ) -> Result<()> {
+        if let Some(beyond) = &mut self.beyond {
+            let fixed = self.doors.iter().filter(|d| d.enabled && self.event_world.enabled(d.id))
+                .map(|d| d.collider.clone()).collect::<Vec<_>>();
+            beyond.advance_players(dt, map, world, players, &fixed)?;
+            for trigger in &mut self.triggers {
+                let entity = &map.entities[trigger.id.0];
+                if let Some(base) = entity.get("origin").and_then(|s| vector(s)) {
+                    if let Some((position, rotation)) = beyond.trigger_pose(&trigger.name, base) {
+                        trigger.volume = Collider::model(map, model(entity, map).unwrap(), position, rotation, false)?;
+                    }
+                }
+            }
+        }
         if let Some(fortress) = &mut self.fortress {
             let fixed = self.doors.iter().filter(|d| d.enabled && self.event_world.enabled(d.id))
                 .map(|d| d.collider.clone()).collect::<Vec<_>>();
@@ -185,10 +198,11 @@ impl Interactions {
         map: &Bsp,
         world: &mut World,
         players: [Option<(&Player, Vec3, bool)>; 2],
-    ) -> Result<[Events; 2]> {
+    ) -> Result<([Events; 2], Option<PlayerId>)> {
         let mut events = std::array::from_fn(|_| Events::default());
+        let mut scene_owner = None;
         if dt <= 0. || !dt.is_finite() {
-            return Ok(events);
+            return Ok((events, scene_owner));
         }
         let mut operated = BTreeSet::new();
         let bodies = players.iter().flatten().map(|p| p.0).collect::<Vec<_>>();
@@ -203,12 +217,23 @@ impl Interactions {
         }
         for (index, input) in players.iter().enumerate() {
             if let Some((player, aim, true)) = input {
-                events[index].merge(self.use_door(world, player, *aim, &mut operated));
+                if let Some(event) = self.beyond.as_mut().and_then(|b| b.activate(world, player.eye(), *aim)) {
+                    events[index].merge(event);
+                    self.used += 1;
+                } else {
+                    events[index].merge(self.use_door(world, player, *aim, &mut operated));
+                }
+                // A lever can start an original one-Alice scene. Later input in
+                // this host tick must not operate another control through it.
+                if self.scripted() {
+                    scene_owner = Some(PlayerId::ALL[index]);
+                    break;
+                }
             }
         }
         self.advance_doors(dt, map, &bodies)?;
         self.sync_coop(world);
-        Ok(events)
+        Ok((events, scene_owner))
     }
 
     /// Personal contacts with a shared quest item must include either player.

@@ -190,14 +190,25 @@ sent/restored player/enemy state. The newer builds add opt-in diagnostics and
 ordinary-input test controls; gameplay is unchanged from the paired-support build.
 Its entry scene starts automatically with Blue as owner even when Red leads the
 subsequent route. The split room is an environmental trap; passenger boarding is
-not applicable. The later return visit and Beyond the Wall remain unverified.
+not applicable. The later return visit and full Beyond the Wall traversal remain unverified.
+
+Beyond the Wall now has native adapter evidence on build
+`c17d9c2b1eedbd621fd56923648b8f38ec4a58bfd1ba1bae5ef39aac4c0e53c8`
+(`private/coop-beyond-adapter-check5.log`). Staged checks on the actual map cover
+paired Rage-lift carry at 30/60/144 Hz, either rider blocking both proposed carries,
+rolling-bridge boarding, the later elevator's saved boarding wait without freezing
+other machinery, survivor-only use, and either player's Rage pickup/scene/reunion
+and musical-lever operation. Each player retains an individual Rage pickup.
+These are focused fixtures, not entrance-to-exit routes or rendered/network proof.
+Puzzle audio, complete traversal/combat, death/wipe/rejoin and public two-process
+checks remain open, so the completed count stays three of 39.
 
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Passed (combined evidence above): both arrival orders, all scenes/reunions, nearest-visible guard damage in both roles, individual health/Blade pickups, matching encounter/player states, both death/spectator/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit; shared boarding N/A |
 | 2 | `pandemonium` | `Initial` | Passed (combined evidence above): native and delayed public routes in both orders, rope/cart, four scenes/three reunions, personal Cards/healing rewards, nearest-visible guard damage in both roles, full-route encounter/player comparison, both hazard death/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit |
 | 3 | `fortress1` | `Initial` | Passed (combined evidence above): both delayed public route orders, original scene/reunion, independent portals, paired split supports, upper jumps and exit, fresh guest rejoin, nearest-visible Boojum selection/damage in both roles, separate healing, coherent enemies, both combat death/spectator/respawn roles and saved-checkpoint wipe; shared boarding N/A |
-| 4 | `fortress2` | `Initial` | Not run |
+| 4 | `fortress2` | `Initial` | Partial: native paired lift/boarding, rolling-bridge wait, either-player levers and Rage scene/personal pickups pass; full routes, sound, combat/recovery and public two-process verification remain open |
 | 5 | `fortress1` | `fortress1_start2` | Not run |
 | 6 | `skool1` | `Initial` | Not run |
 | 7 | `skool2` | `Initial` | Not run |

@@ -179,10 +179,9 @@ impl Arena {
         for (index, body) in roster.players.iter_mut().enumerate() {
             if body.stats.alive() {
                 if let Some(weapon) = inputs[index].1.weapon { body.stats.select(weapon as usize); }
-                inventory::collect(&mut body.stats, &self.pickups, body.player.feet, world);
             }
         }
-        self.stage.village_pickup(roster, world);
+        self.stage.collect_pickups(roster, world, &self.pickups);
         if self.stage.busy() { return self.finish(roster, map, world, true); }
         self.stage.interactions.activate_enemies();
         let mut before = self.npcs.loot_sources();

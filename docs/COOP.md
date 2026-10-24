@@ -1378,6 +1378,51 @@ The opt-in diagnostic build and both route-driver regression tests pass in
 `private/coop-fortress-combat-driver-tests1.log`. Normal gameplay is unchanged by
 the additional read-only Boojum report.
 
+## Beyond the Wall co-op adapters
+
+The shared Beyond controller now advances once per host tick and checks both
+living bodies before committing a moving support. Either player can operate the
+musical levers; the actual final operator owns the original single-Alice scene,
+including when the partner also tries a lever on that tick. Note replay outputs
+advance once for the world. Sound playback in co-op is still pending.
+
+The rolling bridge waits for both living players to reach the stable tiles before
+rolling the rear tile away. The Rage pickup waits for both to board the lift,
+starts its original transformation scene for the collector, and reunites the
+partner on the lift before descent. The other player's copy remains available
+and an ordinary jump from the lowered lift can collect it without replaying the
+scene. The later cycling elevator waits while only part of the living team is
+aboard, including during disembarkation, and cycles normally when empty. Its
+saved boarding delay affects only the lift; other machinery keeps running. A
+sole survivor does not wait for a dead partner.
+
+Build `c17d9c2b1eedbd621fd56923648b8f38ec4a58bfd1ba1bae5ef39aac4c0e53c8`
+passes `--coop-beyond-check` on the authored map geometry. It checks paired
+48-unit descent at 30/60/144 Hz, single-player clock/carry parity, pause and JSON
+restore, either obstructed rider stopping both carries and resuming after the
+obstruction is removed, both boarding orders, saved waits and invalid-delay
+rejection, both scene owners, frozen partners, lift reunion and separate pickups.
+The native fixture uses staged placements and does not run combat or a complete
+route. Evidence: `private/coop-beyond-adapter-build5.log` and
+`private/coop-beyond-adapter-check5.log`.
+
+Single-player machinery/cinematics and the power-up suite (including watched,
+skipped and legacy-save Rage scenes) pass in `private/coop-beyond-sp-state5.log`
+and `private/coop-beyond-sp-items5.log`. The baseline power-up run also passed.
+The full single-player route already failed at arch step 12 on the unchanged
+`2271c7db` executable. The final build reproduces its entire 192-line output
+exactly, including that failure; this is not a route pass. The comparison is
+recorded in `private/coop-beyond-sp-comparison5.json`, with both original logs.
+Existing co-op school/world checks, the Fortress paired supports and all 39
+entrance-only checks pass in `private/coop-beyond-world5.log`,
+`private/coop-beyond-fortress5.log` and `private/coop-beyond-entrances5.log`.
+The complete Rust suite passes: 740 passed, no failures, one existing ignored
+test (`private/coop-beyond-adapter-tests5.log`).
+
+This adds no completed campaign row: full Beyond traversal, audible puzzle
+notes, rendered delayed internet play, combat, recovery and rejoin checks remain.
+The overall estimate remains about 41%, with three of 39 visits fully verified.
+
 ## Reproducing transport checks
 
 Build with `cargo build --locked`, then run:
