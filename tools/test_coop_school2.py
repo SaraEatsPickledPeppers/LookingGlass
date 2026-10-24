@@ -69,9 +69,12 @@ class School2Pair(SchoolPair):
         def safe():
             for report in self.reports.values():
                 driver = report['route_driver']
+                # An idle guard outside its engagement range is not a fight
+                # to wait for at this waypoint. Continue the ordinary route;
+                # it will wake on approach. Active foes and waves still block.
+                foes = [e for e in driver['guards'] if e['state'] != 'Idle'] + driver['boojums']
                 if any(e['active'] and e['health'] > 0 and any(v and d < radius
-                       for v, d in zip(e['line_of_sight'], e['distance']))
-                       for e in driver['guards'] + driver['boojums']):
+                       for v, d in zip(e['line_of_sight'], e['distance'])) for e in foes):
                     return False
                 world = report['combat']['stage']['world']
                 cast = world['encounters']
@@ -93,7 +96,8 @@ class School2Pair(SchoolPair):
             self.passage([(p, False) for p in stairs], speed_limit=20)
         altar = (-906, -3170, -192)
         self.passage([(altar, True)],partner_done=lambda:
-            all('skool2:44' in b['stats']['collected'] for b in self.bodies()))
+            all('skool2:44' in b['stats']['collected'] for b in self.bodies()),
+            first_exit=[(stairs[-1], True)])
         self.wait(.5)
         assert all('skool2:44' in b['stats']['collected'] for b in self.bodies()), 'Personal Demon Dice missing'
         # Both have collected, either after reunion or individual approaches.

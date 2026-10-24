@@ -2611,3 +2611,91 @@ without death, respawn or checkpoint restoration. Minimum Will was 46/52 and
 These are short, explicitly staged component passes, not full routes or a
 resolution of the intermittent delayed-jump failure recorded above. No images
 were opened during this work.
+
+
+### Automated route timing and narrow pickup pads
+
+Comparing the retained failed and passing Red-first Dice plans identified the
+opening-jump failure above. Both plans and starting positions were identical.
+The failed recording contains a roughly 450 ms render frame on both clients.
+The host clamps that frame to 100 ms of simulation, while the guest's old test
+controller advanced through its entire wall-clock interval. It discarded the
+planned jump before emitting a jump input; the authoritative jump counter stayed
+zero. This was an opt-in navigation-controller timing error, not an observed
+loss of a transmitted jump.
+
+Guest navigation now accumulates local frame intervals capped at the same
+100 ms, retaining the remainder between 200 ms input segments. It cannot consume
+multiple unsampled segments in one frame. The host still uses its simulation
+ticks. Unit checks reproduce the recorded stall and verify ordinary frame-time
+remainders; 760 checks pass, with one existing ignored test. Build
+`0ae9a8f3e17841ad0f6853610609a90e82b01d1675c4544078d8b31c267db708`
+also passes release compilation. Normal gameplay inputs and the network protocol
+are unchanged. This does not establish resilience to every independent client
+or server stall.
+
+The first integration repeat passed Red-first in 52.92 seconds but correctly
+failed Blue-first when the test controller found no unoccupied supported step
+aside on the small altar. Both players were alive at 100 health, and the scene
+had finished. Evidence is retained in
+`private/coop/regression-suite-21aa4c84ae1046d9a2573c2359b83b62`.
+The Dice route now gives its first player an explicit ordinary jump back to the
+lower landing when the partner still needs their personal pickup. That frees
+the altar before the second approach. It still requires actual personal
+pickups, scene ownership and reunion, combat, both returns, live health and
+matching network states. No positions or resources are written.
+
+The updated fixture passed both staged altar orders on that build with public
+internet joining and 40/20 ms injected delay/jitter:
+`private/coop/regression-suite-7de4d71d6003494e8cb6dc8a27bbb3f4/summary.json`.
+Blue took 57.30 seconds with 638 matching player/enemy and shared-world states;
+Red took 60.22 seconds with 673. Both finished with 100/100 health and no death,
+respawn or wipe. Minimum Will was 58/58 and 46/49. Blue verified the partner's
+actual pickup after reunion; Red exercised the explicit first-player departure
+before the other pickup. These are staged components, not complete visits.
+Routine verification consumed compact reports; no images were opened.
+
+The following normal-entrance Red-first attempt failed after 410.77 seconds:
+`private/coop/regression-suite-6b52f53b33144064b9b7b2658464fc6c`.
+It reached the real Dice altar and began returning up the stairs, then the
+fixture waited for an idle reinforcement roughly 600 units away. Both players
+remained at 100 health, but Red had nearly exhausted her Will. That melee guard
+wakes within 420 units, and the existing native route excludes idle guards from
+its immediate combat policy. The co-op fixture was instead stopping for every
+visible guard within 700 units. No completed-visit credit is assigned to this run.
+
+School Two's opt-in Cards tactic and combat wait now follow the active-fight
+policy: an idle guard does not stop traversal or attract automatic shots before
+the route approaches it. Active enemies and live attack waves still block the
+combat wait. Gameplay awareness, damage, inventories and resource costs remain
+unchanged. Full-route verification is still required.
+
+The targeting filter retains all bodies in collision tests. A new regression
+checks that an unselected idle guard still blocks aim at an active foe behind
+it, while a visible foe to the side remains selectable. The expanded unit set
+passes 761 checks, with one existing ignored test.
+
+Build `1c1491c5ad8ddd1bd67487e89ee4b3e000e7fd008fa4c9a82ca864c23e77023a`
+passed the 761 unit checks and release compilation. Its normal-entrance
+Red-first repeat passed the Dice-and-return milestone with 7,458 matching
+player/enemy and shared-world states, correct Red scene ownership, both personal
+pickups and no death, respawn or wipe. Both players had 100 health at that
+milestone. Minimum Will was 55 and 1.1217; resources were not replenished by the
+fixture. Evidence is `milestone-dice.json` in
+`private/coop/school2-route-dd80107b99f746578573fb52a5bc3a05`.
+
+The broader run then operated the gym lever and climbed the bleachers, but
+failed after 681.73 seconds on the jump from the upper seating toward
+`(1600, -2275, 440)`. Red briefly landed, slid off, took fall damage and could
+not plan back up from the gym floor. The recorded jump input was emitted;
+this is a separate landing-control problem still under investigation. The
+suite remains failed in
+`private/coop/regression-suite-d6f977d6fec04faca6112a843c6ad50b`.
+There is no gym-completion or full-visit credit. Full School One and School Two
+routes in both orders remain open; overall progress stays about 42%, with five
+of 39 full campaign visits verified.
+
+Driver failures now print only the command, phase, error, tick, replan count,
+remaining steps and expected position. Full enemy pools and network hashes
+remain in the retained private reports, avoiding large terminal dumps during
+routine automated diagnosis. No images were opened during this work.

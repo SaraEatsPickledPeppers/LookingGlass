@@ -229,6 +229,35 @@ struct Worker {
     start: Vec3,
     result: mpsc::Receiver<Result<Vec<(Controls, Vec3)>, usize>>,
 }
+/// The host clamps a slow render frame to 100 ms of simulation. Match that
+/// bound locally without using delayed snapshot arrivals as a movement clock.
+/// A long frame must never fast-forward through inputs that were not sampled.
+struct NavigationClock {
+    sampled: Instant,
+    elapsed: Duration,
+}
+impl NavigationClock {
+    fn new(now: Instant) -> Self { Self { sampled:now, elapsed:Duration::ZERO } }
+    fn advance(&mut self, now: Instant) -> bool {
+        self.elapsed += now.duration_since(self.sampled).min(Duration::from_millis(100));
+        self.sampled = now;
+        let step = Duration::from_millis(200);
+        if self.elapsed < step { return false; }
+        self.elapsed -= step;
+        true
+    }
+}
+
+// Selection policy must not remove unselected bodies from the collision
+// context: an idle guard can still stand between Alice and an active foe.
+fn attack_target<'a>(world: &World, targets: &'a [crate::combat::Target], eye: Vec3,
+    eligible: impl Fn(usize) -> bool) -> Option<&'a crate::combat::Target> {
+    let context = crate::combat::Context { world, targets };
+    targets.iter().filter(|t| eligible(t.id) && t.center.distance(eye) < 1000.)
+        .filter(|t| crate::combat::contact(&context,eye,t.center,1.).is_some_and(|(id,_)| id==t.id))
+        .min_by(|a,b| a.center.distance_squared(eye).total_cmp(&b.center.distance_squared(eye)))
+}
+
 pub struct Driver {
     path: PathBuf,
     command: Option<Command>,
@@ -240,6 +269,7 @@ pub struct Driver {
     plan: VecDeque<(Controls, Vec3)>,
     step_tick: u64,
     step_at: Instant,
+    navigation_clock: NavigationClock,
     jumped: bool,
     rope_used: bool,
     control_used: bool,
@@ -267,7 +297,8 @@ impl Driver {
     pub fn new(path: PathBuf) -> Self {
         let now = Instant::now();
         Self { path, command: None, modified: None, polled: now, refreshed: now, used: now,
-            worker: None, plan: VecDeque::new(), step_tick: 0, step_at: now, jumped: false, rope_used: false,
+            worker: None, plan: VecDeque::new(), step_tick: 0, step_at: now,
+            navigation_clock:NavigationClock::new(now), jumped: false, rope_used: false,
             control_used: false, step_height: None, location: None, report: Report::default() }
     }
     pub fn poll(&mut self, now: Instant) {
@@ -379,6 +410,7 @@ impl Driver {
         if self.location != Some(location) {
             self.plan.clear(); self.jumped = false; self.location = Some(location);
             self.step_tick = frame.tick; self.step_at = now;
+            self.navigation_clock = NavigationClock::new(now);
         }
         // Never spawn a second worker while a superseded plan is still running.
         if let Some(worker) = &self.worker {
@@ -402,6 +434,7 @@ impl Driver {
                                 let _ = std::fs::write(crate::preferences::path(&format!("route-plan-{}-{}.json",worker.id,self.report.replans)),bytes);
                             }
                             self.plan = plan.into(); self.step_tick = frame.tick; self.step_at = now; self.jumped = false;
+                            self.navigation_clock = NavigationClock::new(now);
                         }
                         Err(0) => self.report.error = Some("Route planning worker ended without a result".into()),
                         Err(states) => self.report.error = Some(format!("No route after {states} physics states from {:?}", worker.start)),
@@ -439,10 +472,12 @@ impl Driver {
             if let Some(cast) = &arena.stage.interactions.encounters { targets.extend(cast.targets()); }
             if let Some(school) = &arena.stage.interactions.school2 { targets.extend(school.targets()); }
             targets.extend(arena.stage.interactions.shot_targets());
-            let context = crate::combat::Context { world, targets: &targets };
-            if let Some(target) = targets.iter().filter(|t|t.center.distance(body.player.eye()) < 1000.)
-                .filter(|t|crate::combat::contact(&context,body.player.eye(),t.center,1.).is_some_and(|(id,_)|id==t.id))
-                .min_by(|a,b|a.center.distance_squared(body.player.eye()).total_cmp(&b.center.distance_squared(body.player.eye()))) {
+            // Match the native route's active-fight policy. A distant idle
+            // guard may be visible beyond its engagement range; do not waste
+            // Will on it before approaching. Keep every body in hit testing.
+            if let Some(target) = attack_target(world,&targets,body.player.eye(),|id|
+                !command.prefer_cards || !self.report.guards.iter().any(|guard|
+                    guard.id == id && guard.state == crate::combat::State::Idle)) {
                 let delta = target.center-body.player.eye();
                 keys.yaw = delta.y.atan2(delta.x); keys.pitch = (delta.z/delta.length().max(1.)).asin().clamp(-1.56,1.56);
                 let cards = command.prefer_cards && body.stats.copies(1) > 0
@@ -494,12 +529,13 @@ impl Driver {
         if self.report.reached { self.report.phase="reached"; self.plan.clear(); return; }
         if command.navigate {
             self.report.phase="navigating";
-            // A host observes its own simulation clock directly. A guest sends
-            // 200 ms input segments on its local clock; timing them from received
-            // snapshots would turn delivery jitter into uneven key-hold lengths.
+            // A host observes its own simulation clock directly. Guest steps
+            // use local frame intervals with the same simulation-time cap.
+            // Wall-clock catch-up after a slow frame used to discard whole
+            // unsent steps, including jumps. Delayed snapshots are not a clock.
             while !self.plan.is_empty() && if local == PlayerId::Blue {
                 frame.tick.saturating_sub(self.step_tick) >= 24
-            } else { now.duration_since(self.step_at) >= Duration::from_millis(200) } {
+            } else { self.navigation_clock.advance(now) } {
                 let (_, expected) = self.plan.pop_front().unwrap();
                 self.step_tick += 24; self.step_at += Duration::from_millis(200); self.jumped=false;
                 // The host can check a landing immediately. Guest snapshots
@@ -567,6 +603,43 @@ impl Driver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn unselected_idle_guard_still_blocks_aim_at_an_enemy_behind_it() {
+        let world = World::fixture(&[]);
+        let eye = vec3(0.,0.,40.);
+        let target = |id, center| crate::combat::Target { id, center, half:Vec3::splat(10.) };
+        let mut targets = vec![target(1,vec3(50.,0.,40.)), target(2,vec3(100.,0.,40.))];
+        assert!(attack_target(&world,&targets,eye,|id| id!=1).is_none());
+        targets.push(target(3,vec3(50.,50.,40.)));
+        assert_eq!(attack_target(&world,&targets,eye,|id| id!=1).unwrap().id,3);
+        assert_eq!(attack_target(&world,&targets,eye,|_| true).unwrap().id,1);
+    }
+    #[test]
+    fn navigation_clock_does_not_skip_unsampled_steps_after_a_render_stall() {
+        let start = Instant::now();
+        let mut clock = NavigationClock::new(start);
+        assert!(!clock.advance(start + Duration::from_millis(100)));
+        // The recorded failure had a 450 ms frame on both clients. The host
+        // advances only 100 ms, so the guest must consume just one step here.
+        let after_stall = start + Duration::from_millis(550);
+        assert!(clock.advance(after_stall));
+        assert!(!clock.advance(after_stall), "An unsampled jump step was discarded");
+        assert!(!clock.advance(after_stall + Duration::from_millis(100)));
+        assert!(clock.advance(after_stall + Duration::from_millis(200)));
+        assert!(!clock.advance(after_stall + Duration::from_millis(200)));
+    }
+    #[test]
+    fn navigation_clock_preserves_normal_frame_remainders() {
+        for millis in [8, 16, 33] {
+            let start = Instant::now();
+            let mut clock = NavigationClock::new(start);
+            let mut steps = 0;
+            for frame in 1..=200 {
+                steps += u64::from(clock.advance(start + Duration::from_millis(frame * millis)));
+                assert_eq!(steps, frame * millis / 200);
+            }
+        }
+    }
     #[test]
     fn running_approach_uses_local_time_when_guest_snapshots_stall() {
         let runup=Runup { millis:150,wish:Vec2::X };

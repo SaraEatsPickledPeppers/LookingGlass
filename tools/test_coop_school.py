@@ -288,22 +288,14 @@ class SchoolPair(PandemoniumPair):
             self.go(goal,navigate)
             self.secure()
 
-    def passage(self,goals,after_reunion=None,speed_limit=None,partner_done=None):
+    def passage(self,goals,after_reunion=None,speed_limit=None,partner_done=None,first_exit=None):
         # Narrow stairs have no same-height waiting spot at each bend. Let one
         # player finish the passage and step aside before the other follows
         # exactly the same ordinary route. An authored scene may already have
         # transported the waiting partner beyond the passage.
         partner_index = 0 if self.partner == 'host' else 1
         old_warp = self.bodies()[partner_index]['warped_at']
-        for role in (self.first,self.partner):
-            other = 'guest' if role == 'host' else 'host'
-            self.set(other)
-            role_goals = goals
-            if role == self.partner and after_reunion is not None and self.bodies()[partner_index]['warped_at'] > old_warp:
-                self.evidence.setdefault('passage_reunions',[]).append(dict(role=role,
-                    warped_at=self.bodies()[partner_index]['warped_at'],
-                    feet=self.bodies()[partner_index]['player']['feet']))
-                role_goals = after_reunion
+        def traverse(role,role_goals):
             for goal,navigate in role_goals:
                 self.set(role,goal,navigate,speed_limit=speed_limit if not navigate else None)
                 self.until(lambda:self.reached(role))
@@ -327,6 +319,17 @@ class SchoolPair(PandemoniumPair):
                 self.evidence.setdefault('passage_stops',[]).append(dict(role=role,goal=goal,
                     feet=self.bodies()[0 if role == 'host' else 1]['player']['feet'],
                     tick=self.reports['host']['frame']['tick']))
+
+        for role in (self.first,self.partner):
+            other = 'guest' if role == 'host' else 'host'
+            self.set(other)
+            role_goals = goals
+            if role == self.partner and after_reunion is not None and self.bodies()[partner_index]['warped_at'] > old_warp:
+                self.evidence.setdefault('passage_reunions',[]).append(dict(role=role,
+                    warped_at=self.bodies()[partner_index]['warped_at'],
+                    feet=self.bodies()[partner_index]['player']['feet']))
+                role_goals = after_reunion
+            traverse(role,role_goals)
             if role == self.first:
                 # A scene may already have delivered the waiting player's
                 # personal pickup. A caller can verify that outcome directly
@@ -335,6 +338,13 @@ class SchoolPair(PandemoniumPair):
                     self.evidence.setdefault('passage_partner_completed',[]).append(dict(
                         role=self.partner,warped_at=self.bodies()[partner_index]['warped_at'],goals=goals))
                     break
+                if first_exit:
+                    # A small pickup pad may have no space to step aside.
+                    # Let the first player leave by an explicit ordinary route
+                    # before the partner approaches their personal pickup.
+                    traverse(role,first_exit)
+                    self.evidence.setdefault('passage_first_exits',[]).append(dict(
+                        role=role,goals=first_exit,feet=self.bodies()[0 if role == 'host' else 1]['player']['feet']))
                 self.move_aside(role)
         print('PASS school passage',goals,flush=True)
 

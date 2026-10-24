@@ -98,7 +98,12 @@ class Pair:
             self.reports[role] = report
             frame, stage = report['frame'], report['combat']['stage']
             driver = report['route_driver']
-            assert driver and not driver['error'], f'{role} driver failed: {driver}'
+            if not driver or driver['error']:
+                # Keep terminal failures small. Full reports (including enemy
+                # pools and network hashes) remain in the private evidence.
+                details = {k: driver.get(k) for k in ('command', 'phase', 'error',
+                    'observed_tick', 'replans', 'plan_remaining', 'expected')} if driver else None
+                raise AssertionError(f'{role} driver failed: {details}')
             assert (driver['observed_epoch'], driver['observed_tick']) == (frame['epoch'], frame['tick']), 'Driver observed a different frame'
             if self.build is None:
                 self.build = report['build']
