@@ -525,7 +525,28 @@ rollback. Each exit scene has the intended owner and a frozen partner. The lower
 landings and next-level view were inspected. These are resumed descent passes;
 the complete first-school route still needs both clean entrance-to-exit repeats.
 
-Second-school machinery preparation is now implemented on build
+The fresh Red-first repeat in
+`private/coop/school-route-969188a6bd4d41d5897d9ec836916f5d/` passes the west
+bookcase approach but fails on the next upper-library leg. Blue's test navigator
+walks off the stair edge, falls to the lower floor and dies on a subsequent
+attempt. The failure is retained; 8,464 matching network states and 90 full
+school reports agree before it. The fixture now approaches a fixed stair lip
+and uses an explicit ordinary running jump to the upper landing.
+
+That revised route passes from the unchanged library checkpoint through the
+exit in `private/coop/school-resume-cfcc10a29d594d7a87e2a72a5aec3f0f/`, using
+build `59cc04b2bad4238d013635b739de9807fdc6a092845181fac604e99f99504f7f`, Red
+first and public 40/20 ms delay/jitter. Both make the upper gap, paired second
+lift, book crossing and lower shelf. The airborne recipe reunion and fresh
+guest rejoin at ticks 83,135/83,210 retain progress and personal resources.
+Both enter `skool2_start1` at 59/46 Sanity without death, respawn or checkpoint
+rollback. All 3,622 matching network states and 174 full school reports agree;
+all three remaining scene owners and frozen partners pass. The upper landing,
+lower shelf and next-level views were inspected. Fixture SHA-256:
+`54b0d7aff5f95c453e8e90d37ec2a6426b1cb534554b1f295c36547925b0c2e1`.
+This is a library-to-exit segment, not either required full-route repeat.
+
+Second-school machinery preparation was first implemented on build
 `59cc04b2bad4238d013635b739de9807fdc6a092845181fac604e99f99504f7f`.
 The gym lever uses the original activation rules for either player and assigns
 the original scene to its operator. Outside scenes, each extending bleacher step
@@ -547,8 +568,30 @@ both portals, all ingredients/rewards and the return to `skool1_start2`, ending
 at 27 Sanity without cheats/recovery/refills. Evidence:
 `private/coop-gym-school2-route1.log`. The co-op world regression also passes on
 that build in `private/coop-gym-world1.log`. These are focused machinery and
-single-player checks. Second-school co-op quest/combat, pendulums and full rendered
-traversal remain unfinished; row 7 is not complete.
+single-player checks. They did not yet cover paired pendulums or full rendered
+second-school traversal.
+
+The remaining school-two machinery now has an explicit paired adapter on build
+`5c2a87b56cddb3c5d321ef3765fbbc5c76ce52550b1385b8bee0e7084fa2f5ec`.
+Each moving group plans both bodies before committing any pose, clock or rider
+position; a pendulum and its bound lamp stop together when either player blocks
+them. The single-player wrapper retains the original one-owner scene step.
+Native `--school2-check` checks pass for cabinet/books riders in both player
+orders at 30/60/144 Hz, paused motion, snapshot continuation, either-player
+pendulum obstruction/resume and the production adapter without a duplicate
+quest-clock step. Existing school-two scene, potion and save checks also pass.
+Evidence: `private/coop-school2-movers-native1.log`. All 747 Rust tests pass
+(one existing ignored test), as do the optimized build, paired gym checks and
+co-op world regression: `private/coop-school2-movers-tests1.log`,
+`private/coop-school2-movers-release1.log`, `private/coop-school2-movers-gym1.log`
+and `private/coop-school2-movers-world1.log`. Co-op quest/combat and full rendered
+second-school traversal remain unfinished; row 7 receives no completion credit.
+The complete single-player second-school route also passes on this exact build,
+in `private/coop-school2-movers-route1.log`: 53,236 ticks, nine jumps, 23 throws,
+149 cards, 170 combat damage and 27 final Sanity, with both authored portals,
+all ingredients/rewards and the gated `skool1_start2` return. No cheats,
+recovery or refills are used. This confirms the single-player regression check
+for the paired school machinery as well as the earlier gym adapter.
 
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
@@ -557,8 +600,8 @@ traversal remain unfinished; row 7 is not complete.
 | 3 | `fortress1` | `Initial` | Passed (combined evidence above): both delayed public route orders, original scene/reunion, independent portals, paired split supports, upper jumps and exit, fresh guest rejoin, nearest-visible Boojum selection/damage in both roles, separate healing, coherent enemies, both combat death/spectator/respawn roles and saved-checkpoint wipe; shared boarding N/A |
 | 4 | `fortress2` | `Initial` | Passed (combined evidence above): full traversal in both orders (Blue audited, Red clean exit), fresh guest rejoin before exit; both Rage, bridge and cycling-elevator boarding orders; late Rage on the cycling lift; notes/reset/rejoin with audio; nearest-visible guard damage and separate healing; both combat death/spectator/respawn roles and saved-checkpoint wipe; clear return camera and visible Rage owner |
 | 5 | `fortress1` | `fortress1_start2` | Passed (combined evidence above): both delayed public full traversals to school, correct reveal owners/frozen partners/reunions and inspected middle views, ambush activation, fresh guest rejoin before exit; nearest-visible guard damage in both roles, individual healing, both actual death/spectator/respawn roles and saved-checkpoint wipe; shared boarding N/A |
-| 6 | `skool1` | `Initial` | Partial: Red-first public traversal through five scenes, both paired lifts, book crossing and recipe; fresh guest rejoin, personal Mallets and coherent full school snapshots; nearest-visible guard damage in both roles, separate healing, both combat death/spectator/respawn roles and saved-checkpoint wipe pass. Resumed bridge-to-exit now passes, including the airborne reunion fix and lower shelf. Both complete entrance-to-exit arrival orders remain open. |
-| 7 | `skool2` | `Initial` | Preparation only: paired gym lever/bleacher adapter and native two-body checks pass; single-player full-route regression passes. Co-op quest/combat, remaining movers and rendered traversal are not yet verified. |
+| 6 | `skool1` | `Initial` | Partial: Red-first public traversal through five scenes, both paired lifts, book crossing and recipe; fresh guest rejoin, personal Mallets and coherent full school snapshots; nearest-visible guard damage in both roles, separate healing, both combat death/spectator/respawn roles and saved-checkpoint wipe pass. Resumed library-to-exit now passes, including the explicit upper gap jump, airborne reunion and lower shelf. Both complete entrance-to-exit arrival orders remain open. |
+| 7 | `skool2` | `Initial` | Preparation only: paired gym lever/bleachers and school machinery adapters pass native rider, obstruction and restore checks; the complete single-player route passes with these changes. Co-op quest/combat and rendered traversal are not yet verified. |
 | 8 | `skool1` | `skool1_start2` | Not run |
 | 9 | `potears1` | `Initial` | Not run |
 | 10 | `potears2` | `Initial` | Not run |

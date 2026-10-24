@@ -17,6 +17,7 @@ use crate::{
 use anyhow::{Context, Result};
 pub(crate) mod cinema;
 pub(crate) mod cinema_check;
+mod coop_mover_check;
 pub(crate) mod encounters;
 pub(crate) mod potion_check;
 pub(crate) mod rage_hint;
@@ -925,6 +926,19 @@ impl School2 {
         player: &mut Player,
         fixed: &[Collider],
     ) -> Result<()> {
+        self.advance_players(dt, map, world, &mut [player], fixed)?;
+        self.advance_scene(dt, world, player)
+    }
+    /// Move each rigid group once, committing its clock and every supported
+    /// player together only when all bodies have room. Scenes retain one owner.
+    pub(crate) fn advance_players(
+        &mut self,
+        dt: f32,
+        map: &Bsp,
+        world: &mut World,
+        players: &mut [&mut Player],
+        fixed: &[Collider],
+    ) -> Result<()> {
         let mut remaining = dt.clamp(0., 0.1);
         while remaining > 0.000001 {
             let step = remaining.min(1. / 120.);
@@ -974,39 +988,43 @@ impl School2 {
                         )
                         .collect(),
                 );
-                let mut support = None;
                 let mut blocked = false;
-                for (j, pose, collider) in &proposed {
-                    let o = &self.objects[*j];
-                    let ground = o.collider.trace(
-                        player.feet + PLAYER_CENTER,
-                        player.feet + PLAYER_CENTER - Vec3::Z * 3.,
-                        PLAYER_HALF,
-                    );
-                    let riding = player.velocity.z <= 1.
-                        && !ground.start_solid
-                        && ground.fraction < 1.
-                        && ground.normal.z >= 0.65;
-                    if riding {
-                        let carried = pose.origin
-                            + pose.rotation
-                                * o.pose.rotation.inverse()
-                                * (player.feet - o.pose.origin);
-                        if let Some((feet, normal)) = collider.rider_feet(carried) {
-                            support = Some((feet, normal));
-                        } else {
-                            blocked = true;
+                let mut supports = Vec::with_capacity(players.len());
+                for player in players.iter() {
+                    let mut support = None;
+                    for (j, pose, collider) in &proposed {
+                        let o = &self.objects[*j];
+                        let ground = o.collider.trace(
+                            player.feet + PLAYER_CENTER,
+                            player.feet + PLAYER_CENTER - Vec3::Z * 3.,
+                            PLAYER_HALF,
+                        );
+                        let riding = player.velocity.z <= 1.
+                            && !ground.start_solid
+                            && ground.fraction < 1.
+                            && ground.normal.z >= 0.65;
+                        if riding {
+                            let carried = pose.origin
+                                + pose.rotation
+                                    * o.pose.rotation.inverse()
+                                    * (player.feet - o.pose.origin);
+                            if let Some((feet, normal)) = collider.rider_feet(carried) {
+                                support = Some((feet, normal));
+                            } else {
+                                blocked = true;
+                            }
                         }
                     }
+                    let feet = support.map_or(player.feet, |s| s.0);
+                    if let Some((feet, _)) = support {
+                        let sweep = world.body_trace(player.feet, feet);
+                        blocked |= sweep.start_solid || sweep.fraction < 1. || !world.body_clear(feet);
+                    }
+                    blocked |= proposed.iter().any(|(_, _, c)| {
+                        c.touches(feet + PLAYER_CENTER, feet + PLAYER_CENTER, PLAYER_HALF)
+                    });
+                    supports.push(support);
                 }
-                let feet = support.map_or(player.feet, |s| s.0);
-                if let Some((feet, _)) = support {
-                    let sweep = world.body_trace(player.feet, feet);
-                    blocked |= sweep.start_solid || sweep.fraction < 1. || !world.body_clear(feet);
-                }
-                blocked |= proposed.iter().any(|(_, _, c)| {
-                    c.touches(feet + PLAYER_CENTER, feet + PLAYER_CENTER, PLAYER_HALF)
-                });
                 if blocked {
                     continue;
                 }
@@ -1016,15 +1034,16 @@ impl School2 {
                     o.time = time;
                     o.collider = collider;
                 }
-                if let Some((feet, normal)) = support {
-                    player.feet = feet;
-                    player.grounded = true;
-                    player.ground_normal = normal;
+                for (player, support) in players.iter_mut().zip(supports) {
+                    if let Some((feet, normal)) = support {
+                        player.feet = feet;
+                        player.grounded = true;
+                        player.ground_normal = normal;
+                    }
                 }
             }
         }
         world.set_dynamic(fixed.iter().cloned().chain(self.colliders()).collect());
-        self.advance_scene(dt, world, player)?;
         Ok(())
     }
 }
@@ -1315,6 +1334,7 @@ impl Art {
 /// Real-asset component checks complement the continuous entrance route.
 pub fn check(assets: &mut Assets) -> Result<()> {
     let map = Bsp::parse(&assets.read("maps/skool2.bsp")?)?;
+    coop_mover_check::check(assets, &map)?;
     crate::interaction::school2_check::check(assets)?;
     cinema_check::check(assets, &map)?;
     potion_check::check(assets, &map)?;

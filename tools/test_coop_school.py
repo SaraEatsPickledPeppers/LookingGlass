@@ -254,7 +254,9 @@ class SchoolPair(PandemoniumPair):
     def upper_library_route(self):
         # Clear the west edge of the bookcase before turning toward the stairs.
         self.legs([((-180,3500,64),False),((-180,3300,64),False),((-140,3300,64),False),
-                   ((208,3300,400),True),((-32,3496,384),True),((-464,3520,384),False),
+                   ((208,3300,400),True),((192,3344,400),False)])
+        self.upper_library_gap()
+        self.legs([((-32,3496,384),False),((-464,3520,384),False),
                    ((-464,3800,384),False),((-464,4096,384),False),((-276,4160,384),False)])
         self.lift('elevator2',(-276,4360,400),(-228,4360,400),696)
         self.legs([((-276,4160,704),False),((-212,3860,704),False),((-64,3968,704),False),
@@ -263,6 +265,28 @@ class SchoolPair(PandemoniumPair):
         self.capture_pair('flying-books-bridge')
         self.checkpoint_stop('bridge')
         self.book_bridge()
+
+    def upper_library_gap(self):
+        # The stair top and west landing are separated by open space. Use a
+        # deliberate running jump from the settled lip; a broad navigation
+        # tolerance can end at a different stair edge and plan a fall below it.
+        goal = (-16,3496,384)
+        self.wait(.5)
+        for role in (self.first,self.partner):
+            index = 0 if role == 'host' else 1
+            jumps = self.bodies()[index]['player']['jumps']
+            self.set(role,goal,run=True,jump=True)
+            def landed():
+                p = self.bodies()[index]['player']
+                return (p['jumps'] > jumps and p['grounded'] and
+                        abs(p['feet'][2]-goal[2]) < 4 and distance(p['feet'],goal) < 45)
+            self.until(landed,15)
+            self.set(role,goal)
+            self.until(lambda: self.reached(role),10)
+            self.set(role)
+            self.wait(.5)
+            assert landed(), f'{role}: left the upper library landing'
+        self.capture_pair('upper-library-gap')
 
     def book_jump(self,approach,goal):
         self.go(approach)

@@ -1907,6 +1907,20 @@ The updated full route takes that fresh reward, splits the Mallet approach at
 the lower stair, and attempts a slow descent onto the lower library shelf.
 Those changes still need a complete repeat. Overall progress remains 42%.
 
+The later library-to-exit checkpoint repeat also passes after replacing the
+upper stair navigation leg with a deliberate running jump. Both players reach
+the next school alive, with all remaining scene owners, frozen partners,
+reunions and a fresh guest reconnect checked. The preceding full repeat still
+counts as a failure because Blue fell while navigating that upper gap. Neither
+complete first-school arrival order has yet passed; progress remains about 42%.
+
+Second-school co-op machinery now checks both living players before moving a
+group or carrying its riders. Native checks cover both moving furniture riders,
+either player blocking a pendulum and its bound lamp, pause/save restoration,
+and 30/60/144 Hz. Single-player scenes retain their original owner step. These
+focused checks do not verify the second-school quest/combat or full co-op route;
+the build identities and evidence are recorded in `COOP_CAMPAIGN.md`.
+
 ## Repeating a school section from a normal checkpoint
 
 For diagnosis, the school route accepts `--checkpoint-stops balcony library bridge descent`.

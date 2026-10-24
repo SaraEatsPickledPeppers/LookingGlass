@@ -194,6 +194,12 @@ impl Interactions {
             let clock = if self.school2.as_ref().is_some_and(|s| s.hold_bleachers()) { 0. } else { dt };
             gym.advance_players(clock, map, world, players, &fixed)?;
         }
+        if let Some(school2) = &mut self.school2 {
+            let fixed = self.doors.iter().filter(|d| d.enabled && self.event_world.enabled(d.id))
+                .map(|d| d.collider.clone())
+                .chain(self.gym.iter().flat_map(|g| g.colliders())).collect::<Vec<_>>();
+            school2.advance_players(dt, map, world, players, &fixed)?;
+        }
         self.sync_coop(world);
         Ok(())
     }
