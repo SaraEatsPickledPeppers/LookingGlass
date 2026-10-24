@@ -546,6 +546,56 @@ lower shelf and next-level views were inspected. Fixture SHA-256:
 `54b0d7aff5f95c453e8e90d37ec2a6426b1cb534554b1f295c36547925b0c2e1`.
 This is a library-to-exit segment, not either required full-route repeat.
 
+The next Blue-first full repeat,
+`private/coop/school-route-ee1cadfdb8dc4f09bdb732a11fe949c2/`, times out before
+the Mallet: Red reaches the lower stair within the navigator's tolerance but
+drifts off its side while stopping. Both remain alive at 97/95 Sanity; all
+5,972 matching network states and 351 full school reports agree. This remains
+a failed route. The fixture now attempts a centred ordinary walk down those
+stairs, and an optional `theatre` menu checkpoint/resume point supports shorter
+repeats from just before that descent.
+
+The revised Mallet descent passes for both players in the next Blue-first full
+run, `private/coop/school-route-88dc45f1a8a5499b8b7cd2ff6e6d19d4/`. Both
+collect their Mallets and cross the balcony. The run still fails: the spiral
+lift stops at motion time 6.841648, rider height 55.3747, before the 64-unit
+landing. Both remain alive at 83/93 Sanity. All 8,807 matching network states
+and 112 full school reports agree. Native lift checks already distinguish the
+outer rim beneath the upper landing lip from clear rider positions; the next
+fixture repeat tests walking inward if that obstruction holds the lift.
+No full-route credit is awarded.
+
+That run also supplies an unchanged ordinary host-menu checkpoint before the
+Mallet stairs, tick 26,629, Blue/Red Sanity 97/100, in `theatre-checkpoint.json`.
+Its SHA-256 is
+`1034fb722534c35e4971ece22162b2853a664a0730082859ad8bfe0583cf0629`.
+The successful menu save and return to play were inspected; checkpoint contents
+are not edited by the repeat fixture.
+
+Two theatre-checkpoint repeats, `school-resume-a618799f5256491e917e5b7d7004609d`
+and `school-resume-09e4e7a02397448787c733e0032e2e0c`, reproduce a separate
+landing defect after ordinary inward walking clears the outer lip. Red reaches
+the static floor at height 64 while Blue remains on the lift at 61.2968;
+the lift clock stops at 6.94998. Both remain alive at 83/93 Sanity. The latter
+run has 4,276 matching network states and five coincident full school reports.
+The downwards support probe incorrectly still counts the static-floor player
+as riding the lower lift. The new regression fails on that old behavior;
+support selection now gives the nearer walkable floor precedence. A separate
+regression retains obstruction handling when a moving platform would actually
+hit that player. These failed repeats receive no traversal credit.
+
+Build `b21fc09969b22ae75d53b25a7d9a2a608feac17bd51411006971ee9dda7bce78`
+fixes both lower-lift and equal-height support ambiguity. The native regression
+starts at the exact observed stopped pose with both player orders: the landed
+body stays fixed, the other reaches the top, and neither enters solid geometry.
+`--coop-world-check` passes, including existing boarding, obstruction, village
+mover and scene/checkpoint checks (`private/coop-landing2-world.log`). The full
+single-player school route also passes in 41,593 ticks at 77 Sanity, with no
+flight, warps or recovery (`private/coop-landing2-sp-route.log`). These native
+results do not replace the outstanding full two-client traversals.
+The release build and 750 Rust tests also pass, with one existing ignored test
+(`private/coop-landing2-release.log`, `private/coop-landing2-tests.log`).
+
 Second-school machinery preparation was first implemented on build
 `59cc04b2bad4238d013635b739de9807fdc6a092845181fac604e99f99504f7f`.
 The gym lever uses the original activation rules for either player and assigns

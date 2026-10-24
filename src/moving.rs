@@ -17,6 +17,25 @@ pub fn aboard(collider: &Collider, feet: Vec3) -> bool {
     !trace.start_solid && trace.fraction < 1. && trace.normal.z > 0.65
 }
 
+/// A nearby lift is only a support if another surface is not at or above it. At a
+/// landing the downwards probe can hit both the floor and the lift underneath;
+/// carrying that body would pull it into the floor and stop every other rider.
+fn supported_by(world: &World, collider: &Collider, feet: Vec3) -> bool {
+    let support = collider.trace(
+        feet + PLAYER_CENTER,
+        feet + PLAYER_CENTER - Vec3::Z * 3.,
+        PLAYER_HALF,
+    );
+    if support.start_solid || support.fraction >= 1. || support.normal.z <= 0.65 {
+        return false;
+    }
+    let other = world.body_trace(feet, feet - Vec3::Z * 3.);
+    !(other.fraction < 1.
+        && other.fraction <= support.fraction + 0.001
+        && !other.start_solid
+        && other.normal.z > 0.65)
+}
+
 pub fn carry(
     world: &World,
     previous: &Collider,
@@ -28,7 +47,7 @@ pub fn carry(
 ) -> bool {
     let mut planned = Vec::with_capacity(players.len());
     for player in players.iter() {
-        let riding = solid && player.velocity.z <= 1. && aboard(previous, player.feet);
+        let riding = solid && player.velocity.z <= 1. && supported_by(world, previous, player.feet);
         if riding {
             let carried = to.translation
                 + to.rotation * from.rotation.inverse() * (player.feet - from.translation);
@@ -164,5 +183,81 @@ mod tests {
             ));
             assert_eq!(bodies.each_ref().map(|p| p.feet), before);
         }
+    }
+
+    #[test]
+    fn landed_partner_does_not_ride_the_lift_below_the_floor() {
+        for landed in 0..2 {
+            let world = World::fixture(&[(vec3(20., -100., -8.), vec3(100., 100., 2.))]);
+            let mut bodies = [
+                Player::new(vec3(-48., 0., 0.04)),
+                Player::new(vec3(48., 0., 2.04)),
+            ];
+            if landed == 0 {
+                bodies.reverse();
+            }
+            let floor_feet = bodies[landed].feet;
+            assert!(
+                aboard(&platform(0.), floor_feet),
+                "Reproduce nearby lift support through floor"
+            );
+            assert!(carry(
+                &world,
+                &platform(0.),
+                &platform(1.),
+                pose(Vec3::ZERO, 0.),
+                pose(Vec3::Z, 0.),
+                true,
+                &mut bodies.each_mut()
+            ));
+            assert_eq!(bodies[landed].feet, floor_feet);
+            assert!(bodies[1 - landed].feet.z > 1. && world.body_clear(bodies[1 - landed].feet));
+        }
+    }
+
+    #[test]
+    fn landed_partner_still_blocks_a_mover_that_would_hit_their_body() {
+        for landed in 0..2 {
+            let world = World::fixture(&[(vec3(20., -100., -8.), vec3(100., 100., 2.))]);
+            let mut bodies = [
+                Player::new(vec3(-48., 0., 0.04)),
+                Player::new(vec3(48., 0., 2.04)),
+            ];
+            if landed == 0 {
+                bodies.reverse();
+            }
+            let before = bodies.each_ref().map(|p| p.feet);
+            assert!(!carry(
+                &world,
+                &platform(0.),
+                &platform(4.),
+                pose(Vec3::ZERO, 0.),
+                pose(Vec3::Z * 4., 0.),
+                true,
+                &mut bodies.each_mut()
+            ));
+            assert_eq!(bodies.each_ref().map(|p| p.feet), before);
+        }
+    }
+
+    #[test]
+    fn floor_keeps_precedence_when_lift_reaches_the_same_height() {
+        let world = World::fixture(&[(vec3(20., -100., -8.), vec3(100., 100., 2.))]);
+        let mut bodies = [
+            Player::new(vec3(-48., 0., 2.04)),
+            Player::new(vec3(48., 0., 2.04)),
+        ];
+        let floor_feet = bodies[1].feet;
+        assert!(carry(
+            &world,
+            &platform(2.),
+            &platform(2.),
+            pose(Vec3::Z * 2., 0.),
+            pose(Vec3::Z * 2., 0.05),
+            true,
+            &mut bodies.each_mut()
+        ));
+        assert_eq!(bodies[1].feet, floor_feet);
+        assert!(bodies[0].feet.y.abs() > 1.);
     }
 }

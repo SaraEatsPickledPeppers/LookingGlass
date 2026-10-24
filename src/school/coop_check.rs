@@ -42,6 +42,7 @@ pub(crate) fn riders(school: &School, world: &World, name: &str, at: Vec3) -> Re
 
 pub fn check(assets: &mut Assets) -> Result<()> {
     let map = Bsp::parse(&assets.read("maps/skool1.bsp")?)?;
+    landed_partner(&map)?;
     for (thread, name, start, top) in LIFTS {
         for fps in [30, 60, 144] {
             let mut school = School::load(&map, false)?;
@@ -240,6 +241,55 @@ pub fn check(assets: &mut Assets) -> Result<()> {
         println!(
             "PASS co-op {name}: bottom/top departure gates, empty return and sole living rider"
         );
+    }
+    Ok(())
+}
+
+/// Reproduce the public two-client stop just below the library's upper lip.
+/// One body has stepped onto the static landing while the other still rides.
+fn landed_partner(map: &Bsp) -> Result<()> {
+    for reversed in [false, true] {
+        let mut school = School::load(map, false)?;
+        school
+            .event("Skool1_Lift_Up")
+            .context("Missing spiral lift event")?;
+        let o = school.object_mut("library_spiral_lift");
+        let motion = o.motion.as_mut().unwrap();
+        motion.time = 6.9499798;
+        o.pose = motion.sample(motion.time);
+        o.collider = Collider::model(map, o.model, o.pose.origin, o.pose.rotation(), true)?;
+        let mut world = World::from_bsp(map)?;
+        world.set_dynamic(school.colliders().collect());
+        let mut players = [
+            Player::new(vec3(252.01315, 4253.7007, 61.296814)),
+            Player::new(vec3(217.55937, 4235.815, 64.03125)),
+        ];
+        if reversed {
+            players.reverse();
+        }
+        let landed = if reversed { 0 } else { 1 };
+        let floor_feet = players[landed].feet;
+        ensure!(
+            players.iter().all(|p| world.body_clear(p.feet)),
+            "Spiral landing fixture starts embedded"
+        );
+        for _ in 0..60 {
+            school.advance_players(FIXED_DT, map, &mut world, &mut players.each_mut(), &[])?;
+            ensure!(
+                players.iter().all(|p| world.body_clear(p.feet)),
+                "Spiral landing transition embedded a body"
+            );
+        }
+        ensure!(
+            players[landed].feet == floor_feet,
+            "Spiral lift dragged a player off the static landing"
+        );
+        ensure!(
+            players[1 - landed].feet.z >= 63.99,
+            "Landed partner stranded the remaining spiral rider: {:?}",
+            players.each_ref().map(|p| p.feet)
+        );
+        println!("PASS native spiral landing reversed={reversed}: static partner stays put, remaining rider reaches top");
     }
     Ok(())
 }

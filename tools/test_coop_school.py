@@ -113,8 +113,43 @@ class SchoolPair(PandemoniumPair):
         self.until(lambda: all(distance(self.bodies(r)[index]['player']['feet'][:2],second_goal[:2]) < 24
                                and self.bodies(r)[index]['player']['grounded'] for r in self.reports),40)
         self.set(self.partner)
-        self.until(lambda: all(b['player']['feet'][2] >= top-1 and b['player']['grounded']
-                               for r in self.reports for b in self.bodies(r)),40)
+        def at_top():
+            return all(b['player']['feet'][2] >= top-1 and b['player']['grounded']
+                       for r in self.reports for b in self.bodies(r))
+        last_time = obj()['motion']['time']
+        last_move = self.reports['host']['frame']['tick']
+        adjustments = 0
+        deadline = time.monotonic()+40
+        while not at_top():
+            assert time.monotonic() < deadline, f'{name}: did not reach the upper landing'
+            self.pump()
+            current = obj()
+            if current['motion']['time'] != last_time:
+                last_time = current['motion']['time']
+                last_move = self.reports['host']['frame']['tick']
+            if (name == 'library_spiral_lift' and adjustments < 2 and
+                    current['pose']['origin'][2] > top-32 and
+                    self.reports['host']['frame']['tick']-last_move >= 120):
+                # The outer rim passes under the upper landing lip. The mover
+                # correctly stops when a rider meets it; walk inward to clear
+                # that obstruction before the last part of the ascent.
+                center = current['pose']['origin'][:2]
+                target_radius = (60,48)[adjustments]
+                starts = []
+                for role in self.commands:
+                    index = 0 if role == 'host' else 1
+                    feet = self.bodies(role)[index]['player']['feet']
+                    starts.append(feet)
+                    radius = distance(feet[:2],center)
+                    scale = min(1,target_radius/max(1,radius))
+                    self.set(role,tuple(c+(p-c)*scale for p,c in zip(feet[:2],center))+(feet[2],))
+                self.evidence.setdefault('lift_clearance',[]).append(dict(
+                    name=name,tick=last_move,feet=starts,motion_time=last_time,
+                    target_radius=target_radius))
+                adjustments += 1
+                last_move = self.reports['host']['frame']['tick']
+        for role in self.commands:
+            self.set(role)
         self.capture_pair(name+'-top')
         self.evidence.setdefault('lifts',[]).append(dict(name=name,waiting_seconds=2,
             both_reached_height=top,first=self.args.first))
@@ -144,7 +179,9 @@ class SchoolPair(PandemoniumPair):
     def mallet_landing(self):
         # The altar is across the stairwell, not along a continuous balcony.
         # Stop on the lower stair before the short jump to the altar platform.
-        self.legs([((-2304,2624,-342),True),((-2304,2544,-352),False),
+        # Walk down its centre: a broad navigation stop can leave running
+        # momentum carrying the delayed guest off the side of the stairs.
+        self.legs([((-2304,2800,-256),False),((-2304,2624,-342),False),((-2304,2544,-352),False),
                    ((-2272,2464,-256),True)])
 
     def checkpoint_stop(self,label):
@@ -227,6 +264,10 @@ class SchoolPair(PandemoniumPair):
         self.wait(1)
         self.capture_pair('school-entrance')
         self.theatre()
+        self.checkpoint_stop('theatre')
+        self.after_theatre()
+
+    def after_theatre(self):
         self.mallet_landing()
         # The essence beside the Mallet belongs to the return visit; the first
         # visit uses the fresh theatre reward above for ordinary healing.
@@ -392,7 +433,7 @@ if __name__ == '__main__':
     parser.add_argument('--first',choices=('blue','red'),default='red')
     parser.add_argument('--local',action='store_true')
     parser.add_argument('--rejoin',action='store_true')
-    parser.add_argument('--checkpoint-stops',nargs='*',choices=('balcony','library','bridge','descent'),default=[],
+    parser.add_argument('--checkpoint-stops',nargs='*',choices=('theatre','balcony','library','bridge','descent'),default=[],
                         help='Hold neutral inputs for up to 180 seconds for a normal menu checkpoint; create continue-<stop> in the evidence folder to resume')
     parser.add_argument('--delay-ms',type=int,default=40)
     parser.add_argument('--jitter-ms',type=int,default=20)

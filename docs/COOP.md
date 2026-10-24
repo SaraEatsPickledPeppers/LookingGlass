@@ -1923,11 +1923,11 @@ the build identities and evidence are recorded in `COOP_CAMPAIGN.md`.
 
 ## Repeating a school section from a normal checkpoint
 
-For diagnosis, the school route accepts `--checkpoint-stops balcony library bridge descent`.
+For diagnosis, the school route accepts `--checkpoint-stops theatre balcony library bridge descent`.
 At each stop it holds both clients' movement inputs for up to three minutes.
 Use the host's ESC menu to **Save checkpoint**, retain a byte-for-byte copy of
 that profile's `coop-checkpoint.json`, and resume the menu. Create an empty
-`continue-balcony`, `continue-library`, `continue-bridge` or `continue-descent` file in the printed evidence folder to
+`continue-theatre`, `continue-balcony`, `continue-library`, `continue-bridge` or `continue-descent` file in the printed evidence folder to
 continue the route. The option is off for unattended full-route tests.
 
 The saved section can then be repeated with:
@@ -1936,7 +1936,8 @@ The saved section can then be repeated with:
 python tools/test_coop_school_resume.py --data <base> --checkpoint <saved-file> --resume-point balcony --first red --rejoin
 ```
 
-Use `--resume-point library` before the upper library stairs,
+Use `--resume-point theatre` before the Mallet stair descent,
+`--resume-point library` before the upper library stairs,
 `--resume-point bridge` before crossing the books, or `--resume-point descent`
 for a checkpoint taken after the recipe reunion.
 The fixture copies the original save unchanged into a fresh host profile, uses
@@ -1952,6 +1953,14 @@ the partner can land on safe nearby ground and the owner resumes normal gravity.
 Grounded reunions and ordinary death respawns keep their narrower placement rule.
 Both players survive the lower shelf descent and reach the next school entrance.
 See `COOP_CAMPAIGN.md` for the build, evidence and remaining full-route checks.
+
+School lift support now gives a static landing precedence over a platform below
+it or at the same height. This prevents the player who has already stepped off
+from blocking the remaining rider or being dragged around by the rotating lift.
+Actual body obstructions still stop the mover and every rider together. Native
+checks reproduce the observed near-top stop with either player on the floor;
+the separate-client route fixture also uses ordinary inward walking to clear
+the spiral's outside rim beneath the landing lip.
 
 ## Reproducing transport checks
 
