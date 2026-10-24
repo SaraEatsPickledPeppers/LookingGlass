@@ -123,7 +123,7 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after completing the village verification matrix: **about 40%** (previously 39%). Credited
+Overall estimate after completing the village and Pandemonium verification rows: **about 40%** (previously 39%). Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
 9/15 for two-player movement/presentation, paired school supports, dry/swimming arrival placement, complete delayed village/Pandemonium traversal in separate clients and rendered independent rope controls, and 7/20 for native targeting, host-owned
 weapons/damage, personal resources, timed respawns and full saved-state team wipes,
@@ -131,9 +131,9 @@ plus 8/20 for shared world replication, ordered contacts, the verified theatre
 ownership/reunion slice, school boarding barriers, visit history and restart/backup
 restoration of shared checkpoints, and native traversal of all six village scenes
 and all four Pandemonium scenes with either player arriving first (also verified through public internet clients).
-Full-campaign verification now earns 20/39 of a point (about 0.51/20), for the village's
-complete combined evidence. Total credited points are about 39.51, rounded to 40%.
-Standalone policy tests receive no campaign credit; 38 campaign visits remain open.
+Full-campaign verification now earns 40/39 points (about 1.03/20), for the village's
+and Pandemonium's complete combined evidence. Total credited points are about 40.03,
+rounded to 40%. Standalone policy tests receive no campaign credit; 37 visits remain open.
 
 Pandemonium now uses each replicated player's own rope grip in co-op, while the
 single-player controller and saved grip remain unchanged. The host advances its
@@ -262,8 +262,8 @@ verify that next visit. Both client processes exit normally and the private invi
 is removed. Evidence: `private/coop/pandemonium-test-25726e42ca974a459cf70cd356606c0e/`,
 `private/coop-pandemonium-network-blue2.log`. This run used the authorized local
 desktop fallback while Anode was busy. Later recovery/rejoin results follow below;
-consumable and first-guard checks now follow in the encounter section. A full-route
-repeat with encounter-state comparison remains open for Pandemonium.
+consumable, first-guard and full-route encounter comparison checks now follow in
+the encounter section and complete the Pandemonium verification row.
 
 The Red-first repeat also passes on the same build and delay/jitter settings,
 running in Anode. Both clients observe all four Red-owned scenes, three reunions,
@@ -340,7 +340,7 @@ normally, and the invite is removed. Evidence:
 `private/coop-pandemonium-rejoin-internet1.log`. The game source is unchanged from
 the preceding 740-test build; this checkpoint extends the independent-client
 harnesses and records their evidence. Later focused consumable/guard checks are
-recorded below; the full-route encounter comparison still prevents marking Pandemonium passed.
+recorded below, followed by both successful full-route encounter comparisons.
 
 The native enemy combat foundation now supplies two live targets to each enemy
 and keeps damage, knockback and Will drain separate for Blue and Red. Closest
@@ -1136,7 +1136,7 @@ Evidence: `private/coop/village-test-49531ea8bd3f460da591f2be6a8c4465/`, on the
 same `f6304f3344c2f6d0340da41879fb00c4c7d37ada0076df301d49ae75a49f331d` build.
 The source change and harnesses also pass 734 Rust tests (one pre-existing ignored),
 19 packaging/setup checks and Python compilation. The later focused checks below
-complete the village's consumable/enemy evidence; 38 visits still prevent claiming
+complete the village's consumable/enemy evidence; 37 visits still prevent claiming
 full campaign support.
 
 ### Public encounter and personal-consumable checks
@@ -1167,7 +1167,7 @@ Both pass in Anode on build
   heals Blue 57.733 to 72.733 and then Red 87.667 to 100 independently. All 2,438
   comparable sent/restored states and six coincident full reports agree. Both attack
   views and the guest pickup view were inspected. Later enemies/the exit are outside
-  this focused fixture, so a full-route encounter-comparison repeat remains open.
+  this focused fixture; subsequent full-route repeats complete that coverage.
 
 The opt-in route driver records the guard's host-selected target, distances and
 line of sight. Guests do not run AI to produce a second target choice. A bounded
@@ -1197,6 +1197,22 @@ trial completed its gameplay checks but had only three coincident local report
 ticks (`pandemonium-combat-d99e90f584e24341aa3486dabf794c3d`), motivating the bounded
 send/restore observations. No health, inventory or enemy behavior was changed to
 make these tests pass. Successful clients/helpers close normally and remove invites.
+
+The full Pandemonium route then passes again in both arrival orders on `fe1f5fd9`,
+with the same public delay/jitter settings. Blue's run also leaves/rejoins a fresh
+guest before the final airship. All seven encounter actors are included in the
+comparison, including six combat deaths and both encountered Diamond guards'
+projectiles. Blue's run matches 5,997 sent/restored states and 31 local reports;
+Red's matches 6,362 and 65. All four scene owners, three safe reunions, delayed
+cart boarding, shared rope, retained personal Cards and independently collected
+healing rewards pass. Neither run has a death, respawn or wipe. Both arrive in
+Fortress alive (Blue-led 46.667/25.134 Sanity; Red-led 30.001/45.201).
+Evidence: `private/coop/pandemonium-test-94511445d6bc41e9a4e92a1a50ec4f18/` and
+`private/coop/pandemonium-test-c3449c00e8bb41d0b6c7f39bb4729a98/`; each retains an
+`encounter-coverage.json` summary. Rope, boarding-wait and initial Fortress
+cinematic views were inspected. Both clients/helpers exit and invites are removed.
+Combined with the earlier recovery/wipe evidence, Pandemonium is the second passed
+campaign row. The initial Fortress arrival images do not verify that next visit.
 
 ## Reproducing transport checks
 

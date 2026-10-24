@@ -1,7 +1,7 @@
 # Co-op campaign verification matrix
 
 Source: `campaign::route()` in `src/campaign.rs`. Return visits are separate requirements.
-The village is the first visit with the complete combined co-op evidence below.
+The village and Pandemonium have the complete combined co-op evidence below.
 Existing single-player route tests do not supply evidence for two-player play.
 Record build identities and reproducible evidence before changing a row to passed.
 
@@ -152,13 +152,35 @@ observe these grants. All 2,438 comparable sent/restored player, lives, checkpoi
 and encounter states match; six coincident full local reports match as well.
 Both target views and the guest pickup view were inspected, and both clients exit
 normally. The normal entrance rope/cart are included, but later guards and the
-exit are outside this focused fixture. A full-route repeat with the new encounter
-state comparison remains open before this row can pass.
+exit are outside this focused fixture. The later full-route repeats below complete
+the encounter comparison and the Pandemonium row.
+
+Both full public routes now pass with the new encounter/player comparison on the
+same `fe1f5fd9` build, again with 40 ms delay and 20 ms jitter:
+
+- Blue leads: `private/coop/pandemonium-test-94511445d6bc41e9a4e92a1a50ec4f18/`.
+  All four scenes belong to Blue, with reunions at ticks 2,701/14,409/34,878.
+  A fresh guest rejoins near the exit (ticks 38,251/38,334), retaining both players'
+  resources and completed scenes. All 5,997 comparable sent/restored states and
+  31 coincident local reports match. Both reach Fortress alive, at 46.667/25.134 Sanity.
+- Red leads: `private/coop/pandemonium-test-c3449c00e8bb41d0b6c7f39bb4729a98/`.
+  All four scenes belong to Red, with reunions at 2,756/14,621/34,994. All 6,362
+  comparable sent/restored states and 65 coincident local reports match. Both reach
+  Fortress alive, at 30.001/45.201 Sanity.
+
+Both retain personal Cards and independently collected healing rewards. The full
+encounter records include all seven authored guards, six normal combat deaths,
+and projectile attacks from both encountered Diamond guards. The distant return
+guard stays alive, as on the ordinary route. Neither run uses respawns or wipes.
+Rope, boarding-wait and initial Fortress cinematic views were inspected; those
+arrival views do not verify the Fortress visit. Both client pairs and helpers
+exit normally, and both invites are removed. Coverage summaries are retained as
+`encounter-coverage.json` inside each fixture.
 
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Passed (combined evidence above): both arrival orders, all scenes/reunions, nearest-visible guard damage in both roles, individual health/Blade pickups, matching encounter/player states, both death/spectator/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit; shared boarding N/A |
-| 2 | `pandemonium` | `Initial` | Partial: native and delayed public routes in both orders, rope/cart, four scenes/three reunions, personal Cards and independently collected healing rewards, first guard targets/damages both roles with matching encounter state, both hazard death/respawn roles, saved-checkpoint wipe and fresh guest rejoin-to-exit pass; full-route repeat with encounter comparison pending |
+| 2 | `pandemonium` | `Initial` | Passed (combined evidence above): native and delayed public routes in both orders, rope/cart, four scenes/three reunions, personal Cards/healing rewards, nearest-visible guard damage in both roles, full-route encounter/player comparison, both hazard death/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit |
 | 3 | `fortress1` | `Initial` | Not run |
 | 4 | `fortress2` | `Initial` | Not run |
 | 5 | `fortress1` | `fortress1_start2` | Not run |
