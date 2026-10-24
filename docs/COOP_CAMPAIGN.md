@@ -359,6 +359,80 @@ open. Only Python fixtures/documentation changed after the frozen game's existin
 Rust, release and native/single-player verification; source-package/syntax/source
 boundary checks cover these additions.
 
+First school partial traversal: build
+`4fd9c6cca856cc455099b23286834117ecb693144726781a33103c34bb4fab00`
+adds opt-in school scene observations without changing gameplay. A Red-first,
+public internet run with 40 ms delay and 20 ms jitter reaches the four-book
+bridge, both personal Mallets, and both library lifts from the normal entrance.
+Each lift waits for its absent partner for two observed school-clock seconds,
+then carries both players to the upper landing. Waiting messages and completed
+rides were visually inspected. The theatre, moving shelf, shelf reveal and
+book-bridge reveal each have Red as owner, a frozen partner and a safe reunion.
+Both middle shelf/book reveal views were inspected; no extra Alice is present.
+All 14,137 comparable sent/restored states and 117 coincident full school,
+encounter and player reports agree. Neither player dies or resets the checkpoint.
+Evidence: `private/coop/school-route-1bb1e30f303f4edc9abdeb31367d7952/`, including
+`partial-audit.json`. This run fails at the test driver's navigation search onto
+the first bridge book; it does not verify the recipe, exit, or guest rejoin.
+The route fixture now walks onto that first book before planning the remaining
+gaps. Both complete arrival orders
+remain required before the row can pass. Existing 746 Rust tests (one ignored),
+debug/release builds, native co-op world and school state/lift checks pass on this
+build. No additional campaign completion credit is assigned yet.
+
+A subsequent Red-first optimized run crosses all four books and reaches the
+recipe scene, then rejoins a fresh guest with positions, personal resources and
+school progress retained (ticks 66,317/66,401). Five Red-owned scenes, five safe
+reunions, 10,233 matching sent/restored states and 294 coincident full school
+reports pass. Evidence: `private/coop/school-route-44d72453baad4b1690465f308c26a03a/`.
+Its recipe middle view shows the original single Alice and Cheshire Cat; the
+authored cinematic Alice retains the original blue costume even with Red owning
+the scene. The full route still fails: the guest's timed descent overshoots the
+64-unit shelf and falls from 384 to the bottom floor, dying with 44 Sanity. The
+fixture now collects a fresh theatre guard reward and uses a slow, observed edge
+descent to that shelf. The exit remains unverified by this run. A further route
+attempt times out on the long planned jump to the Mallet platform. Splitting that
+approach at the lower stair reaches the platform in the later focused probe
+`private/coop/school-combat-da20a3a5b1ef498dae4720537d5c4567/`; its healing check
+still fails because `mana_skool1` is return-only, as required by
+`inventory::pickups_for_visit`. The fixture preserves that restriction and now
+uses an actual fresh enemy reward after the theatre. The changed descent and
+complete route still need a clean repeat.
+
+Both school guard-death roles and the saved-checkpoint wipe now pass on the same
+build and public delay/jitter settings, using the optimized executable in
+`private/coop/school-recovery-84df4abea6c8431fbd0072b0a61ca189/`.
+Red dies/respawns at ticks 3,969/5,169 and Blue at 9,270/10,470. Both clients
+agree on exactly 1,200 ticks, cameras following the moving survivor, 25 Sanity,
+48-unit separation, retained inventory and unchanged survivor health. A team
+wipe at tick 12,727 restores the actual tick-1 checkpoint: exact personal
+resources, school puzzle flags, machinery definitions and enemy health/state,
+plus starting positions within normal movement bounds. All 1,930 comparable
+sent/restored states and eight coincident full school/player/encounter reports
+agree. Both spectator, respawn and checkpoint views were inspected. The fixture
+closes both clients/helpers and removes the invite. Reproduce with
+`tools/test_coop_school_recovery.py --data <base> --exe target/release/looking-glass.exe`.
+Earlier recovery attempts are retained as failures: an edge position outside
+firing range, an occluded balcony position, and a spectator movement target too
+close to the preceding respawn. These were fixture corrections, with no changes
+to combat damage, recovery timing or the saved world.
+
+Focused school combat and individual healing now pass in
+`private/coop/school-combat-2b97ba23cace4d9f8b9ee9202be946ea/` on the same build,
+using the optimized executable and public 40/20 ms delay/jitter. With both
+players visible, `cgd_top1` selects nearer Red, then nearer Blue; each checked
+seven-Sanity hit leaves the distant partner unchanged. The fresh `play_guard1`
+reward after the theatre heals Blue from 93 to 100 while Red stays at 58 and
+retains her copy. Red then heals to 83 while Blue stays at 100. Both clients
+observe independent collection and unchanged partner resources. All 1,662
+comparable sent/restored states and 28 coincident full school/player/encounter
+reports agree. Targeting and both healing views were inspected; both clients and
+their helpers exit normally and the invite is removed. Reproduce with
+`tools/test_coop_school_combat.py --data <base> --exe target/release/looking-glass.exe`.
+The upper guard's reward expires before reaching it after the theatre, so this
+fixture uses the fresh theatre-floor reward without changing item lifetimes.
+Full clean traversal and both first-arrival orders remain open; 5/39 rows pass.
+
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Passed (combined evidence above): both arrival orders, all scenes/reunions, nearest-visible guard damage in both roles, individual health/Blade pickups, matching encounter/player states, both death/spectator/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit; shared boarding N/A |
@@ -366,7 +440,7 @@ boundary checks cover these additions.
 | 3 | `fortress1` | `Initial` | Passed (combined evidence above): both delayed public route orders, original scene/reunion, independent portals, paired split supports, upper jumps and exit, fresh guest rejoin, nearest-visible Boojum selection/damage in both roles, separate healing, coherent enemies, both combat death/spectator/respawn roles and saved-checkpoint wipe; shared boarding N/A |
 | 4 | `fortress2` | `Initial` | Passed (combined evidence above): full traversal in both orders (Blue audited, Red clean exit), fresh guest rejoin before exit; both Rage, bridge and cycling-elevator boarding orders; late Rage on the cycling lift; notes/reset/rejoin with audio; nearest-visible guard damage and separate healing; both combat death/spectator/respawn roles and saved-checkpoint wipe; clear return camera and visible Rage owner |
 | 5 | `fortress1` | `fortress1_start2` | Passed (combined evidence above): both delayed public full traversals to school, correct reveal owners/frozen partners/reunions and inspected middle views, ambush activation, fresh guest rejoin before exit; nearest-visible guard damage in both roles, individual healing, both actual death/spectator/respawn roles and saved-checkpoint wipe; shared boarding N/A |
-| 6 | `skool1` | `Initial` | Not run |
+| 6 | `skool1` | `Initial` | Partial: Red-first public traversal through five scenes, both paired lifts, book crossing and recipe; fresh guest rejoin, personal Mallets and coherent full school snapshots; nearest-visible guard damage in both roles, separate healing, both combat death/spectator/respawn roles and saved-checkpoint wipe pass. Clean descent/exit and both full arrival orders remain open. |
 | 7 | `skool2` | `Initial` | Not run |
 | 8 | `skool1` | `skool1_start2` | Not run |
 | 9 | `potears1` | `Initial` | Not run |

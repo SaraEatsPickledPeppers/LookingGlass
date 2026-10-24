@@ -267,6 +267,8 @@ impl Driver {
         self.report.scene = arena.stage.interactions.village.as_ref().and_then(|v|v.cinema.scene_id())
             .or_else(|| arena.stage.interactions.pandemonium.as_ref().and_then(|p|p.scene_id()))
             .or_else(|| arena.stage.interactions.fortress.as_ref().and_then(|f|f.state.cinema.scene_id()))
+            .or_else(|| arena.stage.interactions.school.as_ref().and_then(|s|s.scene_id()))
+            .or_else(|| arena.stage.interactions.school2.as_ref().and_then(|s|s.scene_id()))
             .or_else(|| arena.stage.interactions.beyond.as_ref().and_then(|b|b.scene_id())).map(str::to_owned);
         self.report.speech = arena.stage.story.busy() && !arena.stage.busy();
         self.report.guards = arena.stage.interactions.encounters.iter().flat_map(|cast| &cast.actors).enumerate()

@@ -1843,6 +1843,70 @@ build and native/single-player checks recorded above. This checkpoint adds only
 Python fixtures and evidence documentation. Seven source-package tests, Python
 syntax checks and the source-boundary audits cover the authored additions.
 
+## First school verification in progress
+
+The first school visit has partial public two-process evidence on build
+`4fd9c6cca856cc455099b23286834117ecb693144726781a33103c34bb4fab00`.
+The only runtime addition is opt-in reporting of school scene names. The new
+`tools/test_coop_school.py` fixture uses ordinary movement and combat inputs from
+the normal entrance. Its retained Red-first run reaches both personal Mallets,
+four correctly owned scenes with safe reunions, both lifts (including delayed
+boarding), and the four-book bridge. All 14,137 comparable network states and
+117 coincident full school/player/encounter reports match. Both waiting and
+completed lift views, and the middle shelf/book reveals, were inspected.
+
+Evidence is in `private/coop/school-route-1bb1e30f303f4edc9abdeb31367d7952/`.
+It remains a failed full-route test: the host's navigation search times out at
+the first bridge book after the guest reaches it. The fixture now uses a direct
+walk for that small step. No recipe, exit or rejoin success is inferred from the
+partial run. Both complete arrival orders
+remain outstanding; the total estimate stays at about **42%**, with **5/39**
+campaign visits fully verified.
+
+The separate recovery fixture now passes with the optimized executable and the
+same public 40/20 ms delay/jitter in
+`private/coop/school-recovery-84df4abea6c8431fbd0072b0a61ca189/`.
+Both actual guard deaths lead to exactly 1,200 ticks of moving-partner spectating
+and revival at 25 Sanity, 48 units from the survivor. The subsequent team wipe
+restores the real earlier checkpoint's resources, school/enemy state and starting
+positions within ordinary movement bounds. All 1,930 comparable network states
+and eight coincident full school reports match. Both spectator, respawn and
+checkpoint views were inspected. This proves recovery at the entrance; it does
+not establish completion of the school route. Reproduce with
+`tools/test_coop_school_recovery.py --data <base> --exe target/release/looking-glass.exe`.
+
+The frozen build passes 746 Rust tests (one existing ignored test), debug and
+release builds, the native co-op world check and the native school state/lift
+check. The latter covers both lifts at 30/60/144 Hz, waiting/obstruction, book
+state contacts and fresh/return restoration; it is not a full two-player route.
+
+The optimized Red-first repeat in
+`private/coop/school-route-44d72453baad4b1690465f308c26a03a/` subsequently crosses
+all four books, plays the recipe scene and successfully reconnects a fresh guest.
+Five owners/reunions, 10,233 network states and 294 full school reports agree.
+The run still fails before the exit: the guest overshoots a lower shelf during
+the timed descent and dies from the longer fall. The fixture now uses a fresh
+theatre guard reward and a slower, observed edge descent. The Mallet approach
+is split at the lower stair after another run missed the long planned jump;
+the short approach reaches the platform in a focused probe. The essence near
+the Mallet is return-only and is not made available on the first visit. The
+original recipe cinematic contains one Alice in her original blue clothing,
+including when Red is the trigger owner; that costume has not been recolored.
+
+Focused combat and healing now pass on the same build/settings in
+`private/coop/school-combat-2b97ba23cace4d9f8b9ee9202be946ea/`.
+With both visible, the upper guard selects nearer Red, then nearer Blue; each
+checked hit removes seven Sanity only from the selected player. The fresh
+theatre-floor guard reward heals Blue 93 to 100 while Red stays at 58 with her
+copy retained; Red then heals to 83 without changing Blue's resources. Both
+clients observe the separate collections. All 1,662 comparable network states
+and 28 full school reports match. Targeting and healing views were inspected;
+the clients/helpers close and the invite is removed. Reproduce with
+`tools/test_coop_school_combat.py --data <base> --exe target/release/looking-glass.exe`.
+The updated full route takes that fresh reward, splits the Mallet approach at
+the lower stair, and attempts a slow descent onto the lower library shelf.
+Those changes still need a complete repeat. Overall progress remains 42%.
+
 ## Reproducing transport checks
 
 Build with `cargo build --locked`, then run:
