@@ -141,6 +141,19 @@ impl Interactions {
         world: &mut World,
         players: &mut [&mut Player],
     ) -> Result<()> {
+        if let Some(fortress) = &mut self.fortress {
+            let fixed = self.doors.iter().filter(|d| d.enabled && self.event_world.enabled(d.id))
+                .map(|d| d.collider.clone()).collect::<Vec<_>>();
+            fortress.advance_players(dt, map, world, players, &fixed)?;
+            for trigger in &mut self.triggers {
+                let entity = &map.entities[trigger.id.0];
+                if let Some(base) = entity.get("origin").and_then(|s| vector(s)) {
+                    if let Some((position, rotation)) = fortress.trigger_pose(&trigger.name, base) {
+                        trigger.volume = Collider::model(map, model(entity, map).unwrap(), position, rotation, false)?;
+                    }
+                }
+            }
+        }
         if let Some(pandemonium) = &mut self.pandemonium {
             let fixed = self.doors.iter().filter(|d| d.enabled && self.event_world.enabled(d.id))
                 .map(|d| d.collider.clone()).collect::<Vec<_>>();

@@ -430,6 +430,7 @@ fn run() -> Result<()> {
             "--coop-village-check" => mode = "coop-village",
             "--coop-pandemonium-check" => mode = "coop-pandemonium",
             "--coop-pandemonium-route-check" => mode = "coop-pandemonium-route",
+            "--coop-fortress-check" => mode = "coop-fortress",
             "--school-check" => mode = "school",
             "--footing-check" => mode = "footing",
             "--shelf-preview" => o.shelf_preview = true,
@@ -643,6 +644,7 @@ fn run() -> Result<()> {
         return coop::stage::check(&mut assets);
     }
     if mode == "coop-campaign" { return coop::campaign::check(&mut assets); }
+    if mode == "coop-fortress" { return fortress::coop_check::check(&mut assets); }
     if mode == "dice" {
         return dice::check(&mut assets);
     }

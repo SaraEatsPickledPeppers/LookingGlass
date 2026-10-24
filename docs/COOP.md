@@ -1214,6 +1214,34 @@ cinematic views were inspected. Both clients/helpers exit and invites are remove
 Combined with the earlier recovery/wipe evidence, Pandemonium is the second passed
 campaign row. The initial Fortress arrival images do not verify that next visit.
 
+## Fortress moving-room preparation
+
+The first Fortress controller now advances its moving room once for all living
+co-op bodies. It calculates every rider's proposed position before committing;
+an obstruction affecting either player holds both riders and the shared room
+clock until it clears. Original single-Alice scenes still use their original
+controller path. Moving trigger volumes are refreshed with the same poses as in
+single player. The split room is a first-arrival environmental trap, not a shared
+passenger lift, so its authored trigger does not gain an all-aboard wait.
+
+`--coop-fortress-check` stages two bodies on the real `split_middle` geometry.
+On build `bac55928de0966ab179553addb99d0c14888d14eab63f352fb34c906564d374f`,
+30/60/144 Hz checks carry both 220 units, preserve pause and serialized restore,
+and exactly match one-player carry. Separate obstructions of either rider stop
+both and resume after removal. Evidence: `private/coop-fortress-support-native1.log`.
+This is a staged support check, not a complete two-client campaign traversal.
+
+Both single-player Fortress routes match the previous `fe1f5fd9` build exactly:
+arrival takes 16,020 ticks, 10 jumps, one Blade throw and 22 Cards; return takes
+5,343 ticks, three jumps, one Blade throw and 41 Cards. Both finish at 100 Sanity
+with no combat damage, flight or recovery. Watched/skipped cinematic outcomes,
+pause, mid-scene restore, legacy saves and the one-shot ambush also pass.
+Evidence: `private/coop-fortress-sp-comparison1.json`,
+`private/coop-fortress-sp-route1.log`, `private/coop-fortress-sp-cinema1.log`.
+All 740 Rust tests pass (one pre-existing ignored), and the normal build succeeds.
+Full network routes, map-specific recovery, and the later return visit remain
+unverified. The campaign count remains two of 39 visits.
+
 ## Reproducing transport checks
 
 Build with `cargo build --locked`, then run:
