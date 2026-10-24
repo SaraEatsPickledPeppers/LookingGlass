@@ -1504,6 +1504,108 @@ route. Remote pain/pickup cue fidelity, menu-to-game audio handoff, rendered Rag
 presentation and the remaining campaign traversal/combat/recovery checks still
 need verification. No additional campaign visit or percentage point is credited.
 
+## Beyond normal-entrance network route
+
+`tools/test_coop_beyond.py` starts two independent profiles at the normal Beyond
+entrance and uses ordinary movement, jumping, attacks and lever inputs. It reads
+replicated machinery clocks to time the flipping corridor and moving stairs.
+It rejects deaths, checkpoint resets, obstructed bodies and unplanned recovery
+portals rather than treating those shortcuts as clean traversal. Each private
+run keeps the exact harness source, observations, final reports and captures.
+
+The explicit local test driver now accepts a bounded input-delay estimate for
+braking from delayed observations and a moving-step target. These affect only
+the driver's ordinary inputs; they do not change player physics, received state
+or the host's authority. Other route fixtures keep their existing zero-delay
+steering unless they opt in.
+
+The fourth public run, build `496972c8`, reaches arch step 11 from the entrance
+with 40 ms delay plus 20 ms jitter per sender. It crosses the flipping corridor,
+solves the puzzle with alternating players, completes the rolling walkway and
+observes all three Blue-owned scenes. Both players reach the arches with 100
+Sanity; the minimum along the route is 96 for Blue and 100 for Red. No player
+respawns, and 7,143 actual sent/restored network states agree. Evidence and both
+rendered views are retained in
+`private/coop/beyond-route-aa5a24b4065b48d7bb126d15146b0f9b/`.
+The run stops at the next stair because the driver required a vertical gap below
+90 units between steps whose gap is always 102.4. This is not a completed route.
+
+Earlier failed attempts are retained: the delayed guest overshot a jump landing
+(`1a1cbed4`), simultaneous automatic door presses prevented passage (`888da19b`),
+and delayed walking overshot a platform edge into a recovery portal (`217a1088`).
+The harness now anticipates braking, sends the leader through that narrow door
+first, and aims farther inside the platform. The moving-step driver uses the
+native route's 110-unit launch bound and descending upper-wave timing. The upper
+exit uses the native route's running approach, and the final door waits for the
+shuffle to settle before being approached. These test adjustments still require
+the resulting full route to pass.
+
+Two further repeats stopped at the gap after the third flipping platform. In
+`beyond-route-d12f8fe4562c400fb1d66815c43a99a8`, the guest's static plan treated a
+passing platform as permanent floor and never jumped. In
+`beyond-route-f11fb0abdca14a369a9affd8dba05144`, an outer-harness run-up lasted
+too long because it waited on periodic network reports. Both recovery portals
+were rejected. The driver now times bounded run-ups alongside local input
+sampling: host simulation ticks and the guest's local clock. A regression test
+checks that stalled guest snapshots cannot lengthen the run-up. The corridor
+gap now uses that ordinary running jump instead of a static-floor plan.
+
+Reproduce with a debug build and locally installed game data:
+
+```text
+python tools/test_coop_beyond.py --data <base-folder> --first blue --rejoin
+python tools/test_coop_beyond.py --data <base-folder> --first red --rejoin
+```
+
+For diagnosis, `--arches-only` stages the initial position at a verified point
+outside the rising-room trigger and then supplies ordinary inputs through the
+stairs. Its evidence folder and result explicitly identify it as a staged probe;
+it cannot complete a campaign row or establish normal-entrance traversal.
+`--corridor-only` similarly starts just before the corridor trigger. The two
+probe flags are mutually exclusive.
+That probe passes on build
+`7eec625b6f796e7878748a243126ca79df900c889b7cc00a9f4e61e02f915424` in
+`private/coop/beyond-arches-probe-0387775c95634254acd868903865bf8f/`:
+both climb the steps, complete the upper running jump and use the authored
+portal. There are 1,027 matching sent/restored states under the default delay
+and jitter. Both rendered upper-door views were inspected. The first probe
+(`20cac92e`) was rejected at startup because its proposed spawn was obstructed;
+the successful probe uses a clear point recorded in the normal traversal.
+
+The same build completes the whole corridor from the normal entrance in
+`private/coop/beyond-route-3ccb48bd81f34998802d1600e37f7f42/`, with 4,516
+matching sent/restored states and no respawns. That repeat stops before the
+first musical note: the navigation landing radius left the operator outside
+lever reach. The harness now finishes each lever approach with precise ordinary
+walking before its single E press.
+The next repeat (`beyond-route-4fd969389a574d3997680914aa974503`) clears the
+corridor and all three levers, then stops when a Boojum's scream knocks Blue
+off the spiral stairs into a recovery portal. The test had treated a nearby
+enemy hidden by the stairs as safe. It now fights from the upper landing before
+descending, allows nearby Boojums time to approach, and waits for existing
+scream projectiles and knockback to settle before departing a combat stop.
+The following full-route repeat (`beyond-route-d1833f4c4eca4f698d5a499781c15b5b`)
+stops earlier, at another static-planner misstep toward `(2980,3456,-64)`.
+The remaining corridor gaps now use explicit ordinary jumps too. The focused
+corridor probe passes on the same `7eec625b` build in
+`private/coop/beyond-corridor-probe-f26639b408ba470b82d9b3a6498ea8e7/`:
+both traverse all flipping-platform gaps and take the authored portal, with
+1,709 matching sent/restored states under 40/20 ms delay/jitter. Both rendered
+portal views show 100 Sanity and were inspected. This initial placement is
+staged. The final full route, revised combat stops and final shuffled-door exit
+still need an uninterrupted normal-entrance run; no full-route pass is claimed.
+
+Validation for this source build: 745 Rust tests pass with one existing ignored
+test, both debug and release builds succeed, and all seven source-package tests
+pass. The source identity matches the executable used by the passing stair
+probe. Evidence: `private/coop-beyond-route-tests5.log`,
+`private/coop-beyond-route-build5.log`, `private/coop-beyond-route-release5.log`,
+`private/coop-beyond-source-tests4.log` and `private/coop-beyond-source-identity5.json`.
+
+Internet joining and 40/20 ms delay/jitter are the defaults. Full routes in both
+orders, combat/resource checks, death/wipe and remaining rendered transport
+checks are still required for this campaign row. Overall credit remains 41%.
+
 ## Reproducing transport checks
 
 Build with `cargo build --locked`, then run:

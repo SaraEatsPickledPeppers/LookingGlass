@@ -27,9 +27,17 @@ struct Command {
     #[serde(default)]
     jump: bool,
     #[serde(default)]
+    runup: Option<Runup>,
+    #[serde(default)]
     use_aim: Option<Vec2>,
     #[serde(default)]
     watch_dialogue: bool,
+    #[serde(default)]
+    beyond_step: Option<usize>,
+    /// Test controller's estimate of observation plus input delivery delay.
+    /// Only anticipates steering; it never changes the received body or physics.
+    #[serde(default)]
+    input_lead: f32,
     navigate: bool,
     attack: bool,
     capture: bool,
@@ -38,19 +46,45 @@ struct Command {
 impl Command {
     fn validate(&self) -> Result<()> {
         ensure!(self.id > 0 && self.epoch > 0 && self.heartbeat > 0, "Invalid route command identity");
+        ensure!(self.input_lead.is_finite() && (0. ..=1.5).contains(&self.input_lead), "Invalid input lead");
         ensure!(self.goal.is_none_or(|p| p.is_finite() && p.abs().max_element() < 1_000_000.),
             "Invalid route goal");
         ensure!(self.goal.is_none() || self.marker.is_none(), "Choose a route goal or a marker");
         ensure!(self.marker.is_none_or(|i| i < 100_000), "Invalid route marker");
         ensure!(!(self.run || self.jump) || !self.navigate && self.rope.is_none(),
             "Explicit run/jump needs straight movement, not a planned route or rope command");
+        if let Some(runup) = &self.runup {
+            ensure!(self.jump && self.run && self.goal.is_some() && (1..=500).contains(&runup.millis)
+                && runup.wish.is_finite() && (runup.wish.length()-1.).abs()<0.01,
+                "Invalid running-jump approach");
+        }
         if let Some(rope) = &self.rope { rope.validate()?; }
         if let Some(aim) = self.use_aim {
             ensure!(aim.is_finite() && aim.x.abs() <= std::f32::consts::TAU && aim.y.abs() <= 1.56
                 && self.goal.is_none() && self.marker.is_none() && self.rope.is_none()
                 && !self.navigate && !self.attack && !self.run && !self.jump, "Invalid control-use command");
         }
+        if let Some(step) = self.beyond_step {
+            ensure!((1..=15).contains(&step) && self.goal.is_none() && self.marker.is_none()
+                && self.rope.is_none() && self.use_aim.is_none() && !self.navigate && !self.run && !self.jump,
+                "Invalid moving-step command");
+        }
         Ok(())
+    }
+}
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Runup {
+    millis: u16,
+    wish: Vec2,
+}
+impl Runup {
+    fn active(&self, local: PlayerId, ticks: u64, elapsed: Duration) -> bool {
+        if local == PlayerId::Blue {
+            ticks < (u64::from(self.millis)*120).div_ceil(1000)
+        } else {
+            elapsed < Duration::from_millis(u64::from(self.millis))
+        }
     }
 }
 #[derive(Clone, Deserialize)]
@@ -116,6 +150,7 @@ pub struct Report {
     /// guests restore enemy presentation without running another AI simulation.
     pub guards: Vec<EnemyReport<crate::combat::State>>,
     pub boojums: Vec<EnemyReport<crate::boojum::State>>,
+    pub beyond_steps: Option<[Vec3; 15]>,
     pub network_states: VecDeque<NetworkState>,
 }
 #[derive(Serialize)]
@@ -157,6 +192,7 @@ pub struct Driver {
     jumped: bool,
     rope_used: bool,
     control_used: bool,
+    step_height: Option<f32>,
     location: Option<(u64, u64, u64)>,
     pub report: Report,
 }
@@ -179,7 +215,7 @@ impl Driver {
         let now = Instant::now();
         Self { path, command: None, modified: None, polled: now, refreshed: now, used: now,
             worker: None, plan: VecDeque::new(), step_tick: 0, step_at: now, jumped: false, rope_used: false,
-            control_used: false, location: None, report: Report::default() }
+            control_used: false, step_height: None, location: None, report: Report::default() }
     }
     pub fn poll(&mut self, now: Instant) {
         if now.duration_since(self.polled) < Duration::from_millis(50) { return; }
@@ -198,6 +234,7 @@ impl Driver {
                 if self.command.as_ref().is_none_or(|old| old.id != command.id) {
                     self.plan.clear(); self.jumped = false; self.rope_used = false; self.location = None;
                     self.control_used = false;
+                    self.step_height = None;
                     self.report.error = None;
                 }
                 self.report.command = Some(command.id);
@@ -218,6 +255,8 @@ impl Driver {
     pub fn observe(&mut self, frame: &Frame, arena: &Arena, world: &World) {
         self.report.observed_epoch = frame.epoch;
         self.report.observed_tick = frame.tick;
+        self.report.beyond_steps = arena.stage.interactions.beyond.as_ref()
+            .map(|b|std::array::from_fn(|i|b.step_goal(i+1)));
         self.report.clear = frame.players.each_ref().map(|b| !b.stats.alive() || world.body_clear(b.player.feet));
         self.report.blade_pickups = frame.players.each_ref().map(|b| b.stats.copies(0) > 0
             && arena.pickups.iter().any(|p| matches!(p.kind, crate::inventory::PickupKind::Weapon(0))
@@ -272,7 +311,10 @@ impl Driver {
         self.report.phase = "idle";
         let body = &frame.players[local.index()];
         let location = (frame.epoch, body.warped_at, body.spawned_at);
-        if self.location != Some(location) { self.plan.clear(); self.jumped = false; self.location = Some(location); }
+        if self.location != Some(location) {
+            self.plan.clear(); self.jumped = false; self.location = Some(location);
+            self.step_tick = frame.tick; self.step_at = now;
+        }
         // Never spawn a second worker while a superseded plan is still running.
         if let Some(worker) = &self.worker {
             let result = match worker.result.try_recv() {
@@ -340,6 +382,35 @@ impl Driver {
                 keys.weapon = Some(0); keys.primary = delta.length()<80.; keys.alternate = !keys.primary;
             }
         }
+        if let Some(index) = command.beyond_step {
+            let Some(beyond) = &arena.stage.interactions.beyond else {
+                self.report.error = Some("Moving-step command requires Beyond the Wall".into()); return;
+            };
+            let goal = beyond.step_goal(index);
+            let delta = goal - body.player.feet;
+            let distance = delta.truncate().length();
+            self.report.expected = Some(goal);
+            self.report.reached = distance < 20. && body.player.grounded && delta.z.abs() < 4.;
+            if self.report.reached { self.report.phase = "on moving step"; return; }
+            let falling = self.step_height.is_some_and(|z|goal.z < z);
+            self.step_height = Some(goal.z);
+            // Steps four places apart share their wave: the next is always
+            // 102.4 units higher. Start while it falls from the upper part of
+            // the wave, as in the native route, rather than waiting for an
+            // impossible sub-90-unit separation or launching at the trough.
+            let upper_wave = index > 12 || goal.z > 25.6*(16-index) as f32 + 80.;
+            if !self.jumped && body.player.grounded && falling && upper_wave && delta.z < 110. && distance < 290. {
+                keys.jumps += 1; self.jumped = true;
+            }
+            if self.jumped {
+                let steering = delta.truncate() - body.player.velocity.truncate()*command.input_lead;
+                keys.wish = steering.normalize_or_zero()
+                    * ((2.*420.*steering.length()).sqrt().min(320.)*0.95/320.);
+                keys.run = true;
+            }
+            self.report.phase = "timing moving-step jump";
+            return;
+        }
         let goal = if let Some(marker) = command.marker {
             match map.entities.get(marker).and_then(|e| e.get("origin")).and_then(|s| crate::interaction::vector(s))
                 .filter(|p| p.is_finite() && p.abs().max_element() < 1_000_000.) {
@@ -388,10 +459,19 @@ impl Driver {
             if self.worker.is_some() { self.report.phase="planning"; }
         } else {
             self.report.phase="walking";
-            keys.wish=delta.truncate().normalize_or_zero()*(delta.truncate().length()/48.).min(1.);
+            let steering = delta.truncate() - body.player.velocity.truncate()
+                * command.input_lead;
+            keys.wish=steering.normalize_or_zero()*(steering.length()/48.).min(1.);
             keys.swim=keys.wish.extend(0.);
             keys.run=command.run;
-            if command.jump && !self.jumped { keys.jumps+=1; self.jumped=true; }
+            if let Some(runup) = command.runup.as_ref().filter(|r|
+                !self.jumped && r.active(local,frame.tick.saturating_sub(self.step_tick),now.duration_since(self.step_at))) {
+                // Time this short approach beside input sampling. Waiting for
+                // a report in the outer harness can double its duration and
+                // send a player off the pad before the jump arrives.
+                keys.wish=runup.wish; keys.swim=keys.wish.extend(0.);
+                self.report.phase="running approach";
+            } else if command.jump && !self.jumped { keys.jumps+=1; self.jumped=true; }
         }
         if !keys.primary && !keys.alternate && keys.wish.length()>0. {
             keys.yaw=keys.wish.y.atan2(keys.wish.x); keys.pitch=0.;
@@ -414,6 +494,15 @@ impl Driver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn running_approach_uses_local_time_when_guest_snapshots_stall() {
+        let runup=Runup { millis:150,wish:Vec2::X };
+        assert!(runup.active(PlayerId::Blue,17,Duration::from_secs(1)));
+        assert!(!runup.active(PlayerId::Blue,18,Duration::ZERO));
+        assert!(runup.active(PlayerId::Red,900,Duration::from_millis(149)));
+        assert!(!runup.active(PlayerId::Red,0,Duration::from_millis(150)));
+        assert!(!runup.active(PlayerId::Red,0,Duration::from_millis(400)));
+    }
     #[test]
     fn delayed_rope_acknowledgement_does_not_repeat_grab_or_release_edges() {
         let mut world = World::fixture(&[]);
@@ -448,7 +537,15 @@ mod tests {
         let base=serde_json::json!({"id":1,"heartbeat":1,"epoch":1,"goal":null,"navigate":false,"attack":true,"capture":false,"finish":false});
         let old:Command=serde_json::from_value(base.clone()).unwrap(); assert!(old.validate().is_ok());
         assert!(old.rope.is_none() && old.marker.is_none() && !old.horizontal && !old.run && !old.jump);
-        assert!(old.use_aim.is_none() && !old.watch_dialogue);
+        assert!(old.use_aim.is_none() && !old.watch_dialogue && old.beyond_step.is_none());
+        for step in [0,16] {
+            let mut input=base.clone(); input["beyond_step"]=step.into();
+            assert!(serde_json::from_value::<Command>(input).unwrap().validate().is_err());
+        }
+        for lead in [-0.1,1.6] {
+            let mut input=base.clone(); input["input_lead"]=lead.into();
+            assert!(serde_json::from_value::<Command>(input).unwrap().validate().is_err());
+        }
         let mut using = base.clone(); using["use_aim"] = serde_json::json!([0.,0.]); using["attack"] = false.into();
         assert!(serde_json::from_value::<Command>(using.clone()).unwrap().validate().is_ok());
         using["use_aim"] = serde_json::json!([0.,2.]);

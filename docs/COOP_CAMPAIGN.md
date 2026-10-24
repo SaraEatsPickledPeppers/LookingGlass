@@ -213,12 +213,41 @@ unskipped six-line village opening with both clients' actual audio output
 (`private/coop/village-voice-0e430b62bac8415a8ecf762320d21940/`). These focused
 checks add sound evidence without granting another full campaign row.
 
+Normal-entrance network traversal now reaches arch step 11 on build
+`496972c89d1bfb2d2f9b3518f8f90e929ebb6e8ef62e09df31fb95650c5d57da`
+in `private/coop/beyond-route-aa5a24b4065b48d7bb126d15146b0f9b/`.
+Both independent clients cross the flipping corridor, solve the musical puzzle
+with alternating operators, cross all nine rolling-walkway stages and take the
+two authored portals using ordinary inputs. All three scenes have Blue as owner;
+both players reach the arches at 100 Sanity, with no respawns. There are 7,143
+matching actual sent/restored states under 40 ms delay plus 20 ms jitter.
+The run stops on the next stair command: its test controller required less than
+90 units of vertical separation between steps that remain 102.4 units apart.
+This is partial traversal evidence, not an exit, rejoin or recovery pass.
+The focused delayed public stair probe subsequently passes on build
+`7eec625b6f796e7878748a243126ca79df900c889b7cc00a9f4e61e02f915424`:
+`private/coop/beyond-arches-probe-0387775c95634254acd868903865bf8f/`.
+Both players climb the moving steps, make the running jump to the upper door
+and take the authored portal, with 1,027 matching sent/restored states and both
+rendered upper-door views inspected. Its initial placement is staged outside
+the rising-room trigger, so it adds no normal-entrance/full-row credit.
+On that same build, a focused public corridor probe passes all flipping-platform
+gaps and the authored portal in
+`private/coop/beyond-corridor-probe-f26639b408ba470b82d9b3a6498ea8e7/`, with
+1,709 matching states and both rendered 100-Sanity portal views inspected.
+Its initial placement is staged before the corridor trigger. Subsequent full
+repeats have not reached the exit: one stops at lever range, one at a Boojum
+knockback on the spiral stairs, and one at a later corridor navigation gap.
+The harness now uses precise lever approaches, broader combat waits and explicit
+corridor jumps. A final normal-entrance pass, Red-leading repeat, combat/personal
+resource checks, recovery matrix and remaining rendered transports are open.
+
 | # | Map | Entrance | Co-op evidence |
 | ---: | --- | --- | --- |
 | 1 | `gvillage` | `Initial` | Passed (combined evidence above): both arrival orders, all scenes/reunions, nearest-visible guard damage in both roles, individual health/Blade pickups, matching encounter/player states, both death/spectator/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit; shared boarding N/A |
 | 2 | `pandemonium` | `Initial` | Passed (combined evidence above): native and delayed public routes in both orders, rope/cart, four scenes/three reunions, personal Cards/healing rewards, nearest-visible guard damage in both roles, full-route encounter/player comparison, both hazard death/respawn roles, saved-checkpoint wipe, trailing partner and fresh guest rejoin-to-exit |
 | 3 | `fortress1` | `Initial` | Passed (combined evidence above): both delayed public route orders, original scene/reunion, independent portals, paired split supports, upper jumps and exit, fresh guest rejoin, nearest-visible Boojum selection/damage in both roles, separate healing, coherent enemies, both combat death/spectator/respawn roles and saved-checkpoint wipe; shared boarding N/A |
-| 4 | `fortress2` | `Initial` | Partial: native paired lift/boarding, rolling-bridge wait, either-player levers and Rage scene/personal pickups; staged delayed public musical notes/reset/rejoin with real audio pass. Full routes, combat/recovery and remaining rendered/network verification are open |
+| 4 | `fortress2` | `Initial` | Partial: native lift/boarding, levers and Rage scene/personal pickups; staged public musical notes/reset/rejoin with audio; normal-entrance traversal through corridor, puzzle, rolling bridge and arch step 11; separate delayed public corridor and complete moving-stair probes. Full routes, combat/recovery and remaining rendered/network verification are open |
 | 5 | `fortress1` | `fortress1_start2` | Not run |
 | 6 | `skool1` | `Initial` | Not run |
 | 7 | `skool2` | `Initial` | Not run |
