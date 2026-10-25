@@ -2862,3 +2862,51 @@ No full School Two traversal or new campaign visit is credited. Overall progress
 remains about 42%, with five of 39 full visits historically verified and the
 later player-contact changes still requiring their campaign repeats. All
 checks in this change used compact numerical reports; no images were opened.
+
+### Gym waiting point beside the swinging lamp
+
+A native replay of the failed School Two report reproduces the stationary
+guest exactly. Its target `(1750, -2275, 440)` intersects `gym_light1` at that
+phase. Removing that lamp only in the private diagnostic clears the body trace;
+removing its rod does not. The normal co-op mover safely holds the lamp against
+Alice, while the test controller keeps steering toward its occupied target.
+The former waypoint is obstructed for 113 of 600 sampled ticks in a full swing.
+
+The fixture now uses `(1680, -2350, 440)` on the adjacent diagonal walkway for
+the departure and return. In the recorded world, three ordinary movement
+segments reach this point within the original eight-unit arrival radius without
+leaving support. The point remains clear and supported through all 600 ticks of
+the lamp's cycle. The focused gym test also waits 600 gameplay ticks after both
+players arrive and requires the lamp to advance at least 4.9 seconds, detecting
+a blocked waiting position even when neither player takes damage.
+
+This changes test waypoints and assertions only. Game source remains build
+`8f056d4f67ab9af79d2cfd93b2015afe9a47ba29cc306b181da6b4460e0fc41a`.
+Numerical diagnosis and validation are retained in `private/gym-stall-probe.json`,
+`private/gym-stall-candidates.json` and `private/gym-stall-detour.json`.
+Two-client repeats and the full-route result are recorded separately below.
+
+Both focused internet orders pass with 40/20 ms delay/jitter in
+`private/coop/regression-suite-cabdb662c9a64637ac62471f1d9f1783`.
+Blue-first takes 105.83 seconds and records 1,443 matching player/enemy and
+shared-world states; Red-first takes 111.62 seconds with 1,559 matches. Both
+finish at 100/100 health without death, respawn or checkpoint restoration.
+The lamp advances 5.015 and 5.174 seconds respectively during the waiting check.
+These staged components retain their limited scope; a full entrance-to-return
+repeat is a separate requirement.
+
+The normal-entrance Red-first repeat on this unchanged game build fails before
+reaching the gym, after 333.22 seconds. Both personal Dice pickups and the
+reunion succeed; Red returns upstairs, but Blue falls during the return jump.
+The recorded plan contains a valid takeoff and lateral landing approach. The
+driver changes from `navigating` to `settling landing` while Blue is still beside
+the landing platform, discards the remaining plan, and falls against its side.
+This identifies premature landing control as the next investigation; it does
+not establish a verified fix for that separate failure.
+
+Evidence is retained in
+`private/coop/regression-suite-311b50cd522d4f03868f7a3122e3ad59` and
+`private/coop/school2-route-00c91b7e8c8043998d39d0af8547d81e`, with a compact
+movement extract in `private/coop-altar-host-fall.json`. No new Dice milestone,
+full traversal or campaign credit is claimed from this failed run. Progress
+remains about 42%; no images were opened.

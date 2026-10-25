@@ -31,14 +31,24 @@ class GymJumpPair(School2Pair):
         self.wait(1)
         self.go((2150, -2000, 0))
         self.gym_ascent()
-        self.wait(1)
+        # A waiting point must stay clear for a whole five-second swing, not
+        # merely happen to be free when the first player arrives. The mover
+        # safely stops against a body, so health alone cannot detect this stall.
+        def pendulum_time():
+            return next(o['time'] for o in self.school()['objects'] if o['name'] == 'gym_pend1')
+        before = pendulum_time()
+        tick = self.reports['host']['frame']['tick']
+        self.until(lambda: self.reports['host']['frame']['tick'] >= tick + 600, 15)
+        advanced = pendulum_time() - before
+        assert advanced >= 4.9, f'Waiting players blocked the gym lamp: only {advanced:.3f}s of motion'
+        self.evidence['gym_departure'] = dict(goal=self.gym_exit, lamp_advance_seconds=advanced)
         for report in self.reports.values():
             assert report['visit']['map'] == 'skool2' and report['visit']['epoch'] == 1
             for index,body in enumerate(report['frame']['players']):
                 assert body['player']['grounded']
                 assert abs(body['player']['feet'][2] - 440) < 2
                 first_index = 0 if self.first == 'host' else 1
-                goal = (1750, -2275) if index == first_index else (1600, -2275)
+                goal = self.gym_exit[:2] if index == first_index else (1600, -2275)
                 assert distance(body['player']['feet'][:2], goal) < 100
         for rows in self.history.values():
             assert all(row['checkpoint_generation'] == 0 for row in rows)

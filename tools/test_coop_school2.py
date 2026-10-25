@@ -23,6 +23,9 @@ class School2Pair(SchoolPair):
     expected_scenes = {'dice_cat', 'extendBleachers', 'Old_Gnome_Mushroom',
                        'OG1_Warp', 'Old_Gnome_SpiceDrops', 'Skool2_GrowLollypop',
                        'Skool2_LastGnome_Cinema'}
+    # The former point (1750, -2275, 440) lies inside gym_light1 during part
+    # of its swing. Wait on the supported diagonal walkway beside the lamp.
+    gym_exit = (1680, -2350, 440)
 
     @property
     def first(self):
@@ -134,7 +137,7 @@ class School2Pair(SchoolPair):
                    (1030, -2560, 0), (1030, -2880, 0), (1200, -2880, 0),
                    (1470, -2880, 0), (1470, -3040, 0), (2150, -3040, 0), (2150, -2000, 0)]])
         self.gym_ascent()
-        self.legs([((1750, -2275, 440), True), ((1472, -2560, 440), False),
+        self.legs([(self.gym_exit, True), ((1472, -2560, 440), False),
                    ((1710, -2800, 440), False), ((1880, -2940, 440), True),
                    ((2077, -3090, 440), False)])
         self.secure(radius=1400)
@@ -160,12 +163,12 @@ class School2Pair(SchoolPair):
                       ((2440, -2150, 192), False), ((2270, -2040, 250), True),
                       ((1950, -2016, 400), False), ((1710, -2000, 448), False),
                       ((1600, -2275, 440), True)],
-                     first_exit=[((1750, -2275, 440), True)])
+                     first_exit=[(self.gym_exit, True)])
 
     def laboratory(self):
         self.go((1880, -2940, 440))
         self.passage([(p, True) for p in [(1880, -2940, 440), (1710, -2800, 440),
-                      (1472, -2560, 440), (1750, -2275, 440), (1600, -2275, 440),
+                      (1472, -2560, 440), self.gym_exit, (1600, -2275, 440),
                       (1710, -2000, 448), (1950, -2016, 400), (2270, -2040, 250),
                       (2440, -2150, 192), (2400, -2150, 160), (2150, -2080, 0)]])
         self.legs([(p, False) for p in [(2150, -3040, 0), (1470, -3040, 0),
