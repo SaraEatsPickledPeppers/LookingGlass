@@ -130,7 +130,7 @@ def main():
     parser.add_argument('--jitter-ms', type=int, default=20)
     parser.add_argument('--school-checkpoint', type=Path)
     parser.add_argument('--school2-checkpoint', type=Path)
-    parser.add_argument('--school2-resume-point', choices=('gym', 'laboratory-approach'), default='gym')
+    parser.add_argument('--school2-resume-point', choices=('gym', 'laboratory-approach', 'laboratory-entrance', 'greenhouse'), default='gym')
     parser.add_argument('--school-resume-point', choices=('theatre', 'balcony', 'spiral', 'library', 'bridge', 'descent'))
     parser.add_argument('--first', choices=('blue', 'red'), default='blue',
                         help='Arrival order for the resumed school case; full cases name their own order')

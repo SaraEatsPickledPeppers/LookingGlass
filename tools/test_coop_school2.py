@@ -16,6 +16,33 @@ from test_coop_village import Pair
 from test_coop_play import ROOT, distance
 
 
+def verify_quest_completion(rows):
+    """Check collection and consumption in order, including both inventories."""
+    ingredients = {'mushroom', 'spice', 'lollipop', 'jumbogrow'}
+    phases = [
+        ('Jumbogrow', {'mushroom', 'spice', 'jumbogrow'}, set()),
+        ('Growing', {'mushroom', 'spice'}, {'jumbogrow'}),
+        ('Lollipop', {'mushroom', 'spice', 'lollipop'}, {'jumbogrow'}),
+        ('FinalDialogue', {'mushroom', 'spice', 'lollipop'}, {'jumbogrow'}),
+        ('Rewards', set(), ingredients),
+        ('Complete', {'potion', 'star'}, ingredients),
+    ]
+    remaining = iter(rows)
+    evidence = {}
+    for phase, present, consumed in phases:
+        for row in remaining:
+            quest = row['school']['quest']
+            inventories = [quest['items']] + [b['stats']['school_items'] for b in row['players']]
+            if quest['stage'] == phase and all(
+                    all(items[k] for k in present) and all(not items[k] for k in consumed)
+                    for items in inventories):
+                evidence[phase] = row['tick']
+                break
+        else:
+            raise AssertionError(f'Missing ordered quest evidence for {phase}: collection or consumption differs')
+    return evidence
+
+
 class School2Pair(SchoolPair):
     map_name = 'skool2'
     next_map = 'skool1'
@@ -258,6 +285,9 @@ class School2Pair(SchoolPair):
             self._departure_first = original_order
         print('PASS School Two paired laboratory stairs and entrance fight', flush=True)
         self.save_checkpoint('laboratory-entrance')
+        self.laboratory_rescue()
+
+    def laboratory_rescue(self):
         self.go((-64, -1270, 256))
         self.wait(8)
         self.secure()
@@ -278,27 +308,59 @@ class School2Pair(SchoolPair):
         self.legs([((40, -930, 256), False), ((150, -600, 256), False), ((36, -452, 256), False)])
         self.until(lambda: all(self.school(r)['quest']['items']['jumbogrow'] for r in self.reports), 15)
         print('PASS School Two rescue, Spice Drops and Jumbogrow', flush=True)
+        self.save_checkpoint('greenhouse')
 
-    def portal(self, goal):
-        for role in (self.first, self.partner):
+    def portal(self, goal, clearance):
+        def transfer_done(role, before):
             index = 0 if role == 'host' else 1
-            before = self.bodies()[index]['warped_at']
-            self.set(role, goal)
-            self.until(lambda: all(self.bodies(r)[index]['warped_at'] > before for r in self.reports), 30)
-            self.set(role)
-            self.wait(.5)
+            return all(self.bodies(r)[index]['warped_at'] > before for r in self.reports)
+
+        def record(role):
+            index = 0 if role == 'host' else 1
             self.evidence['portals'].append(dict(role=role, goal=goal,
                 warped_at=self.bodies()[index]['warped_at'], feet=self.bodies()[index]['player']['feet']))
-            if role == self.first:
-                self.move_aside(role)
+
+        before = {role: self.bodies()[0 if role == 'host' else 1]['warped_at']
+                  for role in (self.first, self.partner)}
+        self.set(self.partner)
+        self.set(self.first, goal)
+        self.until(lambda: transfer_done(self.first, before[self.first]), 30)
+        record(self.first)
+        # Bring the partner through while the first player walks off the pad.
+        # Waiting for a precise clearance first strands a hurt player in the
+        # arrival fight for several extra seconds. Normal portal placement and
+        # player collision still choose separate supported arrivals.
+        self.set(self.first, clearance)
+        self.set(self.partner, goal)
+        self.until(lambda: transfer_done(self.partner, before[self.partner]), 30)
+        record(self.partner)
+        self.set(self.partner)
+        self.until(lambda: self.reached(self.first) and all(
+            b['player']['grounded'] for r in self.reports for b in self.bodies(r)), 30)
+        index = 0 if self.first == 'host' else 1
+        self.evidence.setdefault('portal_clearances', []).append(dict(
+            role=self.first, goal=clearance, feet=self.bodies()[index]['player']['feet'],
+            tick=self.reports['host']['frame']['tick']))
 
     def greenhouse(self):
         self.legs([(p, False) for p in [(150, -600, 256), (40, -930, 256),
                    (-64, -1270, 256), (-64, -1504, 256)]])
-        self.portal((-312, -1504, 256))
-        self.legs([(p, False) for p in [(-1120, -2540, 512), (-1470, -2560, 512),
-                   (-1740, -2560, 512), (-2070, -2560, 512), (-2320, -2560, 512),
-                   (-2640, -2560, 512), (-2780, -2560, 512)]])
+        self.portal((-312, -1504, 256), (-1120, -2540, 512))
+        original_order = getattr(self, '_departure_first', None)
+        health = [b['stats']['sanity'] for b in self.bodies()]
+        self._departure_first = 'host' if health[0] >= health[1] else 'guest'
+        self.evidence['greenhouse_corridor_first'] = dict(role=self.first, health=health)
+        try:
+            # Approach the corridor encounter with both players before waiting
+            # for it to clear. The doorway can expose a distant guard without
+            # giving the first player an effective shot from that stopping spot.
+            for point in [(-1120, -2540, 512), (-1470, -2560, 512), (-1740, -2560, 512)]:
+                self.go(point, fight=False)
+            self.secure()
+            self.legs([(p, False) for p in [(-2070, -2560, 512), (-2320, -2560, 512),
+                       (-2640, -2560, 512), (-2780, -2560, 512)]])
+        finally:
+            self._departure_first = original_order
         self.go((-3010, -2550, 488), navigate=True)
         self.wait(7)
         if not all(self.school(r)['quest']['items']['lollipop'] for r in self.reports):
@@ -311,14 +373,23 @@ class School2Pair(SchoolPair):
             self.rejoin_guest()
         self.legs([(p, False) for p in [(-2320, -2560, 512), (-2070, -2560, 512),
                    (-1740, -2560, 512), (-1470, -2560, 512), (-1120, -2540, 512)]])
-        self.portal((-1112, -2280, 512))
+        self.portal((-1112, -2280, 512), (-64, -1504, 256))
 
     def rewards(self):
         self.legs([((-64, -1504, 256), False), ((-64, -1020, 256), False), ((0, -820, 256), False)])
         self.wait(9)
         self.until(lambda: all(self.school(r)['quest']['stage'] in ('Rewards', 'Complete') for r in self.reports), 45)
-        self.legs([((-28, -695, 256), False), ((0, -760, 256), False)])
-        self.until(lambda: all(self.school(r)['quest']['stage'] == 'Complete' for r in self.reports), 15)
+        self.legs([((-28, -695, 256), False)])
+        # Both rewards can be collected during the first paired approach.
+        # Do not force an extra crossing of the occupied condenser pad after
+        # the quest has already confirmed both rewards for both players.
+        complete = lambda: all(self.school(r)['quest']['stage'] == 'Complete'
+            and all(b['stats']['school_items']['potion'] and b['stats']['school_items']['star']
+                    for b in self.bodies(r)) for r in self.reports)
+        if not complete():
+            self.go((0, -760, 256))
+        self.until(complete, 15)
+        self.save_checkpoint('school2-complete')
         self.go((-64, -1270, 256))
         self.until(self.arrived, 90)
 
@@ -355,9 +426,7 @@ class School2Pair(SchoolPair):
                 assert self.reports[role]['visit']['map'] == 'skool2' and self.reports[role]['visit']['epoch'] == 1
             if not partial:
                 assert self.reports[role]['visit']['entry'] == 'skool1_start2'
-                assert any(r['school']['quest']['stage'] == 'Complete' and
-                           all(r['school']['quest']['items'][k] for k in ('mushroom', 'spice', 'lollipop', 'potion', 'star'))
-                           for r in visit)
+                self.evidence.setdefault('quest_timeline', {})[role] = verify_quest_completion(visit)
                 assert sum(p['role'] == role for p in self.evidence['portals']) == 2
             self.evidence[role] = dict(owners={s: sorted(ids) for s, ids in owners.items()})
         self.evidence['minimum_will'] = [min(r['players'][i]['stats']['will']

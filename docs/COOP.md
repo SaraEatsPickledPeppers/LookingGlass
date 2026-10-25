@@ -3318,3 +3318,40 @@ visit remain unverified by this run. Evidence:
 `private/coop/school2-resume-f4a0daa42b19416086a0a8a88d0df780` (repeat) and
 `private/coop/school2-resume-cd18c27bfc2c4005b61b1e72e43071f2`
 (235.47 seconds, earlier scene-wait failure). No screenshots were opened.
+
+School Two now retains ordinary `greenhouse` and `school2-complete` checkpoints
+as well. The resume fixture/suite accepts `laboratory-entrance` and `greenhouse`
+entry points, validating the saved location, quest and personal story items
+before copying the unchanged file into a new profile. Greenhouse resumes
+explicitly exclude the already completed Spice Drops scene from their coverage.
+
+The portal test starts the partner's approach immediately after the first
+transfer is confirmed, while the first player walks off the arrival pad. Both
+actual transfers and supported arrivals are still required. The corridor uses
+short paired approaches with the healthier player in front, restoring the
+chosen order before the growth scene. Rewards are checked in both inventories;
+the test only visits the second pickup position if a reward is still missing.
+
+The final quest checker now verifies the ordered collection, use and consumption
+of ingredients, followed by both rewards, in the shared quest and both personal
+inventories. Its former assertion incorrectly required ingredients to remain
+after mixing consumed them. Rechecking the recorded Red laboratory-entrance
+segment passes all history checks, including 8,853 matching sent/restored world
+and complete states, 189 coincident reports, both portal directions, Red-owned
+scenes, guest reconnection and the authored exit at 100/65 health. Four altered
+versions of the real recording (missing Spice, retained ingredients, missing
+Red potion, omitted growth phase) are rejected. This is explicitly offline
+re-verification; the original process exit remains 1. Evidence:
+`private/coop/school2-resume-9209434bfc9e44259feeb2c8c61bf7a0/history-verification.json`.
+
+The final Blue-leading greenhouse-to-exit run passes live in 377.52 seconds,
+using the unchanged `844ea95` game build, public internet, 40 ms delay and 20 ms
+jitter. Both growth/final scenes belong to Blue, all four portal transfers pass,
+and a new guest process preserves resources and progress. Both enter
+`skool1_start2` alive at 71/100 health, with no respawn or checkpoint restoration.
+All 6,232 comparable sent/restored world and complete states match, along with
+84 coincident full reports. Evidence:
+`private/coop/school2-resume-fc769a3353a84f5c80859b195cec789e/result.json`.
+All owned processes close and no screenshots were opened. The complete School
+Two traversal in both orders and the remaining recovery matrix are still open;
+these checkpoint segments do not complete a campaign row.
