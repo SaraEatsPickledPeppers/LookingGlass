@@ -295,14 +295,25 @@ class SchoolPair(PandemoniumPair):
         # transported the waiting partner beyond the passage.
         partner_index = 0 if self.partner == 'host' else 1
         old_warp = self.bodies()[partner_index]['warped_at']
+        def completed_reunion():
+            return partner_done is not None and partner_done() and all(
+                r['frame']['players'][partner_index]['warped_at'] > old_warp
+                and r['combat']['stage']['owner'] is None
+                and all(b['player']['grounded'] for b in r['frame']['players'])
+                for r in self.reports.values())
         def traverse(role,role_goals):
             for goal,navigate in role_goals:
                 self.set(role,goal,navigate,speed_limit=speed_limit if not navigate else None)
-                self.until(lambda:self.reached(role))
-                # A planned jump accepts the first grounded arrival within
-                # its landing radius. Switch to damped ordinary steering now:
-                # delayed inputs can otherwise carry the guest off the stairs
-                # and restart that jump plan during the combat wait.
+                final_pickup = role == self.first and role_goals is goals and goal == goals[-1][0]
+                self.until(lambda:self.reached(role) or (final_pickup and completed_reunion()))
+                if final_pickup and completed_reunion():
+                    # Both actual pickups and a completed, grounded reunion
+                    # satisfy this component. Do not push toward the original
+                    # point when the scene placed the other body across it.
+                    self.secure()
+                    return
+                # Keep damped ordinary steering during combat rather than
+                # restarting a jump plan when delayed movement leaves its pad.
                 self.set(role,goal,speed_limit=speed_limit)
                 if role == self.first:
                     self.clear_departure(goal)
@@ -334,7 +345,7 @@ class SchoolPair(PandemoniumPair):
                 # A scene may already have delivered the waiting player's
                 # personal pickup. A caller can verify that outcome directly
                 # instead of forcing a second approach across an occupied pad.
-                if partner_done is not None and self.bodies()[partner_index]['warped_at'] > old_warp and partner_done():
+                if completed_reunion():
                     self.evidence.setdefault('passage_partner_completed',[]).append(dict(
                         role=self.partner,warped_at=self.bodies()[partner_index]['warped_at'],goals=goals))
                     break
@@ -345,6 +356,11 @@ class SchoolPair(PandemoniumPair):
                     traverse(role,first_exit)
                     self.evidence.setdefault('passage_first_exits',[]).append(dict(
                         role=role,goals=first_exit,feet=self.bodies()[0 if role == 'host' else 1]['player']['feet']))
+                    # The explicit exit already supplies a separate waiting
+                    # place. Do not demand another sideways step on a narrow
+                    # walkway when the partner's landing is safely behind it.
+                    assert distance(first_exit[-1][0],goals[-1][0]) >= 80
+                    continue
                 self.move_aside(role)
         print('PASS school passage',goals,flush=True)
 

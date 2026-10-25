@@ -96,7 +96,7 @@ class School2Pair(SchoolPair):
             self.passage([(p, False) for p in stairs], speed_limit=20)
         altar = (-906, -3170, -192)
         self.passage([(altar, True)],partner_done=lambda:
-            all('skool2:44' in b['stats']['collected'] for b in self.bodies()),
+            all('skool2:44' in b['stats']['collected'] for r in self.reports for b in self.bodies(r)),
             first_exit=[(stairs[-1], True)])
         self.wait(.5)
         assert all('skool2:44' in b['stats']['collected'] for b in self.bodies()), 'Personal Demon Dice missing'
@@ -116,6 +116,15 @@ class School2Pair(SchoolPair):
                    (480, -2560, 0), (800, -2560, 0), (1150, -2560, 0),
                    (1030, -2560, 0), (1030, -2880, 0), (1200, -2880, 0),
                    (1470, -2880, 0), (1470, -3040, 0), (2150, -3040, 0), (2150, -2000, 0)]])
+        self.gym_ascent()
+        self.legs([((1750, -2275, 440), True), ((1472, -2560, 440), False),
+                   ((1710, -2800, 440), False), ((1880, -2940, 440), True),
+                   ((2077, -3090, 440), False)])
+        self.secure(radius=1400)
+        self.until(lambda: all(self.school(r)['quest']['stage'] == 'Laboratory' for r in self.reports), 45)
+        print('PASS School Two gym lever, bleachers and three Boojums', flush=True)
+
+    def gym_ascent(self):
         self.set(self.first, (2163, -1859, 64), navigate=True)
         self.until(lambda: self.reached(self.first), 45)
         self.set(self.first, (2163, -1859, 64))
@@ -133,13 +142,8 @@ class School2Pair(SchoolPair):
         self.passage([((2150, -2080, 0), False), ((2400, -2150, 160), False),
                       ((2440, -2150, 192), False), ((2270, -2040, 250), True),
                       ((1950, -2016, 400), False), ((1710, -2000, 448), False),
-                      ((1600, -2275, 440), True)])
-        self.legs([((1750, -2275, 440), False), ((1472, -2560, 440), False),
-                   ((1710, -2800, 440), False), ((1880, -2940, 440), True),
-                   ((2077, -3090, 440), False)])
-        self.secure(radius=1400)
-        self.until(lambda: all(self.school(r)['quest']['stage'] == 'Laboratory' for r in self.reports), 45)
-        print('PASS School Two gym lever, bleachers and three Boojums', flush=True)
+                      ((1600, -2275, 440), True)],
+                     first_exit=[((1750, -2275, 440), True)])
 
     def laboratory(self):
         self.go((1880, -2940, 440))

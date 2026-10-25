@@ -248,6 +248,27 @@ impl NavigationClock {
     }
 }
 
+// A broad planner landing is not a settled destination. Correct it at input
+// sampling frequency; the outer harness reports only every 200 ms and can miss
+// a brief landing entirely while delayed movement carries Alice over its edge.
+fn landing_control(world: &World, player: &Player, goal: Vec3, lead: f32, radius: f32) -> Option<(Vec2, bool)> {
+    let delta = goal-player.feet;
+    // Waiting for a delayed grounded snapshot is too late on a small pad.
+    // Brake on the final descent, once above and near the destination, with
+    // a clear horizontal approach. Never steer through a wall or out of water.
+    let descent = !player.grounded && !player.swimming && player.ledge.is_none()
+        && player.velocity.z < 0. && (-128. ..=0.).contains(&delta.z)
+        && delta.truncate().length() < 128. && {
+            let hit=world.body_trace(player.feet,goal+Vec3::Z*(-delta.z));
+            !hit.start_solid && hit.fraction >= 1.
+        };
+    if !(player.grounded && delta.length()<42.) && !descent { return None; }
+    let settled = player.grounded && delta.truncate().length() < radius && player.velocity.truncate().length() < 20.;
+    let steering = delta.truncate()-player.velocity.truncate()*lead;
+    let wish = if settled { Vec2::ZERO } else { steering.normalize_or_zero()*(steering.length()/48.).min(1.) };
+    Some((wish,settled))
+}
+
 // Selection policy must not remove unselected bodies from the collision
 // context: an idle guard can still stand between Alice and an active foe.
 fn attack_target<'a>(world: &World, targets: &'a [crate::combat::Target], eye: Vec3,
@@ -524,10 +545,17 @@ impl Driver {
         } else { command.goal };
         let Some(goal) = goal else { return; };
         let delta = goal-body.player.feet;
-        self.report.reached = if command.navigate { delta.length()<42. && body.player.grounded }
+        let landing = if command.navigate {
+            landing_control(world,&body.player,goal,command.input_lead,command.arrival_radius)
+        } else { None };
+        self.report.reached = if command.navigate { landing.is_some_and(|(_,settled)|settled) }
             else { delta.truncate().length()<command.arrival_radius && (command.horizontal || delta.z.abs()<35.) };
         if self.report.reached { self.report.phase="reached"; self.plan.clear(); return; }
-        if command.navigate {
+        if let Some((wish,_)) = landing {
+            self.report.phase="settling landing";
+            self.plan.clear();
+            keys.wish=wish; keys.swim=wish.extend(0.); keys.run=false;
+        } else if command.navigate {
             self.report.phase="navigating";
             // A host observes its own simulation clock directly. Guest steps
             // use local frame intervals with the same simulation-time cap.
@@ -603,6 +631,60 @@ impl Driver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn navigation_settles_a_fast_edge_landing_before_reporting_arrival() {
+        let world = World::fixture(&[(vec3(-100.,-24.,-100.),vec3(100.,100.,0.))]);
+        for delay in [0, 12] {
+            let mut player = Player::spawn(&world,vec3(20.9199,-30.2542,crate::movement::EYE_HEIGHT+0.03125)).unwrap();
+            player.velocity=vec3(4.1861,-157.485,0.);
+            let goal=Vec3::ZERO;
+            // Recorded gym landing: old 42-unit arrival test passed while
+            // Alice was still moving toward the platform edge at 157 u/s.
+            assert!(player.grounded && player.feet.distance(goal)<42.);
+            assert!(!landing_control(&world,&player,goal,0.17,8.).unwrap().1);
+            let mut views=VecDeque::from(vec![player.clone();delay+1]);
+            for _ in 0..360 {
+                let view=views.pop_front().unwrap();
+                let (wish,settled)=landing_control(&world,&view,goal,delay as f32/120.,8.).unwrap();
+                if settled {
+                    assert!(view.feet.truncate().length()<8. && view.velocity.truncate().length()<20.);
+                }
+                player.tick(&world,Controls {wish,..Default::default()});
+                assert!(player.grounded && player.feet.z.abs()<0.1,"Landing slid off at {:?}",player.feet);
+                views.push_back(player.clone());
+            }
+            assert!(landing_control(&world,&player,goal,0.17,8.).unwrap().1);
+        }
+    }
+    #[test]
+    fn navigation_brakes_before_a_delayed_landing_without_cutting_through_walls() {
+        let floor=(vec3(-100.,-24.,-100.),vec3(100.,200.,0.));
+        let world=World::fixture(&[floor]);
+        let goal=Vec3::ZERO;
+        for delay in [0, 12] {
+            // Recorded final descent relative to the gym platform. Simulate
+            // delayed observations AND delayed ordinary movement inputs.
+            let mut player=Player::new(vec3(27.652,92.514,106.67));
+            player.velocity=vec3(0.,-320.,-46.667);
+            let mut views=VecDeque::from(vec![player.clone();delay+1]);
+            let mut pending=VecDeque::from(vec![Controls {wish:-Vec2::Y,run:true,..Default::default()};delay]);
+            for _ in 0..360 {
+                let view=views.pop_front().unwrap();
+                let (wish,_)=landing_control(&world,&view,goal,2.*delay as f32/120.,8.).unwrap();
+                pending.push_back(Controls {wish,..Default::default()});
+                player.tick(&world,pending.pop_front().unwrap());
+                assert!(player.feet.z>=-0.1,"Missed platform at {:?}",player.feet);
+                views.push_back(player.clone());
+            }
+            assert!(landing_control(&world,&player,goal,0.2,8.).unwrap().1);
+        }
+        let mut airborne=Player::new(vec3(0.,80.,80.));
+        airborne.velocity=-Vec3::Z*100.;
+        let wall=World::fixture(&[floor,(vec3(-100.,30.,0.),vec3(100.,40.,200.))]);
+        assert!(landing_control(&wall,&airborne,goal,0.2,8.).is_none());
+        airborne.velocity.z=100.;
+        assert!(landing_control(&world,&airborne,goal,0.2,8.).is_none());
+    }
     #[test]
     fn unselected_idle_guard_still_blocks_aim_at_an_enemy_behind_it() {
         let world = World::fixture(&[]);

@@ -2699,3 +2699,57 @@ Driver failures now print only the command, phase, error, tick, replan count,
 remaining steps and expected position. Full enemy pools and network hashes
 remain in the retained private reports, avoiding large terminal dumps during
 routine automated diagnosis. No images were opened during this work.
+
+### Automated gym landing regression
+
+`tools/test_coop_gym_jump.py` isolates the gym lever, bleacher ascent and upper
+jump in two independent clients. Only its initial spawn on the gym floor is
+staged. It uses the real lever and normal movement, requires actual jumps from
+both players, checks that both settle on supported destinations at 100 health,
+and verifies the scene owner and exact shared player/world states. It grants no
+resources and cannot certify the gym quest or a complete visit. Run both orders:
+
+```powershell
+python tools/test_coop_regressions.py --exe <built-executable> --data <base-directory> --only gym-jump-red gym-jump-blue
+```
+
+The opt-in route controller now brakes during a clear final descent and settles
+near the goal before reporting arrival. Previously a brief landing within 42
+units could cancel correction while Alice still moved rapidly toward an edge.
+Two production-physics regressions reproduce recorded landings with delayed
+observations and inputs; blocked approaches and ascending flight retain their
+planned controls. Normal player physics and the network protocol are unchanged.
+Build `1d28e039a07f2e1beafebe66729b6cb7a0b17b1023de0a21fb17225c0a5ffabb`
+passes 763 unit checks (one existing ignored test) and release compilation.
+
+Both staged gym orders pass on that build through internet joining with 40 ms
+injected delay and 20 ms jitter. Red-first takes 109.12 seconds with 1,545 matching
+player/enemy and shared-world states; Blue-first takes 101.95 seconds with 1,357.
+Both retain 100/100 health without death, respawn or checkpoint restoration.
+Evidence: `private/coop/regression-suite-c443b5ad57c443fbae61f65e6bd440d9`.
+The fixture explicitly navigates the obstructed departure walkway before the
+second player approaches, rather than demanding another sideways waiting spot.
+
+That suite then fails the Red-first altar case before any landing control runs:
+the client emits a jump edge, but the host body walks off the takeoff ledge with
+zero actual jumps. This intermittent delivery/takeoff timing failure remains
+open; it differs from the earlier unsent-jump render-stall failure. An unchanged
+build repeat reaches the altar safely but times out because the reunited partner
+occupies the requested final approach (`regression-suite-49f614cc709040b4837daf9fde4348a5`).
+The fixture now accepts a completed reunion only when both clients confirm both
+actual personal pickups, grounded players and the ended scene, then finishes
+combat from their separate positions. It does not grant a pickup or bypass a
+failed jump. Selected passing runs do not establish robust latency coverage.
+
+With that fixture correction, Red-first completes the staged altar round trip
+in 52.89 seconds: 532 matching player/enemy and shared-world states, 100/100
+health and minimum Will 34/37. Blue-first completes both personal pickups and
+the reunion, then fails the partner's return takeoff after 44.75 seconds. The
+guest's recorded plan contains a jump, but the host body never jumps; landing
+control never runs during that return. Both outcomes remain in
+`private/coop/regression-suite-44a717d8ddce4ae998847f6be21ef63b`.
+The suite is failed, and no full-route repeat or new completed-visit credit is
+claimed. The next regression needs a safe takeoff margin under input jitter.
+
+These component checks use compact reports; no images were opened. Overall
+completion remains about 42%, with five of 39 full campaign visits verified.

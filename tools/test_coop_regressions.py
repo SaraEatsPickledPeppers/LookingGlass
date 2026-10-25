@@ -119,8 +119,9 @@ def main():
     parser.add_argument('--only', nargs='+', choices=('world', 'school2', 'presence', 'school',
                                                    'school-blue', 'school-red', 'lift-blue', 'lift-red',
                                                    'stairs-blue', 'stairs-red', 'school2-blue', 'school2-red',
-                                                   'dice-blue', 'dice-red', 'altar-blue', 'altar-red'),
-                        help='school resumes a checkpoint; school-blue/red and school2-blue/red are full routes; lift/stairs/altar are staged; dice is a partial School Two entrance route')
+                                                   'dice-blue', 'dice-red', 'altar-blue', 'altar-red',
+                                                   'gym-jump-blue', 'gym-jump-red'),
+                        help='school resumes a checkpoint; school-blue/red and school2-blue/red are full routes; lift/stairs/altar/gym-jump are staged; dice is a partial School Two entrance route')
     parser.add_argument('--local', action='store_true')
     parser.add_argument('--delay-ms', type=int, default=40)
     parser.add_argument('--jitter-ms', type=int, default=20)
@@ -166,6 +167,8 @@ def main():
                                   '--first', first, '--stop-after', 'dice'], 900, True)
         cases['altar-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school2.py'), *common,
                                    '--first', first, '--stop-after', 'dice', '--stage-at-altar'], 300, True)
+        cases['gym-jump-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_gym_jump.py'), *common,
+                                      '--first', first], 300, True)
     if args.school_checkpoint:
         cases['school'] = ([sys.executable, str(ROOT / 'tools/test_coop_school_resume.py'), *common,
                            '--checkpoint', str(args.school_checkpoint), '--resume-point', args.school_resume_point,
