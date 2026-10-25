@@ -3088,3 +3088,87 @@ passing native coverage for both owners, but no passing internet repeat yet.
 The upper-walkway jump is the next controller investigation. Full School Two
 traversal remains open, with no additional campaign visit credited. Progress
 remains about 42%; all checks in this work used logs/state without opening images.
+
+### Grounded route feedback at the upper gym walkway
+
+Inspection of the recorded plan corrects the previous description: this upper
+crossing contains four walking/running segments and **no jump**. A swinging lamp
+deflects Red during a diagonal segment, but the timed driver still turns right
+after its allotted ticks, before reaching the corner. The resulting path runs
+off the walkway. This is an automated-driver failure before the Gnome scene.
+
+A native replay restores the recorded school state and moves the actual lamps.
+Across 25 lamp phases and two input/observation delays, the old timed path falls
+in five no-delay cases and stalls in one. Following the planned intermediate
+positions passes all 50 cases without losing height. The implemented helper
+also passes a separate 50-case repeat. Evidence:
+`private/coop-upper-feedback-comparison.json`,
+`private/coop-upper-feedback-production-results.json` and
+`private/coop-upper-feedback-production.log`.
+
+The test driver now replays each candidate plan to identify routes that remain
+grounded throughout. These routes use ordinary walking inputs and advance to
+the next waypoint only after observing arrival. Plans involving jumps, swimming,
+ledge grabs or unsupported steps keep the existing timed controller. Human
+movement and single-player controls are unchanged. A portable physics regression
+reproduces the old missed turn around a temporary obstacle and requires safe
+arrival with both zero and 12 ticks of input/observation delay; it also checks
+that jumps and walking off a gap do not select the grounded controller.
+
+Build `7d4ed880ebcf0dd8e808211e97ed61d724fd32db3e6ca3481f7aef095eff81fa`
+passes all 767 unit tests, with one existing ignored test, and release
+compilation. The first internet attempt fails before gameplay because the
+temporary invite does not resolve (`regression-suite-71dbbcd0057f472a9b5fb495fe00203e`).
+A fresh invite connects, but the expanded Red-leading gym test times out after
+244.67 seconds (`regression-suite-ad80bca3a18648ae9cf67c3657a7beb0`).
+
+Both players remain at 100 health. The live plan meets the lamp at a different
+pose from the original replay: Red stops at `(1773.73, -2834.33, 440.03)` and
+blocks its rotation while continuing toward an obsolete waypoint. Lamp three's
+clock stays at 101.822 seconds while the other lamps continue. The initial
+feedback fix prevents this fall but needs a bounded replan when progress stops.
+The exact world, bodies and plan are retained in
+`private/coop-upper-stalled-replay-input.json`. No campaign row is credited by
+these component checks.
+
+The blocked-state replay reproduces the stall with zero and 12 ticks of delay.
+After one second without eight units of progress, a fresh collision-aware plan
+walks around the lamp and reaches the destination in both cases without losing
+height (`private/coop-upper-stalled-replay-results.json` and matching log).
+The driver now discards an obstructed walking plan after that interval once the
+body is grounded and nearly stopped. Its normal worker plans again from the
+current received world. A second portable physics regression introduces an
+obstacle after planning and compares indefinite blocking with successful
+replanning under both delays. It requires ordinary grounded movement throughout.
+
+Build `80ead548ae83e0c2e3f5457f03fc3e8d7dbde0297ac5f6b13e1449bd915d5b85`
+passes both new regressions, all 768 unit tests (one existing ignored), and
+release compilation. In the expanded Red-leading internet test, both players
+pass the ascent and entire upper walkway at 100 health. This run reaches the
+Gnome and receives the Mushroom, but fails after 239.97 seconds in the following
+fight. Two Boojums die; the third stays at seven health while both automated
+players hold their positions. Final player health is 100/98. No death, respawn,
+checkpoint recovery or skipped fight is used to continue.
+
+Evidence: `private/coop/regression-suite-34990af90ee14824bab5c443baf0b7d5`,
+`private/coop/gym-jump-5cf6c99f8410476aa86a16e4567682f6`, and the compact saved
+input `private/coop-upper-boojum-stall-input.json`. The remaining Boojum is
+visible to Red according to the thin sight ray, but projectile clearance and
+aiming still need an exact-state check. The full expanded gym test and full
+School Two traversal remain open. No campaign credit is added.
+
+Independent remaining cases pass on the same immutable `80ead54` executable:
+Blue-leading altar in 47.58 seconds (437 matching shared states), Red-leading
+altar in 49.34 seconds (471), and the expanded Blue-leading gym in 162.62 seconds
+(2,420 matching shared states and 36 full school frames). Both altar runs finish
+at 100/100 health. The Blue-leading gym completes all three Boojums, all three
+correctly owned scenes, the Laboratory quest state and grounded reunion, ending
+at 77/100 health without death or respawn. Evidence:
+`private/coop/regression-suite-4b6fcf0b748f413cb2d6e3553852b63f`.
+
+This establishes both upper-walkway arrival orders and one complete staged gym
+order. Red's combat stall and both full School Two traversals still need work.
+Progress remains about 42%, with five historical full visits that require the
+previously documented contact-system repeats before release. No images were
+opened during this investigation; temporary native replay modules are excluded
+from the public source.

@@ -227,7 +227,43 @@ struct Worker {
     epoch: u64,
     warped: u64,
     start: Vec3,
-    result: mpsc::Receiver<Result<Vec<(Controls, Vec3)>, usize>>,
+    result: mpsc::Receiver<Result<PlannedRoute, usize>>,
+}
+struct PlannedRoute {
+    steps: Vec<(Controls, Vec3)>,
+    walking: bool,
+}
+// Timed input sequences are needed for jumps. A route that stays grounded can
+// instead follow its intermediate positions, so a moving obstacle cannot make
+// it turn before it has actually reached the corner.
+fn plan_stays_grounded(world: &World, start: &Player, steps: &[(Controls, Vec3)]) -> bool {
+    if !start.grounded || start.swimming || steps.is_empty() { return false; }
+    let mut player=start.clone();
+    for (input,_) in steps {
+        if input.jump { return false; }
+        for _ in 0..24 {
+            player.tick(world,*input);
+            if !player.grounded || player.swimming || player.ledge.is_some() { return false; }
+        }
+    }
+    true
+}
+fn walking_control(player: &Player, point: Vec3, lead: f32) -> (Vec2, bool) {
+    let delta=point-player.feet;
+    let reached=player.grounded && delta.truncate().length()<8. && delta.z.abs()<35.;
+    let steering=delta.truncate()-player.velocity.truncate()*lead;
+    (steering.normalize_or_zero()*(steering.length()/48.).min(1.),reached)
+}
+struct WalkingProgress {
+    feet: Vec3,
+    advanced: Instant,
+}
+impl WalkingProgress {
+    fn new(feet: Vec3, now: Instant) -> Self { Self {feet,advanced:now} }
+    fn stalled(&mut self, feet: Vec3, now: Instant) -> bool {
+        if feet.distance(self.feet)>8. { self.feet=feet; self.advanced=now; }
+        now.duration_since(self.advanced)>=Duration::from_secs(1)
+    }
 }
 /// The host clamps a slow render frame to 100 ms of simulation. Match that
 /// bound locally without using delayed snapshot arrivals as a movement clock.
@@ -297,6 +333,8 @@ pub struct Driver {
     used: Instant,
     worker: Option<Worker>,
     plan: VecDeque<(Controls, Vec3)>,
+    walking_plan: bool,
+    walking_progress: WalkingProgress,
     step_tick: u64,
     step_at: Instant,
     navigation_clock: NavigationClock,
@@ -327,7 +365,8 @@ impl Driver {
     pub fn new(path: PathBuf) -> Self {
         let now = Instant::now();
         Self { path, command: None, modified: None, polled: now, refreshed: now, used: now,
-            worker: None, plan: VecDeque::new(), step_tick: 0, step_at: now,
+            worker: None, plan: VecDeque::new(), walking_plan:false, step_tick: 0, step_at: now,
+            walking_progress:WalkingProgress::new(Vec3::ZERO,now),
             navigation_clock:NavigationClock::new(now), jumped: false, rope_used: false,
             control_used: false, step_height: None, location: None, report: Report::default() }
     }
@@ -457,13 +496,16 @@ impl Driver {
                         Ok(plan) => {
                             let trace = serde_json::json!({ "build": env!("LOOKING_GLASS_BUILD"),
                                 "epoch": worker.epoch, "command": worker.id, "start": worker.start,
-                                "steps": plan.iter().map(|(input, expected)|serde_json::json!({
+                                "walking":plan.walking,
+                                "steps": plan.steps.iter().map(|(input, expected)|serde_json::json!({
                                     "wish": input.wish, "jump": input.jump, "run": input.run, "expected": expected
                                 })).collect::<Vec<_>>() });
                             if let Ok(bytes) = serde_json::to_vec(&trace) {
                                 let _ = std::fs::write(crate::preferences::path(&format!("route-plan-{}-{}.json",worker.id,self.report.replans)),bytes);
                             }
-                            self.plan = plan.into(); self.step_tick = frame.tick; self.step_at = now; self.jumped = false;
+                            self.walking_plan=plan.walking;
+                            self.walking_progress=WalkingProgress::new(body.player.feet,now);
+                            self.plan = plan.steps.into(); self.step_tick = frame.tick; self.step_at = now; self.jumped = false;
                             self.navigation_clock = NavigationClock::new(now);
                         }
                         Err(0) => self.report.error = Some("Route planning worker ended without a result".into()),
@@ -564,6 +606,27 @@ impl Driver {
             self.report.phase="settling landing";
             self.plan.clear();
             keys.wish=wish; keys.swim=wish.extend(0.); keys.run=false;
+        } else if command.navigate && self.walking_plan && !self.plan.is_empty() {
+            self.report.phase="following walking route";
+            // A swinging obstacle can stop against Alice and never clear the
+            // old path. Plan around its current pose after a second without
+            // progress instead of pushing into it indefinitely.
+            if self.walking_progress.stalled(body.player.feet,now) && body.player.grounded
+                && body.player.velocity.truncate().length()<20. {
+                self.plan.clear();
+                self.report.phase="replanning obstructed walk";
+            } else {
+                while self.plan.front().is_some_and(|(_,point)|
+                    walking_control(&body.player,*point,command.input_lead).1) {
+                    self.plan.pop_front();
+                }
+                if let Some((_,point))=self.plan.front() {
+                    keys.wish=walking_control(&body.player,*point,command.input_lead).0;
+                    keys.swim=keys.wish.extend(0.);
+                }
+            }
+            self.report.plan_remaining=self.plan.len();
+            self.report.expected=self.plan.front().map(|(_,point)|*point);
         } else if command.navigate {
             self.report.phase="navigating";
             // A host observes its own simulation clock directly. Guest steps
@@ -600,7 +663,9 @@ impl Driver {
                 // physics tick of an edge; leave 100 ms of support in reserve.
                 let margin = if local == PlayerId::Red { 12 } else { 0 };
                 std::thread::spawn(move || { let plan=Route::plan_with_takeoff_margin(&world,&player,goal,22.,margin)
-                    .or_else(|_|Route::plan_with_takeoff_margin(&world,&player,goal,40.,margin)); let _=send.send(plan); });
+                    .or_else(|_|Route::plan_with_takeoff_margin(&world,&player,goal,40.,margin))
+                    .map(|steps|PlannedRoute {walking:plan_stays_grounded(&world,&player,&steps),steps});
+                    let _=send.send(plan); });
             }
             if self.worker.is_some() { self.report.phase="planning"; }
         } else {
@@ -644,6 +709,96 @@ impl Driver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn walking_routes_replan_when_a_new_obstacle_stops_progress() {
+        let floor=(vec3(-200.,-200.,-100.),vec3(400.,200.,0.));
+        let open=World::fixture(&[floor]);
+        let blocked=World::fixture(&[floor,(vec3(80.,-40.,0.),vec3(100.,40.,200.))]);
+        let start=Player::spawn(&open,Vec3::Z*crate::movement::EYE_HEIGHT).unwrap();
+        let goal=vec3(240.,0.,0.);
+        let initial=Route::plan_with_takeoff_margin(&open,&start,goal,22.,12).unwrap();
+        assert!(plan_stays_grounded(&open,&start,&initial));
+        for replan in [false,true] { for delay in [0,12] {
+            let mut player=start.clone();
+            let mut steps=initial.clone();
+            let mut next=0;
+            let mut views=VecDeque::from(vec![player.clone();delay+1]);
+            let mut pending=VecDeque::from(vec![Controls::default();delay]);
+            let epoch=Instant::now();
+            let mut progress=WalkingProgress::new(player.feet,epoch);
+            let mut replans=0;
+            for tick in 0..2400 {
+                let view=views.pop_front().unwrap();
+                let now=epoch+Duration::from_secs_f64(tick as f64/120.);
+                let landing=landing_control(&blocked,&view,goal,2.*delay as f32/120.,8.);
+                if landing.is_none() && replan && progress.stalled(view.feet,now)
+                    && view.grounded && view.velocity.truncate().length()<20. {
+                    steps=Route::plan_with_takeoff_margin(&blocked,&view,goal,22.,12).unwrap();
+                    assert!(plan_stays_grounded(&blocked,&view,&steps));
+                    progress=WalkingProgress::new(view.feet,now);next=0;replans+=1;
+                }
+                while next<steps.len() && walking_control(&view,steps[next].1,0.).1 {next+=1;}
+                let wish=landing.map_or_else(||walking_control(&view,
+                    steps.get(next).map_or(goal,|s|s.1),2.*delay as f32/120.).0,|s|s.0);
+                pending.push_back(Controls{wish,..Default::default()});
+                player.tick(&blocked,pending.pop_front().unwrap());
+                assert!(player.grounded,"Walking recovery left the floor");
+                views.push_back(player.clone());
+            }
+            let reached=player.feet.distance(goal)<8.;
+            assert_eq!(reached,replan,"Replan={replan}, delay={delay}: {:?}",player.feet);
+            assert_eq!(replans>0,replan);
+        }}
+    }
+    #[test]
+    fn walking_routes_wait_for_progress_before_turning_past_an_obstacle() {
+        let floors=[(vec3(-40.,-160.,-100.),vec3(140.,40.,0.)),
+            (vec3(110.,-160.,-100.),vec3(260.,-90.,0.))];
+        let open=World::fixture(&floors);
+        let blocked=World::fixture(&[floors[0],floors[1],
+            (vec3(-40.,-50.,0.),vec3(120.,-45.,100.))]);
+        let start=Player::spawn(&open,Vec3::Z*crate::movement::EYE_HEIGHT).unwrap();
+        let diagonal=vec2(std::f32::consts::FRAC_1_SQRT_2,-std::f32::consts::FRAC_1_SQRT_2);
+        let mut planned=start.clone();
+        let steps:Vec<_>=[diagonal,diagonal,diagonal,Vec2::X].into_iter().map(|wish| {
+            let input=Controls {wish,run:true,..Default::default()};
+            for _ in 0..24 {planned.tick(&open,input);}
+            (input,planned.feet)
+        }).collect();
+        assert!(plan_stays_grounded(&open,&start,&steps));
+        let mut jumping=steps.clone(); jumping[0].0.jump=true;
+        assert!(!plan_stays_grounded(&open,&start,&jumping));
+        let gap=World::fixture(&[(vec3(-40.,-40.,-100.),vec3(20.,40.,0.))]);
+        assert!(!plan_stays_grounded(&gap,&start,&steps));
+        let goal=planned.feet-Vec3::Y*12.;
+        let replay=|feedback:bool,delay:usize| {
+            let mut player=start.clone();
+            let mut views=VecDeque::from(vec![player.clone();delay+1]);
+            let mut pending=VecDeque::from(vec![Controls::default();delay]);
+            let mut next=0;
+            let mut lowest=player.feet.z;
+            for tick in 0..1200 {
+                let world=if tick<96 {&blocked} else {&open};
+                let view=views.pop_front().unwrap();
+                let input=if feedback {
+                    while next<steps.len() && walking_control(&view,steps[next].1,0.2).1 {next+=1;}
+                    let target=steps.get(next).map_or(goal,|s|s.1);
+                    Controls {wish:walking_control(&view,target,2.*delay as f32/120.).0,..Default::default()}
+                } else {steps.get(tick/24).map_or(Controls::default(),|s|s.0)};
+                pending.push_back(input);
+                player.tick(world,pending.pop_front().unwrap());
+                views.push_back(player.clone());
+                lowest=lowest.min(player.feet.z);
+            }
+            (player,lowest)
+        };
+        assert!(replay(false,0).1 < -100.,"Timed control did not reproduce the missed turn");
+        for delay in [0,12] {
+            let (player,lowest)=replay(true,delay);
+            assert!(lowest>=-0.1 && player.grounded && player.feet.distance(goal)<8.,
+                "Feedback route failed after {delay} ticks of delay: {:?}, minimum {lowest}",player.feet);
+        }
+    }
     #[test]
     fn navigation_keeps_lateral_jump_input_until_above_the_landing() {
         // The altar return crosses a gap and turns left late in its jump.
