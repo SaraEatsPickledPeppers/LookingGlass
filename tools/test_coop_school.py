@@ -342,6 +342,15 @@ class SchoolPair(PandemoniumPair):
                 role_goals = after_reunion
             traverse(role,role_goals)
             if role == self.first:
+                if partner_done is not None:
+                    # A delayed client can report arrival just before the
+                    # host starts the scene at this endpoint. Drain ordinary
+                    # movement and wait for BOTH scene reports before judging
+                    # reunion or asking for a supported sideways waiting spot.
+                    self.wait(.5)
+                    self.until(lambda: all(r['combat']['stage']['owner'] is None
+                        and all(b['player']['grounded'] for b in r['frame']['players'])
+                        for r in self.reports.values()), 90)
                 # A scene may already have delivered the waiting player's
                 # personal pickup. A caller can verify that outcome directly
                 # instead of forcing a second approach across an occupied pad.

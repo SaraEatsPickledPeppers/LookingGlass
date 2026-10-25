@@ -3550,3 +3550,64 @@ at 7.6 ms. The runner's fixture hash matches the source copy recorded by the
 test. All owned game windows close, Anode is released, and no screenshots are
 opened. Full School Two traversal in both orders and recovery coverage remain
 open; the overall estimate remains approximately 42%.
+
+### Scene checks and shorter automated repeats
+
+`tools/test_coop_fixture_scenes.py` runs eight headless checks without installed
+game assets or a desktop. It is also the regression runner's default
+`fixture-scenes` case. The checks reproduce a delayed guest arrival report
+while the host has already started a cutscene, require both clients to finish
+the scene and land before selecting a waiting spot, and preserve failures for
+stuck scenes and missing personal pickups. The previous fixture fails the
+same regression before the scene-wait fix.
+
+School Two reunion checks also recognize the engine's existing safe-partner
+fallback: after a second scene, an already grounded partner can stay on the
+same supported nearby pad within 128 units. This allowance requires unchanged
+partner coordinates and bounded height/separation; it does not extend the
+ordinary 110-unit bound for newly placed partners. Headless cases reject a
+displaced, airborne, overly high or distant retained partner, and mismatched
+relocation ticks. The native placement test separately checks support, hazards
+and walls. Game movement and placement rules are unchanged by these fixture fixes.
+
+The ordinary `checkpoint-dice.json` saved by a normal School Two entrance run
+can now repeat just the gym, including its lever, upper platforms, combat and
+Gnome scenes. The checkpoint is copied unchanged into a fresh profile and
+verified exactly on restore. Select `--school2-resume-point dice`; this ends
+at a new ordinary gym checkpoint and always reports a partial segment.
+Other School Two resume points retain their existing routes through the exit.
+
+```text
+python tools/test_coop_regressions.py --exe <built-executable> --data <base-directory> --only school2-resume --school2-checkpoint <checkpoint-dice.json> --school2-resume-point dice --first red
+```
+
+For compact, read-only monitoring without images or complete histories:
+
+```text
+python tools/coop_status.py private/coop/regression-suite-<id>
+```
+
+The status reports completed cases, the active case, latest route event, player
+health, scene and selected network timings. Terminal failures include a bounded
+error excerpt and their full log path. Missing live reports are explicitly
+unavailable. Observing status never awards a pass or changes a running test.
+
+The fresh automated suite
+`private/coop/regression-suite-c118bc8f7ddd4429867ee55a8460b77d` passes on the
+unchanged `9e65cb7` runtime with public internet, 40 ms delay and 20 ms jitter:
+
+| Case | Seconds | Matching complete network states | Final Sanity, Blue / Red |
+| --- | ---: | ---: | ---: |
+| Eight headless fixture checks | 0.16 | Not applicable | Not applicable |
+| Staged altar, Blue first | 47.80 | 427 | 100 / 100 |
+| Staged altar, Red first | 49.95 | 495 | 100 / 100 |
+| Unchanged Dice checkpoint through gym, Red first | 323.30 | 5,259 | 100 / 100 |
+
+The gym repeat has 99 matching full local reports and saves an ordinary gym
+checkpoint at tick 85,783. Scene ownership, frozen waiting partners, reunion,
+personal Dice, no deaths/wipes and shared state checks pass. Fixture and frozen
+executable hashes match after the run. All owned windows close and Anode is
+released; no screenshots are opened. Locked Rust tests pass 779 with one
+existing ignored test, the release build succeeds, and all seven source-package
+tests pass. These are component results; full School Two runs in both orders
+and its recovery matrix remain open. Overall completion remains about 42%.

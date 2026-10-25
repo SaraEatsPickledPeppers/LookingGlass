@@ -16,6 +16,27 @@ from test_coop_village import Pair
 from test_coop_play import ROOT, distance
 
 
+def verify_reunion(old, row):
+    """Match normal placement or the existing safe-partner fallback."""
+    a, b = row['players']
+    assert a['warped_at'] == b['warped_at'] > 0, 'Scene did not reunite both presentation tracks'
+    travel = max(0, row['tick'] - a['warped_at']) * 640 / 120
+    separation = distance(a['feet'], b['feet'])
+    if separation <= 110 + travel:
+        return 'placed'
+    # placement::reunion_with_partner can retain an already supported nearby
+    # pad when a second scene has no new landing. Only that unchanged partner
+    # earns its 128-unit limit; a newly displaced body keeps the normal bound.
+    other = 1 if old['owner'] == 'Blue' else 0
+    before, after = old['players'][other], row['players'][other]
+    assert before['grounded'] and all(p['grounded'] for p in row['players']), 'Retained reunion is airborne'
+    assert before['feet'] == after['feet'], 'Distant reunion displaced the waiting partner'
+    assert abs(a['feet'][2] - b['feet'][2]) <= 32 + travel, 'Retained reunion changed landing height'
+    assert distance(a['feet'][:2], b['feet'][:2]) >= 40 - travel, 'Retained reunion overlaps the owner'
+    assert separation <= 128 + travel, 'Retained reunion is too far from the owner'
+    return 'retained'
+
+
 def verify_quest_completion(rows):
     """Check collection and consumption in order, including both inventories."""
     ingredients = {'mushroom', 'spice', 'lollipop', 'jumbogrow'}
@@ -416,9 +437,8 @@ class School2Pair(SchoolPair):
                     other = 1 if row['owner'] == 'Blue' else 0
                     assert row['players'][other]['feet'] == old['players'][other]['feet'], 'Partner moved during School Two scene'
                 if old['owner'] is not None and row['owner'] is None:
-                    a, b = row['players']
-                    assert a['warped_at'] == b['warped_at'] > 0
-                    assert distance(a['feet'], b['feet']) <= 110 + max(0, row['tick']-a['warped_at'])*640/120
+                    kind = verify_reunion(old, row)
+                    self.evidence.setdefault('verified_reunions', {}).setdefault(role, {})[row['tick']] = kind
             assert all(r['checkpoint_generation'] == 0 for r in rows)
             assert all(b['spawned_at'] == 0 and b['health'] > 0 for r in rows for b in r['players'])
             assert all('skool2:44' in b['stats']['collected'] for b in self.bodies(role))

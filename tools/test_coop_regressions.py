@@ -135,7 +135,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--exe', type=Path, default=ROOT / 'target/release/looking-glass.exe')
     parser.add_argument('--data', type=Path, required=True)
-    parser.add_argument('--only', nargs='+', choices=('world', 'school2', 'presence', 'host-stalls', 'school',
+    parser.add_argument('--only', nargs='+', choices=('fixture-scenes', 'world', 'school2', 'presence', 'host-stalls', 'school',
                                                    'school-blue', 'school-red', 'lift-blue', 'lift-red',
                                                    'stairs-blue', 'stairs-red', 'school2-blue', 'school2-red',
                                                    'dice-blue', 'dice-red', 'altar-blue', 'altar-red',
@@ -146,7 +146,8 @@ def main():
     parser.add_argument('--jitter-ms', type=int, default=20)
     parser.add_argument('--school-checkpoint', type=Path)
     parser.add_argument('--school2-checkpoint', type=Path)
-    parser.add_argument('--school2-resume-point', choices=('gym', 'laboratory-approach', 'laboratory-entrance', 'greenhouse'), default='gym')
+    parser.add_argument('--school2-resume-point', choices=('dice', 'gym', 'laboratory-approach', 'laboratory-entrance', 'greenhouse'), default='gym',
+                        help='dice repeats only dice-to-gym; later checkpoints continue to exit')
     parser.add_argument('--school-resume-point', choices=('theatre', 'balcony', 'spiral', 'library', 'bridge', 'descent'))
     parser.add_argument('--first', choices=('blue', 'red'), default='blue',
                         help='Arrival order for the resumed school case; full cases name their own order')
@@ -166,7 +167,7 @@ def main():
         args.school_checkpoint = args.school_checkpoint.resolve()
         if not args.school_checkpoint.is_file():
             parser.error('The unchanged ordinary co-op checkpoint must exist')
-    selected = list(dict.fromkeys(args.only or ['world', 'school2', 'presence', 'host-stalls'] +
+    selected = list(dict.fromkeys(args.only or ['fixture-scenes', 'world', 'school2', 'presence', 'host-stalls'] +
                                  (['school'] if args.school_checkpoint else [])))
     if 'school' in selected and not args.school_checkpoint:
         parser.error('The school regression needs --school-checkpoint and --school-resume-point')
@@ -177,6 +178,7 @@ def main():
     if args.local:
         common.append('--local')
     cases = {
+        'fixture-scenes': ([sys.executable, str(ROOT / 'tools/test_coop_fixture_scenes.py')], 30, False),
         'world': ([str(args.exe), '--data', str(args.data), '--coop-world-check'], 180, False),
         'school2': ([str(args.exe), '--data', str(args.data), '--school2-check'], 180, False),
         'presence': ([sys.executable, str(ROOT / 'tools/test_coop_presence.py'), *common], 300, True),
