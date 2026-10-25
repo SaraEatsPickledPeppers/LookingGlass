@@ -2753,3 +2753,63 @@ claimed. The next regression needs a safe takeoff margin under input jitter.
 
 These component checks use compact reports; no images were opened. Overall
 completion remains about 42%, with five of 39 full campaign visits verified.
+
+### Remote takeoff margin
+
+The opt-in remote route planner now requires 100 ms of remaining support before
+a planned grounded jump. It simulates the preceding ordinary movement input to
+reject takeoffs that depend on a jump arriving at the last safe instant. The
+host/native planner retains its zero-margin search. Neither gameplay physics,
+the input protocol nor the player's jump rules change.
+
+A production-physics regression reproduces a sent-but-missed jump by extending
+the last run segment by 12 ticks. The original plan walks off with zero actual
+jumps; the revised plan jumps and lands across the gap for every tested delay
+from zero through 12 ticks. All 764 unit checks pass, with one existing ignored
+test, and release compilation succeeds on build
+`bfaaa28997ede41787d23ed3ba1be43f879b9263470e8edadcdbd0dfe6b677f4`.
+This bounded fixture does not establish reliability under arbitrary stalls or
+network delay. Full route and two-client evidence remains necessary.
+
+The complete single-player School Two route passes on this build with the
+unchanged result: 53,236 ticks, nine jumps, 23 throws, 149 Cards, 170 combat
+damage and 27 final Sanity, including both portals and the gated school return.
+The co-op world and native School Two regressions also pass. Evidence:
+`private/coop-takeoff-single-player.log` and
+`private/coop/regression-suite-f1ec346e93334c49a232d560920b4a8f`.
+
+The first internet integration reaches the altar and performs the return jump,
+but fails because the reunited partner blocks the run-up. Actual movement is
+only a few units before takeoff, while the world-only plan expects roughly 100.
+This is retained as a failure in
+`private/coop/regression-suite-bbcdfe3d48df44a094b79b6585a10080`.
+The altar has no reliable sideways passing place. The fixture now lets the
+player nearest the return landing leave first, then the other follows through
+ordinary movement. Scene ownership still follows the originally requested
+first-arrival order; the recorded return order is separate. A blanket request
+to step aside at the staged entrance failed without a waiting spot
+(`regression-suite-2350524d88dc493ab2b99e964aae8e8b`), before either player moved.
+
+Compact failure reports now include input and actual body jump counters,
+velocity, remaining planned steps and network/frame timing. The retained failed
+Blue-first altar return verifies that this report distinguishes one sent jump
+from zero actual jumps without opening images or dumping the entire history.
+
+The final fixture on this build passes both staged altar orders over internet
+joining with 40/20 ms injected delay/jitter: Red-first takes 48.45 seconds with
+467 matching player/enemy and shared-world states; Blue-first takes 45.70 seconds
+with 427. Both retain 100/100 health with no death, respawn or wipe. Minimum Will
+is 55/52 and 46/49 respectively. The recorded return order happens to match the
+original scene owner in these two runs; the alternate role override has a local
+logic check but has not yet been exercised by a passing rendered run.
+
+Red-first also passes the staged gym in 104.56 seconds at 100/100 health. Blue-first
+successfully lands at `(1600, -2275, 440)` but fails the following planned walking
+turn around the railing toward `(1750, -2275, 440)`. That plan contains no jump.
+The host diverges from the planned corner, discards its remaining steps, slides
+off and takes 42 fall damage. The complete suite correctly fails after that case
+(77.73 seconds):
+`private/coop/regression-suite-99cc9ee187cb4e578108b4b3f46b2219`.
+This is a remaining corner/braking problem, not another missing takeoff. No full
+School Two repeat or new completed-visit credit is claimed. Progress remains
+about 42%, with five of 39 full visits verified. No images were opened.

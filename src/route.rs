@@ -301,13 +301,25 @@ impl Route {
         goal: Vec3,
         tolerance: f32,
     ) -> Result<Vec<(Controls, Vec3)>, usize> {
+        Self::plan_with_takeoff_margin(world, start, goal, tolerance, 0)
+    }
+    /// Optional remote-input margin for diagnostic routes. A planned jump must
+    /// remain possible if the preceding input lasts a little longer in transit.
+    /// Native routes retain their exact zero-margin search and gameplay physics.
+    pub(crate) fn plan_with_takeoff_margin(
+        world: &World,
+        start: &Player,
+        goal: Vec3,
+        tolerance: f32,
+        takeoff_ticks: u32,
+    ) -> Result<Vec<(Controls, Vec3)>, usize> {
         use std::cmp::Reverse;
         use std::collections::{BinaryHeap, HashSet};
         let mut nodes = vec![(start.clone(), 0usize, Controls::default(), 0usize)];
         let mut queue = BinaryHeap::from([Reverse((0u32, 0usize))]);
         let mut seen = HashSet::new();
         while let Some(Reverse((_, index))) = queue.pop() {
-            let (p, _, _, cost) = nodes[index].clone();
+            let (p, _, previous, cost) = nodes[index].clone();
             if p.feet.distance(goal) < tolerance && p.grounded {
                 let mut path = Vec::new();
                 let mut at = index;
@@ -321,6 +333,13 @@ impl Route {
             if nodes.len() > 100000 {
                 break;
             }
+            let takeoff_safe = if p.grounded && takeoff_ticks > 0 {
+                let mut late = p.clone();
+                (0..takeoff_ticks).all(|_| {
+                    late.tick(world, Controls { jump:false, ..previous });
+                    late.grounded
+                })
+            } else { true };
             for d in 0..9 {
                 let angle = d as f32 * std::f32::consts::FRAC_PI_4;
                 let wish = if d == 8 {
@@ -329,7 +348,7 @@ impl Route {
                     vec2(angle.cos(), angle.sin())
                 };
                 for jump in [false, true] {
-                    if jump && !p.grounded && p.ledge.is_none() {
+                    if jump && (!takeoff_safe || !p.grounded && p.ledge.is_none()) {
                         continue;
                     }
                     let input = Controls {
@@ -1144,6 +1163,44 @@ impl Route {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn remote_plan_reserves_support_for_delayed_jump_input() {
+        let world=World::fixture(&[
+            (vec3(-400.,-100.,-100.),vec3(0.,100.,0.)),
+            (vec3(160.,-100.,-100.),vec3(500.,100.,0.)),
+        ]);
+        let start=Player::spawn(&world,vec3(-170.,0.,crate::movement::EYE_HEIGHT)).unwrap();
+        let goal=vec3(260.,0.,0.);
+        // Reproduce a real input timing failure: the final run segment lasts
+        // up to 100 ms longer before the jump packet is applied. Use the same
+        // production physics as the host, including its grounded-only jump.
+        let replay = |plan:&[(Controls,Vec3)], delay| {
+            let mut player=start.clone();
+            let mut previous=Controls::default();
+            for (input,_) in plan {
+                if input.jump {
+                    for _ in 0..delay { player.tick(&world,Controls {jump:false,..previous}); }
+                }
+                for t in 0..24 { player.tick(&world,Controls {jump:input.jump && t==0,..*input}); }
+                previous=*input;
+            }
+            player
+        };
+        let original=Route::plan(&world,&start,goal,22.).unwrap();
+        let missed=replay(&original,12);
+        assert_eq!(missed.jumps,0,"The original route must reproduce the missed takeoff");
+        assert!(!missed.grounded && missed.feet.z < -100.);
+        let remote=Route::plan_with_takeoff_margin(&world,&start,goal,22.,12).unwrap();
+        let jumps=remote.iter().filter(|(input,_)|input.jump).count() as u64;
+        assert!(jumps>0);
+        for delay in 0..=12 {
+            let player=replay(&remote,delay);
+            assert_eq!(player.jumps,jumps,"Missed takeoff with {delay} ticks of delay");
+            assert!(player.grounded && player.feet.distance(goal)<42.,
+                "Delayed route did not land near its goal: delay={delay} feet={:?}",player.feet);
+        }
+    }
 
     /// A 96-unit room with walls on every side. The state space is small, and a goal 70 units east
     /// of its centre lies beyond the east wall, out of reach at the first tolerance and inside the

@@ -92,10 +92,13 @@ def failure_from_log(log, rendered):
             route = report.get('route_driver', {})
             state = dict(visit=report.get('visit'), tick=report['frame']['tick'],
                          route={k: route.get(k) for k in
-                                ('command', 'phase', 'reached', 'error', 'scene', 'replans')},
+                                ('command', 'phase', 'reached', 'error', 'scene', 'replans',
+                                 'jumps', 'plan_remaining', 'expected')},
                          players=[dict(feet=b['player']['feet'], grounded=b['player']['grounded'],
+                                       velocity=b['player']['velocity'], jumps=b['player']['jumps'],
                                        health=b['stats']['sanity'], spawned_at=b['spawned_at'])
-                                  for b in report['frame']['players']])
+                                  for b in report['frame']['players']],
+                         network_timing=report.get('network_timing'), frame_timing=report.get('frame_timing'))
             command = folder / role / 'route-command.json'
             if command.exists():
                 state['last_command'] = json.loads(command.read_text())

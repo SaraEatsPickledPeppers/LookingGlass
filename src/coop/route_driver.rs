@@ -586,8 +586,12 @@ impl Driver {
                 let world=world.clone(); let player:Player=body.player.clone();
                 self.worker=Some(Worker { id:command.id, epoch:frame.epoch, warped:body.warped_at, start:player.feet,result });
                 self.report.replans+=1;
-                std::thread::spawn(move || { let plan=Route::plan(&world,&player,goal,22.)
-                    .or_else(|_|Route::plan(&world,&player,goal,40.)); let _=send.send(plan); });
+                // Remote segments can run longer when updates coalesce or
+                // arrive with jitter. Avoid plans that jump at the last safe
+                // physics tick of an edge; leave 100 ms of support in reserve.
+                let margin = if local == PlayerId::Red { 12 } else { 0 };
+                std::thread::spawn(move || { let plan=Route::plan_with_takeoff_margin(&world,&player,goal,22.,margin)
+                    .or_else(|_|Route::plan_with_takeoff_margin(&world,&player,goal,40.,margin)); let _=send.send(plan); });
             }
             if self.worker.is_some() { self.report.phase="planning"; }
         } else {

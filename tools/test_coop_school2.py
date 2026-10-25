@@ -24,6 +24,12 @@ class School2Pair(SchoolPair):
                        'OG1_Warp', 'Old_Gnome_SpiceDrops', 'Skool2_GrowLollypop',
                        'Skool2_LastGnome_Cinema'}
 
+    @property
+    def first(self):
+        # A narrow-pad departure may use a different walking order, without
+        # changing the requested scene owners checked against args.first.
+        return getattr(self, '_departure_first', None) or super().first
+
     def __init__(self, args):
         super().__init__(args)
         if args.stage_at_altar:
@@ -106,7 +112,18 @@ class School2Pair(SchoolPair):
         return_path = [(stairs[-1], True)]
         if not self.args.stage_at_altar:
             return_path += [(p, False) for p in reversed(stairs[:-1])]
-        self.passage(return_path, speed_limit=20)
+        # Reunion may place the original scene owner behind their partner on
+        # this narrow pad. Let the front player leave first: there is no safe
+        # sideways passing place, and contact would spoil a planned run-up.
+        original_order = getattr(self, '_departure_first', None)
+        nearest = min(('host','guest'), key=lambda role:
+            distance(self.bodies()[0 if role == 'host' else 1]['player']['feet'],stairs[-1]))
+        self._departure_first = nearest
+        self.evidence['dice_return_first'] = nearest
+        try:
+            self.passage(return_path, speed_limit=20)
+        finally:
+            self._departure_first = original_order
         if not self.args.stage_at_altar:
             self.legs([((-320, -2800, 0), False), ((-64, -3100, 0), False)])
         print('PASS School Two personal Dice and return from altar', flush=True)
