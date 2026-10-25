@@ -13,6 +13,7 @@ import time
 import uuid
 
 from test_coop_play import ROOT, read, distance
+from coop_diagnostics import recent_movement
 
 
 class Pair:
@@ -112,6 +113,7 @@ class Pair:
             if stage['owner'] is None:
                 assert all(driver['clear']), f'{role}: obstructed body'
             row = {'tick': frame['tick'], 'epoch': frame['epoch'], 'map': report['visit']['map'],
+                   'network_timing': report.get('network_timing'), 'frame_timing': report.get('frame_timing'),
                    'checkpoint_generation': frame['checkpoint_generation'], 'lives': frame['lives'],
                    'camera_player': report['camera_player'], 'camera_target': report['camera_target'],
                    'camera_subject_feet': report['camera_subject_feet'],
@@ -360,6 +362,7 @@ class Pair:
         print('Compared', compared, 'matching authoritative ticks.', flush=True)
 
     def close(self):
+        (self.folder / 'recent-movement.json').write_text(json.dumps(recent_movement(self.history)))
         (self.folder / 'history.json').write_text(json.dumps(self.history))
         (self.folder / 'observations.json').write_text(json.dumps(self.evidence, indent=2))
         (self.folder / 'captures.json').write_text(json.dumps(self.capture_commands, indent=2))

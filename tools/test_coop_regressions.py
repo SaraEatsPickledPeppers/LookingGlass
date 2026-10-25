@@ -108,6 +108,16 @@ def failure_from_log(log, rendered):
             data = json.loads(observations.read_text())
             result['last_stops'] = {k: data[k][-1] for k in
                                    ('waiting_spots', 'paired_endpoints', 'passage_stops') if data.get(k)}
+        recent = folder / 'recent-movement.json'
+        if recent.exists():
+            data = json.loads(recent.read_text())
+            result['recent_movement'] = dict(file=str(recent), clients={
+                role: {key: value[key] for key in ('epoch', 'first_tick', 'last_tick', 'samples', 'peaks')}
+                for role, value in data['clients'].items()})
+        for role, state in result['clients'].items():
+            command = state['route'].get('command')
+            state['plans'] = [p.relative_to(folder).as_posix() for p in
+                              sorted((folder / role).glob(f'route-plan-{command}-*.json'))]
     except (OSError, ValueError, KeyError, TypeError) as error:
         # A crash or timeout may leave no final report. Preserve the test's
         # original failure and log instead of making missing evidence a pass.
@@ -172,8 +182,11 @@ def main():
                                   '--first', first], 300, True)
         cases['stairs-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school_stairs.py'), *common,
                                     '--first', first], 300, True)
+        # Recorded entrance/gym, return and later segments total about 27
+        # minutes. Allow the complete route to finish; per-leg/fight/scene
+        # watchdogs still reject stalled movement and encounters promptly.
         cases['school2-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school2.py'), *common,
-                                     '--first', first, '--rejoin'], 1500, True)
+                                     '--first', first, '--rejoin'], 1740, True)
         cases['dice-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school2.py'), *common,
                                   '--first', first, '--stop-after', 'dice'], 900, True)
         cases['altar-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school2.py'), *common,
@@ -195,7 +208,8 @@ def main():
     report = dict(format=1, status='running', passed=None, scope='Focused regressions; not full campaign certification',
                   executable=str(args.exe), executable_sha256=digest(args.exe),
                   internet=not args.local, delay_ms=args.delay_ms, jitter_ms=args.jitter_ms,
-                  selected=selected, fixtures={p.name: digest(p) for p in sorted((ROOT / 'tools').glob('test_coop_*.py'))},
+                  selected=selected, fixtures={p.name: digest(p) for p in sorted([
+                      *(ROOT / 'tools').glob('test_coop_*.py'), ROOT / 'tools/coop_diagnostics.py'])},
                   cases=[])
 
     def save():

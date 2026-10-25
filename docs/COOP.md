@@ -3355,3 +3355,52 @@ All 6,232 comparable sent/restored world and complete states match, along with
 All owned processes close and no screenshots were opened. The complete School
 Two traversal in both orders and the remaining recovery matrix are still open;
 these checkpoint segments do not complete a campaign row.
+
+### Compact automated failure evidence
+
+Rendered route fixtures now retain `recent-movement.json`: at most ten seconds
+and 80 observations per client from the current visit, containing movement,
+health, route phases and network/frame timing. The regression runner reports
+peak delays with their ticks and links the last command's saved movement plan.
+The complete history remains available separately. The new diagnostic helper
+is included in the suite's fixture hashes. No screenshot inspection is needed.
+
+The completed Red-first full-route attempt on unchanged build `844ea95` fails
+after 243.73 seconds while returning from the Dice altar. Both players have
+their personal Dice, the scene completes, and the guest then falls against the
+return landing and dies. This earns no completed component or full-visit credit.
+Evidence: `private/coop/regression-suite-1f916c6b56054e5f83b15803a6b819df`
+and `private/coop/school2-route-a7728dd8cd934394bfd070dc35e39851`.
+
+The new compact report was checked against that actual recording: 65,435 bytes
+instead of its 80,082,766-byte full history. It identifies the guest's 799.6 ms
+oldest pending input at tick 25,923 and 667.5 ms round trip at tick 25,965,
+alongside `guest/route-plan-140-2.json`. Empty histories, missing timing, visit
+changes and the sample limit were also checked. The offline report is labelled
+`failure-diagnostic-reverification.json`; the original failed result is retained.
+
+A private headless replay uses the actual map and recorded jump plan. Its full
+24-tick run-up and an 18-tick run-up land; shortening it to 12, 6 or zero ticks
+misses the same side of the platform, with both immediate and delayed views.
+This supports investigating compressed movement during the recorded input
+delay spike; it is not an exact packet replay or a verified networking fix.
+Nearby take-off candidates also fail some small position/timing variations, so
+the shipped route and game controls remain unchanged. The private replay is
+not included in production sources. Evidence: `private/coop-altar-compressed-runup.json`
+and `private/coop-altar-candidate-grid.log`.
+
+The complete School Two test now permits 1,740 seconds: recorded successful
+sections total about 27 minutes. Individual movement, combat and scene
+watchdogs remain unchanged. This does not turn partial sections or a timed-out
+run into a passing full visit. Estimated total progress remains about 42%.
+
+Fresh internet checks on the unchanged game, with 40/20 ms delay/jitter, pass
+in `private/coop/regression-suite-a7c2ead28bca40f69e8d6ac20ee92d71`:
+presence/contact/effects in 55.39 seconds, Blue-first altar in 47.30 seconds and
+Red-first altar in 49.19 seconds. The presence check confirms 36-unit player
+separation, an unchanged stationary partner, both models and rendered particles.
+Both altar runs finish at 100/100 health with their correct scene owners and
+individual Dice. All three automatically produce the bounded movement report;
+the helper's recorded hash matches the tested file. These focused passes do
+not clear the separate full-route timing failure above. All owned windows close,
+Anode is released, and no screenshots are opened.
