@@ -431,26 +431,34 @@ class SchoolPair(PandemoniumPair):
             if current['motion']['time'] != last_time:
                 last_time = current['motion']['time']
                 last_move = self.reports['host']['frame']['tick']
-            if (name == 'library_spiral_lift' and adjustments < 2 and
-                    current['pose']['origin'][2] > top-32 and
+            if (name == 'library_spiral_lift' and adjustments < 8 and
                     self.reports['host']['frame']['tick']-last_move >= 120):
-                # The outer rim passes under the upper landing lip. The mover
-                # correctly stops when a rider meets it; walk inward to clear
-                # that obstruction before the last part of the ascent.
+                # A rider can meet the central shaft during rotation or the
+                # upper landing lip near the top. The shared mover correctly
+                # waits. Walk to an observed supported neighbor with room for
+                # the other body, then release input as carrying resumes.
                 center = current['pose']['origin'][:2]
-                target_radius = (60,48)[adjustments]
-                starts = []
-                for role in self.commands:
-                    index = 0 if role == 'host' else 1
-                    feet = self.bodies(role)[index]['player']['feet']
-                    starts.append(feet)
-                    radius = distance(feet[:2],center)
-                    scale = min(1,target_radius/max(1,radius))
-                    self.set(role,tuple(c+(p-c)*scale for p,c in zip(feet[:2],center))+(feet[2],))
+                starts = [b['player']['feet'] for b in self.bodies()]
+                candidates = []
+                upper = current['pose']['origin'][2] > top-32
+                for index, feet in enumerate(starts):
+                    radius = distance(feet[:2], center)
+                    for point in self.reports['host']['route_driver']['neighbors'][index]:
+                        gain = distance(point[:2], center)-radius
+                        if (abs(point[2]-feet[2]) < 2 and distance(point,starts[1-index]) >= 40
+                                and (gain > 4 or upper and gain < -4)):
+                            candidates.append(((-gain if upper else gain), index, point))
+                assert candidates, f'{name}: no supported clearance step for riders at {starts}'
+                _, index, target = max(candidates, key=lambda c:c[0])
+                role = 'host' if index == 0 else 'guest'
                 self.evidence.setdefault('lift_clearance',[]).append(dict(
                     name=name,tick=last_move,feet=starts,motion_time=last_time,
-                    target_radius=target_radius))
+                    role=role,target=target))
+                self.set(role,target)
+                self.until(lambda: obj()['motion']['time'] > last_time+.1 or self.reached(role),10)
+                self.set(role)
                 adjustments += 1
+                last_time = obj()['motion']['time']
                 last_move = self.reports['host']['frame']['tick']
         for role in self.commands:
             self.set(role)

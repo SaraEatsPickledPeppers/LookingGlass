@@ -3864,3 +3864,30 @@ The compact result is
 visit or a reconnect test. Full fresh co-op return runs in both arrival orders
 and the recovery matrix remain open; total progress stays approximately 42%.
 All checks in this work used text reports without opening screenshots.
+
+The next fresh Blue-first return attempt reaches the spiral lift but fails
+during its ascent, with both riders alive at 83/95 health. Its ordinary saved
+spiral checkpoint is retained in
+`private/coop/school-return-e69669c6276b4faebc5235d83393e39e/checkpoint-spiral.json`.
+Replaying both that failure and a closer-boarding attempt against the real map
+confirms supported riders and a valid next support, but a carried rider's next
+position intersects solid shaft geometry. The shared lift correctly stops;
+collision and platform support do not need relaxing. The private diagnostic
+is `private/return-lift-replay-results.json`, not a complete gameplay test.
+
+The paired lift replay now handles a blocked rotation at any height. It walks
+one rider toward an observed supported neighbor with room for their partner,
+then releases movement when carrying resumes. Lower-shaft corrections move
+outward; upper-lip corrections can move inward. Corrections remain bounded and
+use ordinary movement inputs. The old replay only adjusted near the top and
+could therefore wait forever at a lower obstruction until its watchdog failed.
+
+Repeating the unchanged spiral checkpoint on `01c1d34` now passes through both
+shared lifts, the original Star and potion scenes, fresh guest rejoin, and the
+authored Pool entrance. Two lower-lift clearance steps were actually exercised.
+Both players remain alive and finish at 98/100 health after ordinary pickups;
+5,305 player states, 5,305 shared-world states and 420 full school frames match.
+The 325.97-second result is
+`private/coop/regression-suite-08030788f20949bd9d1e62d80f1acd27/summary.json`.
+This certifies the resumed spiral-to-Pool segment only. Full fresh return runs
+in both arrival orders and the recovery checks are still required.
