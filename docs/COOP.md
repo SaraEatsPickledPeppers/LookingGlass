@@ -3652,3 +3652,71 @@ ordinary laboratory checkpoints are retained in
 still unproven. The complete route's internal watchdog now allows 28.5 minutes,
 below the runner's 29-minute limit with cleanup time; individual movement,
 combat and scene watchdogs remain unchanged.
+
+### Delayed door feedback in automated routes
+
+The opt-in route driver now sends one opening press per observed closed door,
+then waits for the opening target to appear in its received world state. A
+300 ms timer alone could repeat the toggle while a guest still saw a closed
+door. A headless regression reproduces 13 toggles with 600 ms of delayed
+feedback before this correction. The ordinary prompt already distinguishes
+open and closed doors; the failure was stale feedback, not its wording.
+
+Pending requests survive aim and route-command changes. They clear after an
+observed opening, or a visit change, checkpoint restore, teleport or respawn.
+Observation continues while the driver is idle so a later deliberate closure
+can be opened again. These are read-only world observations and ordinary use
+inputs; manual door controls, collision, quest conditions and network protocol
+are unchanged. An unconfirmed press is not retried indefinitely; the existing
+route watchdog still reports an unsuccessful passage.
+
+Headless coverage uses the real door update with 0, 200, 600 and 1,000 ms of
+delayed feedback, both approach directions and a later deliberate closure.
+A separate check covers lost aim and each world-relocation boundary. Existing
+manual-use and paired-body collision tests also pass. All 782 Rust tests pass
+with one existing ignored test. Logs are `private/coop-door-delay-baseline-test.log`,
+`private/coop-door-delay-fixed-test.log` and `private/coop-door-all-tests.log`.
+
+The diagnostic repeat on the previous `005d643` runtime crosses the laboratory
+door and completes the rescue, then fails at another rotating door during the
+greenhouse return. Its unchanged ordinary checkpoint and text observations
+are retained in `private/coop/school2-resume-3b127c33aee24971a0442bb0615a9d84`.
+This is an intermittent route failure, not a full visit pass. No screenshots
+were opened to diagnose or reproduce it.
+
+The next repeat, on `6d66fdd`, passes the laboratory rescue and reaches the
+greenhouse pickup before a reconnect assertion fails. The assertion required
+Will to be exactly unchanged while the host continued simulating. Red's Will
+rises from 8.7375517 to 8.8342390 over 116 ticks, matching Normal difficulty's
+0.1-per-second recovery within 0.000021. Blue's above-cap Will is unchanged.
+The same comparison on the guest's earlier tick also matches. This evidence
+does not convert the stopped route into a pass; its report remains failed in
+`private/coop/regression-suite-446b0db2e2434ed083d27ac4ad8198d7`.
+
+The reconnect assertion now permits only the expected simulation-time recovery
+for the saved difficulty and health, with a 0.002 floating-point tolerance.
+Health, equipment, collected items, selection, quest items and difficulty still
+require exact equality; existing position, scene and checkpoint assertions
+remain. Both reconnect reports are retained before validation, including on
+failure. Four headless cases cover the observed mismatch, recovery caps and
+dead players, unexpected resource changes, and invalid times/values. The
+default `fixture-scenes` case now runs 12 tests.
+These asset-free Python regressions also run in the Windows checks workflow on
+every push and pull request, alongside Rust unit tests. They need no desktop,
+screenshots, original game files or network host.
+
+The fresh suite `private/coop/regression-suite-839085182f0d452c88621c9c949f8534`
+passes on frozen runtime `6d66fdd`: 12 headless cases in 0.17 seconds and the
+ordinary greenhouse checkpoint through School Two's exit in 381.47 seconds.
+The route uses public internet with 40 ms delay and 20 ms jitter, Red first,
+and a fresh guest process at reconnect. It verifies 6,176 matching player and
+shared-world states and 152 matching full school reports. Both players finish
+with 100 Sanity; quest rewards, scenes, reunion, no deaths/wipes and the authored
+return-school entrance pass. The previously blocked greenhouse return door is
+crossed with ordinary inputs. The checkpoint is copied unchanged, and frozen
+executable/source identities are rechecked after the run. All owned windows
+close and Anode is released. No screenshots were opened.
+
+This is a partial checkpoint segment, not a complete School Two visit. Both
+full arrival orders, recovery coverage, the return observatory lift and later
+campaign visits remain open. Overall completion remains approximately 42%.

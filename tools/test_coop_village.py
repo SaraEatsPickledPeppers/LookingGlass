@@ -6,6 +6,7 @@ Run in Anode; internet hosting is default. Full death/rejoin matrix is separate.
 """
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -14,6 +15,19 @@ import uuid
 
 from test_coop_play import ROOT, read, distance
 from coop_diagnostics import recent_movement, timing_summary
+
+
+def verify_rejoin_stats(old, current, elapsed_ticks):
+    """Idle reconnect permits only the game's normal simulation-time Will recovery."""
+    assert type(elapsed_ticks) is int and elapsed_ticks >= 0, 'Rejoin moved the simulation clock backwards'
+    for field in ('sanity', 'owned', 'collected', 'selected', 'school_items', 'staff_component', 'difficulty'):
+        assert current[field] == old[field], f'Rejoin changed personal {field}'
+    rate, cap = {'Easy': (.3, 100), 'Normal': (.1, 10), 'Hard': (0, 0), 'Nightmare': (0, 0)}[old['difficulty']]
+    before, after = old['will'], current['will']
+    assert math.isfinite(before) and math.isfinite(after), 'Rejoin produced invalid Will'
+    expected = min(cap, before + elapsed_ticks / 120 * rate) if old['sanity'] > 0 and before < cap else before
+    # Fixed-step f32 accumulation differs slightly from the analytic value.
+    assert abs(after - expected) < .002, f'Rejoin changed personal Will beyond normal recovery: {before} -> {after}, expected {expected}'
 
 
 class Pair:
@@ -257,21 +271,19 @@ class Pair:
         self.start('guest')
         self.until(lambda: 'guest' in self.reports and self.reports['guest']['pid'] != previous_pid, 120)
         self.wait(.5)
+        (self.folder / 'after-rejoin.json').write_text(json.dumps(self.reports))
         for report in self.reports.values():
             frame = report['frame']
             assert report['visit'] == before['visit'] and frame['checkpoint_generation'] == checkpoint
             assert frame['tick'] >= before['frame']['tick']
             self.verify_rejoined_world(before, report)
             for body, old in zip(frame['players'], before['frame']['players']):
-                for field in ('sanity', 'will', 'owned', 'collected', 'selected',
-                              'school_items', 'staff_component', 'difficulty'):
-                    assert body['stats'][field] == old['stats'][field], f'Rejoin changed personal {field}'
+                verify_rejoin_stats(old['stats'], body['stats'], frame['tick'] - before['frame']['tick'])
                 assert body['spawned_at'] == old['spawned_at'] and body['warped_at'] == old['warped_at']
                 assert distance(body['player']['feet'], old['player']['feet']) < 2, 'Rejoin relocated a player'
         self.evidence['rejoin'] = {'guest_processes': self.starts['guest'], 'epoch': before['visit']['epoch'],
             'before_tick': before['frame']['tick'], 'after_tick': self.reports['guest']['frame']['tick'],
             'resources_and_completed_scenes_preserved': True}
-        (self.folder / 'after-rejoin.json').write_text(json.dumps(self.reports))
         print('PASS', self.map_name, 'guest left and rejoined at the same position with personal resources and scene progress intact.', flush=True)
 
     def verify_rejoined_world(self, before, report):

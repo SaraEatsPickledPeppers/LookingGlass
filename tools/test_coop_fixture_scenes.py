@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from test_coop_school import SchoolPair
 from test_coop_school2 import verify_reunion
+from test_coop_village import verify_rejoin_stats
 
 
 class SceneRace(SchoolPair):
@@ -129,6 +130,39 @@ class ReunionEvidenceTest(unittest.TestCase):
         row['players'][0]['warped_at'] -= 1
         with self.assertRaisesRegex(AssertionError, 'both presentation tracks'):
             verify_reunion(old, row)
+
+
+class RejoinResourcesTest(unittest.TestCase):
+    def stats(self, **changes):
+        return dict(dict(sanity=100, will=8.73755168914795, difficulty='Normal',
+            owned=[0, 1], collected=['blade'], selected=0, school_items={'star': True},
+            staff_component=False), **changes)
+
+    def test_observed_normal_recovery_during_fresh_guest_start(self):
+        verify_rejoin_stats(self.stats(), self.stats(will=8.83423900604248), 116)
+        verify_rejoin_stats(self.stats(), self.stats(will=8.824236869812012), 104)
+
+    def test_caps_difficulty_and_dead_players_preserve_resources(self):
+        for old, after in [(self.stats(will=9.99), 10), (self.stats(will=52), 52),
+                           (self.stats(difficulty='Easy', will=99.9), 100),
+                           (self.stats(difficulty='Hard'), 8.73755168914795),
+                           (self.stats(difficulty='Nightmare'), 8.73755168914795),
+                           (self.stats(sanity=0), 8.73755168914795)]:
+            verify_rejoin_stats(old, dict(old, will=after), 120)
+
+    def test_resets_losses_and_other_resource_changes_still_fail(self):
+        for changes in [dict(will=100), dict(will=8), dict(will=9.5), dict(sanity=90),
+                        dict(owned=[0]), dict(collected=[]), dict(school_items={})]:
+            with self.assertRaises(AssertionError):
+                verify_rejoin_stats(self.stats(), self.stats(**changes), 116)
+
+    def test_invalid_clock_and_will_are_rejected(self):
+        for ticks in [-1, 1.5]:
+            with self.assertRaises(AssertionError):
+                verify_rejoin_stats(self.stats(), self.stats(), ticks)
+        for value in [float('nan'), float('inf')]:
+            with self.assertRaises(AssertionError):
+                verify_rejoin_stats(self.stats(), self.stats(will=value), 116)
 
 
 if __name__ == '__main__':

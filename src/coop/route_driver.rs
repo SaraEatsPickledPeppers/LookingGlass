@@ -8,7 +8,7 @@ use crate::{collision::World, movement::{Controls, Player}, route::Route};
 use anyhow::{ensure, Result};
 use macroquad::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::{collections::VecDeque, path::PathBuf, sync::mpsc, time::{Duration, Instant, SystemTime}};
+use std::{collections::{BTreeSet, VecDeque}, path::PathBuf, sync::mpsc, time::{Duration, Instant, SystemTime}};
 
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -361,6 +361,8 @@ pub struct Driver {
     polled: Instant,
     refreshed: Instant,
     used: Instant,
+    door_requests: BTreeSet<crate::entity::Id>,
+    door_context: Option<(u64, u64, u64, u64)>,
     worker: Option<Worker>,
     plan: VecDeque<(Controls, Vec3)>,
     walking_plan: bool,
@@ -395,6 +397,7 @@ impl Driver {
     pub fn new(path: PathBuf) -> Self {
         let now = Instant::now();
         Self { path, command: None, modified: None, polled: now, refreshed: now, used: now,
+            door_requests: BTreeSet::new(), door_context: None,
             worker: None, plan: VecDeque::new(), walking_plan:false, step_tick: 0, step_at: now,
             walking_progress:WalkingProgress::new(Vec3::ZERO,now),
             navigation_clock:NavigationClock::new(now), jumped: false, rope_used: false,
@@ -515,6 +518,8 @@ impl Driver {
         self.report.jumps = keys.jumps;
         self.report.phase = "idle";
         let body = &frame.players[local.index()];
+        self.observe_doors((frame.epoch, frame.checkpoint_generation, body.warped_at, body.spawned_at),
+            &arena.stage.interactions);
         let location = (frame.epoch, body.warped_at, body.spawned_at);
         if self.location != Some(location) {
             self.plan.clear(); self.jumped = false; self.location = Some(location);
@@ -734,10 +739,27 @@ impl Driver {
         if !keys.primary && !keys.alternate && keys.wish.length()>0. {
             keys.yaw=keys.wish.y.atan2(keys.wish.x); keys.pitch=0.;
         }
-        if arena.stage.interactions.prompt(world, body.player.eye(), super::arena::direction(keys.yaw,keys.pitch)) == Some("E  open door")
-            && now.duration_since(self.used) >= Duration::from_millis(300) {
-            keys.uses += 1; self.used = now;
+        self.open_door(&arena.stage.interactions, world, &body.player, keys, now);
+    }
+    fn open_door(&mut self, interactions: &crate::interaction::Interactions, world: &World,
+        player: &Player, keys: &mut Input, now: Instant) {
+        if now.duration_since(self.used) < Duration::from_millis(300) { return; }
+        if let Some(id) = interactions.closed_door_in_reach(world, player.eye(),
+            super::arena::direction(keys.yaw, keys.pitch)) {
+            if self.door_requests.insert(id) {
+                keys.uses += 1; self.used = now;
+            }
         }
+    }
+    fn observe_doors(&mut self, context: (u64, u64, u64, u64), interactions: &crate::interaction::Interactions) {
+        if self.door_context != Some(context) {
+            self.door_requests.clear();
+            self.door_context = Some(context);
+        }
+        // Keep an unconfirmed press across command changes and aim changes.
+        // A timer alone can close a door before the guest sees it opening.
+        // Observe even while idle, so a later genuine closure can be reopened.
+        self.door_requests.retain(|id| interactions.closed_door(*id));
     }
     pub fn capture_and_finish(&mut self, now: Instant) -> Result<bool> {
         let Some(command)=self.command.as_ref().filter(|_|self.fresh(now)) else { return Ok(false); };
@@ -752,6 +774,63 @@ impl Driver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn automatic_door_waits_for_delayed_open_confirmation() {
+        use crate::interaction::Interactions;
+        for delay in [0, 4, 12, 20] { for opposite in [false, true] {
+            let map = crate::interaction::tests::fixture();
+            let mut host = Interactions::load(&map).unwrap();
+            let mut world = World::from_bsp(&map).unwrap();
+            host.sync(&mut world);
+            let player = Player::new(vec3(32., if opposite { 160. } else { 40. }, 0.));
+            let aim = if opposite { -Vec3::Y } else { Vec3::Y };
+            let mut views = VecDeque::from(vec![(host.snapshot(), world.clone()); delay + 1]);
+            let mut client = Interactions::load(&map).unwrap();
+            let mut driver = Driver::new(PathBuf::new());
+            let start = driver.used + Duration::from_millis(300);
+            let mut keys = Input { yaw: aim.y.atan2(aim.x), ..Default::default() };
+            for cycle in 0..2 {
+                if cycle == 1 {
+                    // A later deliberate closure must allow another opening.
+                    host.update(0.05, &map, &mut world, &player, aim, true).unwrap();
+                }
+                for tick in 0..100 {
+                    let (view, observed_world) = views.pop_front().unwrap();
+                    client.restore(&view, &map).unwrap();
+                    driver.observe_doors((1, 0, 0, 0), &client);
+                    let old = keys.uses;
+                    driver.open_door(&client, &observed_world, &player, &mut keys,
+                        start + Duration::from_millis((cycle * 100 + tick) * 50));
+                    host.update(0.05, &map, &mut world, &player, aim, keys.uses != old).unwrap();
+                    views.push_back((host.snapshot(), world.clone()));
+                }
+                assert_eq!(host.used, cycle * 2 + 1,
+                    "Delayed door confirmation caused a second toggle: {delay} frames, opposite {opposite}, cycle {cycle}");
+                assert_eq!(host.prompt(&world, player.eye(), aim), Some("E  close door"));
+            }
+        }}
+    }
+    #[test]
+    fn unconfirmed_door_press_survives_aim_changes_but_not_world_relocation() {
+        let map = crate::interaction::tests::fixture();
+        let mut world = World::from_bsp(&map).unwrap();
+        let interactions = crate::interaction::Interactions::load(&map).unwrap();
+        interactions.sync(&mut world);
+        let player = Player::new(vec3(32., 40., 0.));
+        let mut driver = Driver::new(PathBuf::new());
+        let start = driver.used + Duration::from_secs(1);
+        let mut keys = Input { yaw: std::f32::consts::FRAC_PI_2, ..Default::default() };
+        for (index, context) in [(1, 0, 0, 0), (1, 1, 0, 0), (1, 1, 20, 0),
+            (1, 1, 20, 30), (2, 1, 20, 30)].into_iter().enumerate() {
+            for turn in 0..3 {
+                keys.yaw = if turn == 1 { -std::f32::consts::FRAC_PI_2 } else { std::f32::consts::FRAC_PI_2 };
+                driver.observe_doors(context, &interactions);
+                driver.open_door(&interactions, &world, &player, &mut keys,
+                    start + Duration::from_secs((index * 3 + turn) as u64));
+                assert_eq!(keys.uses, index as u64 + 1);
+            }
+        }
+    }
     #[test]
     fn checkpoint_commands_are_neutral_fresh_and_acknowledged_once_even_on_failure() {
         let value=serde_json::json!({"id":7,"heartbeat":1,"epoch":2,"goal":null,

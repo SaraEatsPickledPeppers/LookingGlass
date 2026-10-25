@@ -1220,6 +1220,16 @@ impl Interactions {
             }
         })
     }
+    /// Read-only observations for the opt-in route driver. A use request is
+    /// a toggle, so a delayed closed view must not produce repeated presses.
+    pub(crate) fn closed_door(&self, id: Id) -> bool {
+        self.doors.iter().any(|d| d.id == id && d.enabled && self.event_world.enabled(id)
+            && !d.locked && d.target.abs() < 1.)
+    }
+    pub(crate) fn closed_door_in_reach(&self, world: &World, eye: Vec3, aim: Vec3) -> Option<Id> {
+        if self.prompt(world, eye, aim) != Some("E  open door") { return None; }
+        self.nearest(world, eye, aim).map(|index| self.doors[index].id)
+    }
     pub fn update(
         &mut self,
         dt: f32,
