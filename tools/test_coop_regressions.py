@@ -139,13 +139,16 @@ def main():
                                                    'school-blue', 'school-red', 'lift-blue', 'lift-red',
                                                    'stairs-blue', 'stairs-red', 'school2-blue', 'school2-red',
                                                    'dice-blue', 'dice-red', 'altar-blue', 'altar-red',
-                                                   'gym-jump-blue', 'gym-jump-red', 'school2-resume'),
+                                                   'gym-jump-blue', 'gym-jump-red', 'school2-resume',
+                                                   'return-sp', 'return-chain', 'return-blue', 'return-red', 'return-resume'),
                         help='school and school2-resume resume checkpoints; school-blue/red and school2-blue/red are full routes; lift/stairs/altar/gym-jump are staged; dice is a partial School Two entrance route')
     parser.add_argument('--local', action='store_true')
     parser.add_argument('--delay-ms', type=int, default=40)
     parser.add_argument('--jitter-ms', type=int, default=20)
     parser.add_argument('--school-checkpoint', type=Path)
     parser.add_argument('--school2-checkpoint', type=Path)
+    parser.add_argument('--return-checkpoint', type=Path)
+    parser.add_argument('--return-resume-point', choices=('entrance', 'theatre', 'spiral', 'observatory-approach', 'observatory'))
     parser.add_argument('--school2-resume-point', choices=('dice', 'gym', 'laboratory-approach', 'laboratory-entrance', 'greenhouse'), default='gym',
                         help='dice repeats only dice-to-gym; later checkpoints continue to exit')
     parser.add_argument('--school-resume-point', choices=('theatre', 'balcony', 'spiral', 'library', 'bridge', 'descent'))
@@ -157,6 +160,12 @@ def main():
         args.school2_checkpoint = args.school2_checkpoint.resolve()
         if not args.school2_checkpoint.is_file():
             parser.error('The unchanged ordinary School Two checkpoint must exist')
+    if bool(args.return_checkpoint) != bool(args.return_resume_point):
+        parser.error('Provide both --return-checkpoint and --return-resume-point')
+    if args.return_checkpoint:
+        args.return_checkpoint = args.return_checkpoint.resolve()
+        if not args.return_checkpoint.is_file():
+            parser.error('The unchanged ordinary return-school checkpoint must exist')
     if not args.exe.is_file() or not args.data.is_dir():
         parser.error('--exe must be a built executable and --data an existing game-data directory')
     if not (0 <= args.delay_ms <= 500 and 0 <= args.jitter_ms <= 500):
@@ -173,6 +182,8 @@ def main():
         parser.error('The school regression needs --school-checkpoint and --school-resume-point')
     if 'school2-resume' in selected and not args.school2_checkpoint:
         parser.error('The school2-resume regression needs --school2-checkpoint')
+    if 'return-resume' in selected and not args.return_checkpoint:
+        parser.error('The return-resume regression needs --return-checkpoint and --return-resume-point')
     common = ['--exe', str(args.exe), '--data', str(args.data),
               '--delay-ms', str(args.delay_ms), '--jitter-ms', str(args.jitter_ms)]
     if args.local:
@@ -181,10 +192,14 @@ def main():
         'fixture-scenes': ([sys.executable, str(ROOT / 'tools/test_coop_fixture_scenes.py')], 30, False),
         'world': ([str(args.exe), '--data', str(args.data), '--coop-world-check'], 180, False),
         'school2': ([str(args.exe), '--data', str(args.data), '--school2-check'], 180, False),
+        'return-sp': ([str(args.exe), '--data', str(args.data), '--school-return-check'], 600, False),
+        'return-chain': ([str(args.exe), '--data', str(args.data), '--school-return-chain-check'], 600, False),
         'presence': ([sys.executable, str(ROOT / 'tools/test_coop_presence.py'), *common], 300, True),
         'host-stalls': ([sys.executable, str(ROOT / 'tools/test_coop_host_stalls.py'), *common], 300, True),
     }
     for first in ('blue', 'red'):
+        cases['return-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school_return.py'), *common,
+                                    '--first', first, '--rejoin'], 1560, True)
         cases['school-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school.py'), *common,
                                     '--first', first, '--rejoin'], 1500, True)
         cases['lift-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school_lift.py'), *common,
@@ -206,6 +221,10 @@ def main():
         cases['school'] = ([sys.executable, str(ROOT / 'tools/test_coop_school_resume.py'), *common,
                            '--checkpoint', str(args.school_checkpoint), '--resume-point', args.school_resume_point,
                            '--first', args.first, '--rejoin'], 1200, True)
+    if args.return_checkpoint:
+        cases['return-resume'] = ([sys.executable, str(ROOT / 'tools/test_coop_school_return.py'), *common,
+                                 '--checkpoint', str(args.return_checkpoint), '--resume-point', args.return_resume_point,
+                                 '--first', args.first, '--rejoin'], 1560, True)
     if args.school2_checkpoint:
         cases['school2-resume'] = ([sys.executable, str(ROOT / 'tools/test_coop_school2_resume.py'), *common,
                                   '--checkpoint', str(args.school2_checkpoint),

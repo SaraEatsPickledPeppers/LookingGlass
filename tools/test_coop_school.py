@@ -244,6 +244,14 @@ class SchoolPair(PandemoniumPair):
             # position, retaining the same final distance/height checks.
             if not displaced() and settled and all(leader_at_goal(r) for r in self.reports.values()):
                 break
+            if not displaced() and not settled:
+                # A nearby step can leave the body on a different height even
+                # after both approaches report arrival. Repeating this same
+                # endpoint cannot satisfy the unchanged final height check.
+                rejected.append(endpoint)
+                self.evidence.setdefault('unsettled_pair_endpoints',[]).append(dict(
+                    goal=goal,endpoint=endpoint,feet=self.bodies()[partner_index]['player']['feet'],
+                    tick=self.reports['host']['frame']['tick']))
         else:
             raise AssertionError('Pair did not settle at a safe endpoint after eight attempts')
         # The final straight walk keeps navigation's broad arrival from passing

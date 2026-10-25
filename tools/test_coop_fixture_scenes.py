@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from test_coop_school import SchoolPair
 from test_coop_school2 import verify_reunion
+from test_coop_school_return import SchoolReturnPair
 from test_coop_village import verify_rejoin_stats
 
 
@@ -163,6 +164,37 @@ class RejoinResourcesTest(unittest.TestCase):
         for value in [float('nan'), float('inf')]:
             with self.assertRaises(AssertionError):
                 verify_rejoin_stats(self.stats(), self.stats(will=value), 116)
+
+
+class ReturnRejoinTest(unittest.TestCase):
+    def report(self, tick, time):
+        school = {name: 0 for name in ('books', 'returning', 'theatre', 'library', 'shelves', 'recipe')}
+        school['return_visit'] = dict(phase='Observatory', star=False, potion=True,
+            scene=dict(active=False, time=time, beat='Star', doors_closed=True, skipped=False))
+        return dict(frame=dict(tick=tick), combat=dict(stage=dict(world=dict(school=school))))
+
+    def verify(self, old, new):
+        SchoolReturnPair.verify_rejoined_world(None, old, new)
+
+    def test_completed_scene_clock_continues_and_caps_during_rejoin(self):
+        self.verify(self.report(100, 12.5), self.report(220, 13.5))
+        self.verify(self.report(100, 29.5), self.report(220, 30))
+        self.verify(self.report(100, 30), self.report(220, 30))
+
+    def test_scene_restart_reward_reset_and_wrong_clock_are_rejected(self):
+        old = self.report(100, 12.5)
+        for field, value in [('active', True), ('skipped', True), ('time', 0), ('time', 14.5)]:
+            new = self.report(220, 13.5)
+            new['combat']['stage']['world']['school']['return_visit']['scene'][field] = value
+            with self.assertRaises(AssertionError):
+                self.verify(old, new)
+        for field, value in [('phase', 'Rising'), ('star', True), ('potion', False)]:
+            new = self.report(220, 13.5)
+            new['combat']['stage']['world']['school']['return_visit'][field] = value
+            with self.assertRaises(AssertionError):
+                self.verify(old, new)
+        with self.assertRaises(AssertionError):
+            self.verify(old, self.report(99, 12.5))
 
 
 if __name__ == '__main__':

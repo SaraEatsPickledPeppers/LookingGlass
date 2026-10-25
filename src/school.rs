@@ -209,6 +209,13 @@ fn path(map: &Bsp, start: &str) -> Vec<Vec3> {
     result
 }
 impl School {
+    /// Read-only support observation for ordinary input replays. Unlike the
+    /// co-op departure gate, it also works while the platform is moving.
+    pub(crate) fn riding_support(&self, name: &str, feet: Vec3) -> bool {
+        self.objects.iter().find(|o| o.name == name).is_some_and(|o|
+            o.enabled && o.solid && crate::moving::aboard(&o.collider, feet))
+    }
+
     /// Only co-op uses this gate. A trigger request remains pending until every
     /// living body is supported by the lift; a corpse never blocks boarding.
     pub(crate) fn boarding_ready(&self, thread: &str, feet: &[Vec3]) -> Option<bool> {

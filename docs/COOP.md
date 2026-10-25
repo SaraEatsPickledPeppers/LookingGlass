@@ -3756,11 +3756,11 @@ return traversal remains a separate open check. Logs are
 `private/coop-return-lift-fixed-sp.log` and
 `private/coop-return-route-baseline-chain.log`.
 
-The return route now plans ordinary movement and jumps down from the raised
+The return route at that checkpoint planned ordinary movement and jumps down from the raised
 entrance edge instead of holding a straight walking input there. On frozen
 runtime `a9eaf40`, it crosses that obstruction and continues through the theatre
 approach, but later falls and blocks on the library approach at approximately
-`(-1583, 2983, -550)`. `--school-return-check` therefore still exits with failure;
+`(-1583, 2983, -550)`. `--school-return-check` therefore still exited with failure;
 the eleven scene checks pass, but neither complete return traversal nor the
 School Two/return chain is certified. See `private/coop-return-lift-final-sp.log`.
 
@@ -3771,3 +3771,73 @@ checks in 12.41 seconds. Its machine-readable report is
 The locked release build, seven source-package tests and source audit pass.
 Overall completion remains approximately 42%; no campaign row is added by
 these focused checks. No desktop or image inspection was needed.
+
+### Return-school route automation
+
+The single-player return replay now uses the existing funded combat driver,
+clears active threats at ordinary route stops, and runs through the exposed
+library doorway before fighting inside its supported corridor. Legacy Blade
+throws and waiting on the doorway edge let Boojum waves knock the replay off
+the route. Combat, damage, resources and world collision are unchanged.
+
+Spiral boarding now watches actual support and releases movement once Alice
+has landed on the lift. A fixed lower-floor target made the previous replay
+chase that point while the lift rotated, repeatedly replanning after falling
+off. The new School query only observes support; the replay still supplies
+ordinary walking/jumping inputs and fails if it cannot board within its limit.
+
+On frozen runtime `01c1d34`, `--school-return-check` passes all eleven saved
+Star/potion cases and both complete return routes. Watched scenes finish in
+24,222 ticks and skipped scenes in 22,187. Both routes finish at the authored
+Pool entrance with 100 Sanity, after 6 damage, 8 Blade throws and 14 jumps;
+normal earned drops restore health. Inventory carryover, spending the Star
+and potion, and absence of unintended traversal teleports are asserted.
+The compact report is
+`private/coop/regression-suite-d9b6ebe78917493bb09c2b7c6e491910/summary.json`
+(45 seconds, no desktop or screenshots).
+
+The compact runner now accepts `return-sp` and `return-chain` for headless
+single-player checks, and `return-blue` / `return-red` for the two-client
+internet route. The co-op fixture starts at the authored return entrance with
+the visit's normal loadout, takes narrow passages in turn, checks shared
+boarding and both original scenes, and requests an ordinary host checkpoint
+at major stops. It compares authoritative player/world states, verifies scene
+ownership and frozen partners, and rejects unexpected deaths or checkpoint
+recovery. Its intended end is the shared Pool entrance; the new fixture's
+existence is not a passing full-visit claim.
+
+`return-resume --return-checkpoint <file> --return-resume-point <stop>` repeats
+an unchanged saved segment in fresh profiles. Stops are `entrance`, `theatre`,
+`spiral`, `observatory-approach` and `observatory`. Saved bytes are hashed and
+copied unchanged; startup checks positions, personal resources and quest
+state. Resumed results are explicitly partial. The default public internet
+connection, 40 ms delay and 20 ms jitter still apply to rendered cases.
+
+Two additional headless fixture tests cover the completed Star presentation
+clock continuing, then capping, while a guest reconnects. Scene restarts,
+reward resets and unexpected clock changes still fail. The fixture suite now
+contains 14 tests and remains part of the Windows checks workflow.
+
+The actual School Two-to-return single-player chain also passes on `01c1d34`.
+Return entry preserves its earned 27 Sanity, 17.17661 Will, selected weapon,
+18 collected items, Star and potion. Both watched and skipped return routes
+reach the Pool exit, with normal pickups restoring health. The compact suite
+`private/coop/regression-suite-9c4e4acd21c54c87a83937f01d9944e0/summary.json`
+passes 14 fixture tests, the paired native world checks, and the 328.69-second
+chain. All 784 Rust tests and seven source-package tests pass.
+
+The first full two-client return run reaches the theatre but stalls at an
+overly precise corner waypoint. Subsequent repeats use its unchanged ordinary
+theatre checkpoint, without editing positions or resources. A completed
+theatre-to-spiral segment now includes both players traversing the reward loop,
+library approach, and shared spiral boarding/ascent over the internet, but the
+following upper-landing route still fails in
+`private/coop/regression-suite-f551980260704f2caa124be31923fcf8/summary.json`.
+That run remains failed, and no complete co-op return visit is credited.
+
+These repeats also exposed a harness stopping problem near a small step: the
+guest could stand eight units above a proposed endpoint after reporting
+arrival, and the harness retried the same endpoint eight times. It now rejects
+that candidate and tries another supported spot, retaining the final ground,
+distance and height assertions. Narrow walkways use single-file passages
+instead of assuming there is room for two stopping positions at every turn.
