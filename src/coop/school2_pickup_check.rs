@@ -73,6 +73,55 @@ pub(super) fn check(assets: &mut Assets) -> Result<()> {
         println!("PASS co-op Dice first {first:?}: personal pickup, original scene/owner, frozen partner, replica, reunion, ambush and no replay ({count} ticks)");
     }
     check_cramped_reunion(assets, &map, &visit, dice)?;
+    check_gym_departure(assets, &map, &visit)?;
+    Ok(())
+}
+
+/// A recorded gym departure finishes its animation with no new placement
+/// available, although the previous Gnome reunion left the partner safely nearby.
+fn check_gym_departure(assets: &mut Assets, map: &Bsp, visit: &Visit) -> Result<()> {
+    for first in PlayerId::ALL {
+        let (interactions, mut world, _, story) =
+            crate::school2::cinema_check::setup(assets,map,crate::school2::cinema::Beat::Warp)?;
+        let mut stage=Stage::load(assets,map,&mut world,visit,false)?;
+        stage.interactions=interactions;
+        stage.story=story;
+        stage.interactions.sync_coop(&mut world);
+        let (eye,yaw)=crate::interaction::spawn(map,None);
+        let mut roster=Roster::new(&world,eye,yaw,Stats::for_level("skool2",None))?;
+        let owner_at=vec3(2075.9312,-3088.9688,440.03125);
+        let partner_at=vec3(1973.2809,-3126.7268,448.03125);
+        for (id,at) in [(first,owner_at),(first.partner(),partner_at)] {
+            roster.players[id.index()].player=Player::spawn(&world,at+Vec3::Z*EYE_HEIGHT)
+                .context("Cannot stage recorded gym departure")?;
+        }
+        stage.accept(Default::default(),first,&mut roster,&world);
+        ensure!(stage.owner==Some(first),"Gym departure did not acquire its owner");
+        for _ in 0..120*30 {
+            if !stage.busy() { break; }
+            stage.scene_step(&mut roster,map,&mut world,&Default::default())?;
+            if stage.busy() {
+                ensure!(roster.players[first.partner().index()].player.feet.distance(partner_at)<0.1,
+                    "Gym departure moved the waiting partner");
+            }
+        }
+        ensure!(!stage.busy(),"Finished gym departure left co-op controls locked");
+        ensure!(roster.players[first.index()].player.feet.distance(owner_at)<0.1,
+            "Gym reunion moved the scene owner");
+        // The owner can stand on the narrow original walkway. Only a newly
+        // placed or retained partner needs the larger recovery footprint.
+        ensure!(roster.players.iter().all(|b|b.player.grounded && world.body_clear(b.player.feet)
+            && !stage.interactions.hazardous(b.player.feet)
+            && b.stats.sanity()==100. && b.spawned_at==0 && b.warped_at>0),
+            "Gym departure did not preserve safe living players: {:?}",roster.players.iter().map(|b|
+                (b.player.feet,b.player.grounded,b.stats.sanity(),b.spawned_at,b.warped_at)).collect::<Vec<_>>());
+        let other=&roster.players[first.partner().index()].player;
+        ensure!(crate::recovery::supported(&world,other.feet) && other.feet.distance(partner_at)<0.1,
+            "Gym departure did not retain its supported nearby partner: {:?}",other.feet);
+        ensure!((40. ..=128.).contains(&roster.players[0].player.feet.distance(roster.players[1].player.feet)),
+            "Gym departure did not reunite nearby separate players");
+        println!("PASS co-op gym departure {first:?}: original scene, frozen partner, safe reunion and released controls");
+    }
     Ok(())
 }
 

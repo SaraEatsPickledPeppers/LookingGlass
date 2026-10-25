@@ -49,6 +49,22 @@ pub fn reunion(world: &World, owner: &Player, safe: impl Fn(Vec3) -> bool) -> Op
     })
 }
 
+/// A second scene can end beside a partner already standing on a safe nearby
+/// pad. If no new placement fits, keep that existing position rather than
+/// leaving the completed scene locked. This never moves a body through a wall.
+pub fn reunion_with_partner(world: &World, owner: &Player, partner: &Player,
+    safe: impl Fn(Vec3) -> bool) -> Option<Player> {
+    reunion(world, owner, &safe).or_else(|| {
+        let delta = partner.feet - owner.feet;
+        let sight = world.sweep(owner.eye(), partner.eye(), Vec3::splat(0.5));
+        (owner.grounded && partner.grounded && delta.truncate().length() >= 40.
+            && delta.length() <= 128. && delta.z.abs() <= 32.
+            && supported(world, partner.feet) && safe(partner.feet)
+            && !sight.start_solid && sight.fraction >= 1.)
+            .then(|| Player::spawn(world, partner.feet + Vec3::Z * EYE_HEIGHT)).flatten()
+    })
+}
+
 pub fn near(world: &World, feet: Vec3, drop: f32, safe: impl Fn(Vec3) -> bool) -> Option<Player> {
     for radius in [48., 72., 96.] {
         for direction in directions() {
@@ -153,6 +169,26 @@ fn supported(world: &World, feet: Vec3) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn completed_scene_can_keep_an_already_safe_nearby_partner() {
+        let floor = (vec3(-500.,-500.,-100.),vec3(500.,500.,0.));
+        let world = World::fixture(&[floor]);
+        let owner = Player::spawn(&world,Vec3::Z*EYE_HEIGHT).unwrap();
+        let partner = Player::spawn(&world,vec3(112.,0.,EYE_HEIGHT)).unwrap();
+        let safe = |at:Vec3| at.distance(partner.feet)<0.1;
+        assert!(reunion(&world,&owner,safe).is_none());
+        let kept = reunion_with_partner(&world,&owner,&partner,safe).unwrap();
+        assert!(kept.grounded && kept.feet.distance(partner.feet)<0.1);
+        assert!(reunion_with_partner(&world,&owner,&partner,|_|false).is_none());
+        for at in [vec3(24.,0.,EYE_HEIGHT),vec3(129.,0.,EYE_HEIGHT)] {
+            let other=Player::spawn(&world,at).unwrap();
+            assert!(reunion_with_partner(&world,&owner,&other,|p|p.distance(other.feet)<0.1).is_none());
+        }
+        let wall = World::fixture(&[floor,(vec3(55.,-500.,0.),vec3(57.,500.,100.))]);
+        assert!(reunion_with_partner(&wall,&owner,&partner,safe).is_none());
+        let edge = World::fixture(&[(vec3(-20.,-20.,-100.),vec3(120.,20.,0.))]);
+        assert!(reunion_with_partner(&edge,&owner,&partner,safe).is_none());
+    }
     #[test]
     fn scene_reunion_finds_supported_space_between_coarse_search_directions() {
         let world = World::fixture(&[(vec3(-20., -10., -100.), vec3(90., 35., 0.))]);

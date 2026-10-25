@@ -255,12 +255,21 @@ fn landing_control(world: &World, player: &Player, goal: Vec3, lead: f32, radius
     let delta = goal-player.feet;
     // Waiting for a delayed grounded snapshot is too late on a small pad.
     // Brake on the final descent, once above and near the destination, with
-    // a clear horizontal approach. Never steer through a wall or out of water.
+    // a clear horizontal approach. Being beside a platform is not enough:
+    // slowing the planned sideways approach there can miss its edge entirely.
+    // Require support below the body near the intended landing height first.
+    // Match the route's 35-unit walking height tolerance for sloping supports
+    // and approximate waypoints; a two-unit band misses legitimate landings.
+    let height_tolerance=35.;
     let descent = !player.grounded && !player.swimming && player.ledge.is_none()
-        && player.velocity.z < 0. && (-128. ..=0.).contains(&delta.z)
+        && player.velocity.z < 0. && (-128. ..=height_tolerance).contains(&delta.z)
         && delta.truncate().length() < 128. && {
             let hit=world.body_trace(player.feet,goal+Vec3::Z*(-delta.z));
+            let down=vec3(player.feet.x,player.feet.y,goal.z-height_tolerance);
+            let support=world.body_trace(player.feet,down);
             !hit.start_solid && hit.fraction >= 1.
+                && !support.start_solid && support.fraction < 1. && support.normal.z >= 0.65
+                && (player.feet.lerp(down,support.fraction).z-goal.z).abs() < height_tolerance
         };
     if !(player.grounded && delta.length()<42.) && !descent { return None; }
     let settled = player.grounded && delta.truncate().length() < radius && player.velocity.truncate().length() < 20.;
@@ -636,6 +645,46 @@ impl Driver {
 mod tests {
     use super::*;
     #[test]
+    fn navigation_keeps_lateral_jump_input_until_above_the_landing() {
+        // The altar return crosses a gap and turns left late in its jump.
+        // A clear horizontal trace in mid-air does not mean the body is over
+        // the landing. Braking beside its edge drops Alice against the wall.
+        let world=World::fixture(&[
+            (vec3(12.,-444.,-100.),vec3(112.,-254.,0.)),
+            (vec3(-108.,-64.,-100.),vec3(32.,116.,0.)),
+        ]);
+        let goal=Vec3::ZERO;
+        let diagonal=vec2(-std::f32::consts::FRAC_1_SQRT_2,std::f32::consts::FRAC_1_SQRT_2);
+        let path=[(Vec2::Y,false),(Vec2::Y,false),(Vec2::Y,true),(Vec2::Y,false),
+            (diagonal,false),(diagonal,false),(-Vec2::X,false),(-Vec2::Y,false)];
+        let run=|correct:bool| {
+            let mut player=Player::spawn(&world,vec3(83.70465,-371.63672,
+                crate::movement::EYE_HEIGHT+0.03125)).unwrap();
+            let mut handed_off=false;
+            for (wish,jump) in path {
+                for tick in 0..24 {
+                    let input=if let Some((wish,_))=correct.then(||landing_control(&world,&player,goal,0.,8.)).flatten() {
+                        handed_off=true;
+                        Controls {wish,..Default::default()}
+                    } else if handed_off { Controls::default() }
+                    else { Controls {wish,jump:jump&&tick==0,run:true,..Default::default()} };
+                    player.tick(&world,input);
+                }
+            }
+            for _ in 0..360 {
+                let wish=if correct { landing_control(&world,&player,goal,0.,8.).map_or(Vec2::ZERO,|s|s.0) }
+                    else { Vec2::ZERO };
+                player.tick(&world,Controls {wish,..Default::default()});
+            }
+            player
+        };
+        let planned=run(false);
+        assert!(planned.grounded && planned.feet.distance(goal)<42.,"Recorded jump plan missed: {:?}",planned.feet);
+        let corrected=run(true);
+        assert!(corrected.grounded && corrected.feet.distance(goal)<8.,
+            "Landing correction abandoned the lateral approach: {:?}",corrected.feet);
+    }
+    #[test]
     fn navigation_settles_a_fast_edge_landing_before_reporting_arrival() {
         let world = World::fixture(&[(vec3(-100.,-24.,-100.),vec3(100.,100.,0.))]);
         for delay in [0, 12] {
@@ -664,8 +713,11 @@ mod tests {
     fn navigation_brakes_before_a_delayed_landing_without_cutting_through_walls() {
         let floor=(vec3(-100.,-24.,-100.),vec3(100.,200.,0.));
         let world=World::fixture(&[floor]);
-        let goal=Vec3::ZERO;
-        for delay in [0, 12] {
+        // Authored route heights can be approximate, especially on sloping
+        // supports. Straight walking already accepts a 35-unit height band.
+        for height in [-16.,0.,16.] {
+          let goal=Vec3::Z*height;
+          for delay in [0, 12] {
             // Recorded final descent relative to the gym platform. Simulate
             // delayed observations AND delayed ordinary movement inputs.
             let mut player=Player::new(vec3(27.652,92.514,106.67));
@@ -674,14 +726,18 @@ mod tests {
             let mut pending=VecDeque::from(vec![Controls {wish:-Vec2::Y,run:true,..Default::default()};delay]);
             for _ in 0..360 {
                 let view=views.pop_front().unwrap();
-                let (wish,_)=landing_control(&world,&view,goal,2.*delay as f32/120.,8.).unwrap();
-                pending.push_back(Controls {wish,..Default::default()});
+                let control=landing_control(&world,&view,goal,2.*delay as f32/120.,8.)
+                    .map(|(wish,_)|Controls {wish,..Default::default()})
+                    .unwrap_or(Controls {wish:-Vec2::Y,run:true,..Default::default()});
+                pending.push_back(control);
                 player.tick(&world,pending.pop_front().unwrap());
                 assert!(player.feet.z>=-0.1,"Missed platform at {:?}",player.feet);
                 views.push_back(player.clone());
             }
             assert!(landing_control(&world,&player,goal,0.2,8.).unwrap().1);
+          }
         }
+        let goal=Vec3::ZERO;
         let mut airborne=Player::new(vec3(0.,80.,80.));
         airborne.velocity=-Vec3::Z*100.;
         let wall=World::fixture(&[floor,(vec3(-100.,30.,0.),vec3(100.,40.,200.))]);

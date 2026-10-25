@@ -2910,3 +2910,181 @@ Evidence is retained in
 movement extract in `private/coop-altar-host-fall.json`. No new Dice milestone,
 full traversal or campaign credit is claimed from this failed run. Progress
 remains about 42%; no images were opened.
+
+### Preserve the sideways approach before landing
+
+A small production-physics regression reproduces the altar return failure with
+two platforms and the recorded sequence of eight movement segments. The
+unaltered plan lands safely. With the former landing correction, Alice slows
+while still beside the destination and falls against its side at the same
+relative collision boundary as the recorded full run. The failing check is
+retained in `private/coop-lateral-landing-red.log`.
+
+The opt-in route controller now starts airborne landing correction only when
+a downward body trace finds support at the intended landing height. Its existing
+clear horizontal approach check remains. Grounded settling, player movement,
+network input delivery and single-player controls are unchanged. This retains
+the planned sideways input until the body is above the destination.
+
+The regression now passes, as do the existing delayed gym-landing and edge
+settling checks. Build
+`d5225f0f22b34ed8403b1ac4ba81dcb6e59519b1c1b7762fdfd6df21cefc0e14`
+passes 765 unit tests with one existing ignored test. Release and two-client
+results are recorded separately from this numerical evidence.
+
+The initial two-unit support-height band passes both staged altar orders
+(49.67/48.20 seconds, both at 100/100 health), but fails the Blue-first gym
+repeat after 112.45 seconds. Red takes 18 fall damage on the earlier bleacher
+jump before eventually reaching the upper endpoint. The suite correctly fails
+and does not run its remaining Red-first gym case:
+`private/coop/regression-suite-29546387ef0f42daaaaa3e5ad5fad4d6`.
+The compact movement extract is `private/coop-gym-ascent-damage.json`.
+
+The delayed-landing regression now also covers waypoints 16 units above and
+below the actual support, with both immediate and delayed observations/inputs.
+The strict band rejects these valid approaches. The support check now uses the
+same 35-unit height tolerance as straight route walking, while still requiring
+support beneath the body. Both the lateral-gap regression and the expanded gym
+checks pass. All 765 unit tests pass on build
+`a2aede11dcb6e9518184a9a3e83da883a1c4ca33356977851f86da0df7645530`.
+
+Release compilation succeeds. All four focused internet cases pass with
+40/20 ms delay/jitter on this build in
+`private/coop/regression-suite-a4d1c082112d4fc7b4e9ae288b473020`:
+
+| Component | Seconds | Matching player/enemy and world states | Final health |
+| --- | ---: | ---: | --- |
+| Gym, Blue first | 106.16 | 1,522 | 100 / 100 |
+| Gym, Red first | 108.34 | 1,493 | 100 / 100 |
+| Altar, Blue first | 49.19 | 486 | 100 / 100 |
+| Altar, Red first | 46.86 | 447 | 100 / 100 |
+
+Both gym waits permit 5.190 seconds of lamp motion. The Red-first altar case
+also exercises the alternate departure order: Blue leaves first after the
+reunion, while both clients correctly retain Red as the Dice scene owner.
+Neither pair dies, respawns or restores a checkpoint. These remain staged
+components; full entrance-to-return traversal is checked separately.
+
+The normal-entrance Red-first repeat on this build passes the previous altar
+return failure and verifies the complete Dice prefix: 7,500 matching player/enemy
+and world states, 78 full-report matches, both personal pickups and the correct
+scene owner. Both also complete the gym ascent. The full run then fails after
+707.19 seconds because the fixture requests a paired endpoint on the narrow
+diagonal walkway, where no supported side-by-side position exists. Both remain
+alive at 100/87 health. Evidence is retained in
+`private/coop/regression-suite-c81752fc0ec24a6dbe74a67eca41ae87` and its
+`school2-route-159d4c6ac4ec4f8581bda99e821e674e/milestone-dice.json` child.
+This failed full run earns no completed-visit credit.
+
+The upper gym fixture now crosses the complete narrow passage one player at a
+time before stepping aside at its far end. The focused gym case also exercises
+this shared route and the three-Boojum quest, after its existing damage-free
+ascent and unobstructed-lamp checks. It requires both players to finish alive,
+grounded at the far endpoint, with no death, respawn or checkpoint restoration.
+Results for this expanded component are recorded separately below.
+
+Its first Red-first repeat catches a stale test command after the Gnome scene
+and fails after 145.62 seconds. The leader crosses the upper walkway safely;
+the scene reunites the waiting Blue player at the far end, but the fixture's
+old combat-holding goal sends Blue back toward the former waiting point and off
+the platform. Evidence:
+`private/coop/regression-suite-2181284e692b4fd289daf626ed30f938`, with compact
+movement records in `private/coop-gym-walkway-fall.json`.
+
+The School Two fixture now releases the waiting player's positional goal during
+each scene, before reunion. The upper-passage continuation also recognises a
+partner delivered by that authored reunion and continues from the far endpoint
+instead of sending them back to the start. No player state or physics is
+changed. The expanded gym case additionally checks all three scene owners.
+Both gym orders and both altar orders are repeated after this fixture change.
+
+The next Red-first attempt retains both players at 100 health through the Gnome
+reunion, confirming that the stale-goal fall is removed. It stops after 141.12
+seconds when the generic passage helper asks the leader to step aside despite
+both players already occupying separate safe pads. Evidence:
+`private/coop/regression-suite-9b3c7ca24aa045409f9c69d91b896edd`.
+The passage now accepts that authored reunion only after the leader reaches the
+endpoint and both players are grounded nearby with their Mushroom awarded.
+The focused final-position checks include the existing reunion pad eight units
+higher and about 110 units from the route endpoint. Neither arrival is staged
+or written by the fixture.
+
+The following repeat completes the upper passage and three-Boojum fight at
+100/79 health, but its new scene-coverage assertion fires while `OG1_Warp` is
+still starting (157.42 seconds,
+`private/coop/regression-suite-0e6071894619470a9272ae66b5783a25`).
+`gym_finish()` now waits for that departure scene and a grounded reunion before
+returning. The Laboratory quest state alone is not treated as scene completion.
+
+### Keep a safe nearby partner after the gym departure
+
+The extended repeat in
+`private/coop/regression-suite-660e039adf1d4193adeb36e9b1a0e208` fails after
+233.55 seconds with a genuine co-op scene lock. The Gnome's departure animation
+is inactive, the story queue is empty and no transition is pending, but Red
+still owns the scene. Both players remain alive at 100/11 health. The subsequent
+fight and movement are frozen while reunion repeatedly fails.
+
+A native replay restores that exact world and both bodies. It confirms that no
+new reunion position passes the collision/support/hazard checks, even when the
+diagnostic search extends to 144 units. The existing partner is already on a
+supported, harmless pad about 110 units from the owner. Evidence:
+`private/coop-gym-reunion-probe.json` and its matching log. The temporary probe
+module is removed from public sources.
+
+Scene completion now keeps an existing nearby partner as a fallback when no
+new placement is available. Both bodies must be grounded, with at least 40
+units of horizontal separation, at most 128 units total separation, no more
+than 32 units of height difference, a clear eye-level sight line, and the same
+full-footprint support and hazard checks. This preserves an existing position;
+it does not move a body through an obstruction or change ordinary revival.
+
+A unit regression rejects overlapping, distant, hazardous, unsupported and
+wall-separated fallback positions. The native world check also runs the
+recorded Gnome departure with both scene owners and requires the original owner
+position, a frozen waiting partner, safe reunion and released controls.
+Validation of the new build is recorded below.
+
+All 766 unit tests pass with one existing ignored test on build
+`61d9b30356a5a9f2042508160ce3cff410f0c18839fe6690e00190cb57eb1d8f`.
+The recorded native departure releases control; its first final assertion
+incorrectly required the unchanged scene owner to have a recovery-sized floor
+footprint on the narrow original walkway. The check now preserves the original
+owner's grounded, unobstructed pose and requires the larger footprint for the
+retained partner, including exact retention of that partner's safe position.
+
+The complete single-player School Two route passes unchanged: 53,236 ticks,
+nine jumps, 23 throws, 149 Cards, 170 combat damage and 27 final Sanity; both
+authored portals, all quest rewards and the gated return pass without cheats,
+recovery or resource refills. Evidence:
+`private/coop-gym-reunion-single-player.log`.
+The expanded gym fixture now enables ordinary attacks for both players after
+the ascent, matching the full co-op route instead of leaving its staged partner
+passive during the fight.
+
+The final build,
+`5365929dc75b9bfb4008ec5b6af406e37c66b329b5258af2dbf046461d0cdf62`,
+contains the same runtime changes with the corrected native assertion. Release
+compilation and the complete co-op world check pass. Both recorded gym scene
+owners release control, preserve the owner's position, and retain the existing
+supported partner exactly. Existing scene, transport, restoration, airborne
+handoff and cramped-altar checks also pass. Evidence:
+`private/coop-gym-reunion-final-world.log` and
+`private/coop-gym-reunion-final-release.log`.
+
+The first internet repeat on this final build fails before reaching the Gnome
+scene, after 124.14 seconds. Both players pass the ascent and lamp check at full
+health. Red then misses the planned jump from `(1710, -2800, 440)` toward
+`(1880, -2940, 440)`, falls to the gym floor and loses 42 health. The driver
+correctly rejects a new route from that lower floor. Blue remains at 100 health.
+No death, respawn or wipe is used to continue the test, and the suite does not
+run its remaining cases after this failure.
+
+Evidence is retained in
+`private/coop/regression-suite-f514393988a74110a35c8625852bdc8e` and
+`private/coop/gym-jump-46f3e2c43d9a463cb83f20c75a70f5e7`; a compact movement and
+plan extract is `private/coop-gym-upper-jump-fall.json`. The new scene fix has
+passing native coverage for both owners, but no passing internet repeat yet.
+The upper-walkway jump is the next controller investigation. Full School Two
+traversal remains open, with no additional campaign visit credited. Progress
+remains about 42%; all checks in this work used logs/state without opening images.

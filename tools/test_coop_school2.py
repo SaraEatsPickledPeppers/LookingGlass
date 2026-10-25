@@ -57,6 +57,20 @@ class School2Pair(SchoolPair):
         # Use the common network recorder; School One's first_cinema has a
         # different schema. Complete shared-world hashes also cover School Two.
         Pair.pump(self)
+        if 'host' in self.reports:
+            report = self.reports['host']
+            owner = report['combat']['stage']['owner']
+            if owner is not None:
+                waiting = 'guest' if owner == 'Blue' else 'host'
+                old = self.commands[waiting]
+                if old['goal'] is not None:
+                    # secure() holds a waiting body at its current position.
+                    # A scene will reunite it elsewhere: release that old goal
+                    # during the scene, before it can walk back off the pad.
+                    self.set(waiting, capture=old['capture'], epoch=old['epoch'])
+                    self.evidence.setdefault('scene_goal_clearances', []).append(dict(
+                        role=waiting, goal=old['goal'], scene=report['route_driver']['scene'],
+                        tick=report['frame']['tick']))
         for role, report in self.reports.items():
             if self.history[role]:
                 self.history[role][-1]['school'] = report['combat']['stage']['world']['school2']
@@ -137,11 +151,37 @@ class School2Pair(SchoolPair):
                    (1030, -2560, 0), (1030, -2880, 0), (1200, -2880, 0),
                    (1470, -2880, 0), (1470, -3040, 0), (2150, -3040, 0), (2150, -2000, 0)]])
         self.gym_ascent()
-        self.legs([(self.gym_exit, True), ((1472, -2560, 440), False),
-                   ((1710, -2800, 440), False), ((1880, -2940, 440), True),
-                   ((2077, -3090, 440), False)])
+        self.gym_finish()
+
+    def gym_finish(self):
+        # The diagonal walkway has no supported side-by-side waiting spot.
+        # Cross the whole upper route before stepping aside for the partner.
+        for role in self.commands:
+            self.set(role, attack=True)
+        endpoint = (2077, -3090, 440)
+        first_index = 0 if self.first == 'host' else 1
+        def reunited_at_gnome():
+            # The Gnome scene normally brings the waiting player to a separate
+            # supported pad. That is already a valid arrival; neither body
+            # needs to squeeze sideways or repeat the old walkway afterward.
+            return all(
+                distance(r['frame']['players'][first_index]['player']['feet'][:2], endpoint[:2]) < 8
+                and all(b['stats']['school_items']['mushroom'] and b['player']['grounded']
+                        and distance(b['player']['feet'][:2], endpoint[:2]) < 128
+                        and abs(b['player']['feet'][2]-endpoint[2]) < 16
+                        for b in r['frame']['players']) for r in self.reports.values())
+        self.passage([(self.gym_exit, True), ((1472, -2560, 440), False),
+                      ((1710, -2800, 440), False), ((1880, -2940, 440), True),
+                      (endpoint, False)], after_reunion=[(endpoint, False)],
+                     partner_done=reunited_at_gnome)
         self.secure(radius=1400)
         self.until(lambda: all(self.school(r)['quest']['stage'] == 'Laboratory' for r in self.reports), 45)
+        # Laboratory opens at the start of OG1_Warp. Wait for the actual scene
+        # and grounded reunion before moving on or verifying scene coverage.
+        self.wait(.5)
+        self.until(lambda: all(r['combat']['stage']['owner'] is None
+                   and all(b['player']['grounded'] for b in r['frame']['players'])
+                   for r in self.reports.values()), 90)
         print('PASS School Two gym lever, bleachers and three Boojums', flush=True)
 
     def gym_ascent(self):

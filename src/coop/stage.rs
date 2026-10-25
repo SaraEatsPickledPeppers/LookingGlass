@@ -439,7 +439,8 @@ impl Stage {
             let partner = owner.partner();
             if roster.players[partner.index()].stats.alive() {
                 let Some(player) =
-                    super::placement::reunion(world, &roster.players[owner.index()].player, |at| {
+                    super::placement::reunion_with_partner(world, &roster.players[owner.index()].player,
+                        &roster.players[partner.index()].player, |at| {
                         !self.interactions.hazardous(at)
                             && self.interactions.beyond.as_ref().is_none_or(|b| b.reunion_safe(at))
                     })

@@ -1,8 +1,9 @@
 """Exercise School Two's upper-gym jump with two independent clients.
 
 Only the initial spawn is staged. Players use the real lever and bleachers,
-jump through ordinary inputs, and settle on the next platform. This focused
-component does not certify the gym quest or a full campaign visit. Run in Anode.
+jump through ordinary inputs, settle on the next platform, then cross the upper
+walkway and finish the Boojum fight. This staged component does not certify the
+entrance route or a full campaign visit. Run in Anode.
 """
 import argparse
 import hashlib
@@ -62,13 +63,32 @@ class GymJumpPair(School2Pair):
         for rows in self.history.values():
             assert {row['owner'] for row in rows if row['scene'] == 'extendBleachers'} == {self.args.first.title()}
         assert all(r['combat']['stage']['world']['gym']['used'] for r in self.reports.values())
+        self.evidence['ascent_health'] = [b['stats']['sanity'] for b in self.bodies()]
+        self.gym_finish()
+        expected = {'extendBleachers', 'Old_Gnome_Mushroom', 'OG1_Warp'}
+        assert self.captures == expected, f'Unexpected gym scenes: {self.captures}'
+        for report in self.reports.values():
+            assert report['combat']['stage']['world']['school2']['quest']['stage'] == 'Laboratory'
+            for body in report['frame']['players']:
+                assert body['player']['grounded']
+                assert body['stats']['school_items']['mushroom']
+                # The scene's separate reunion pad is eight units higher than
+                # the leader's walkway endpoint, roughly 110 units away.
+                assert abs(body['player']['feet'][2] - 440) < 16
+                assert distance(body['player']['feet'][:2], (2077, -3090)) < 128
+        for rows in self.history.values():
+            for scene in expected:
+                assert {row['owner'] for row in rows if row['scene'] == scene} == {self.args.first.title()}
+            assert all(row['checkpoint_generation'] == 0 for row in rows)
+            assert all(body['health'] > 0 and body['spawned_at'] == 0
+                       for row in rows for body in row['players']), 'Upper gym caused death or respawn'
         self.verify_coherence()
         self.evidence['final_health'] = [b['stats']['sanity'] for b in self.bodies()]
         self.finish_pair(1)
         (self.folder / 'result.json').write_text(json.dumps(dict(
             passed=True, build=self.build, internet=not self.args.local, first=self.args.first,
             delay_ms=self.args.delay_ms, jitter_ms=self.args.jitter_ms, evidence=self.evidence,
-            scope='Staged gym lever, bleacher ascent, jump and supported settling for both players; not gym quest or full traversal'), indent=2))
+            scope='Staged gym lever, bleacher ascent, supported settling, upper walkway and Boojum quest for both players; not entrance or full traversal'), indent=2))
 
 
 if __name__ == '__main__':
