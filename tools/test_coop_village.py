@@ -13,7 +13,7 @@ import time
 import uuid
 
 from test_coop_play import ROOT, read, distance
-from coop_diagnostics import recent_movement
+from coop_diagnostics import recent_movement, timing_summary
 
 
 class Pair:
@@ -363,6 +363,7 @@ class Pair:
 
     def close(self):
         (self.folder / 'recent-movement.json').write_text(json.dumps(recent_movement(self.history)))
+        (self.folder / 'timing-summary.json').write_text(json.dumps(timing_summary(self.history)))
         (self.folder / 'history.json').write_text(json.dumps(self.history))
         (self.folder / 'observations.json').write_text(json.dumps(self.evidence, indent=2))
         (self.folder / 'captures.json').write_text(json.dumps(self.capture_commands, indent=2))

@@ -287,6 +287,7 @@ impl Host {
         }
         Ok(())
     }
+    pub fn cancel_controls(&mut self) { self.input.cancel(); }
     pub fn controls(&mut self, now: Instant) -> (crate::movement::Controls, Input) {
         if self.phase == Phase::Playing
             && self.peer.state() == State::Connected

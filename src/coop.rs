@@ -7,6 +7,7 @@ pub mod arena;
 pub mod audio;
 pub mod campaign;
 pub mod checkpoint;
+mod clock;
 mod placement;
 mod separation;
 mod effects;

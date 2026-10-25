@@ -76,16 +76,18 @@ impl TimedInput {
         if self.received.is_some_and(|at|now.saturating_duration_since(at)<INPUT_TIMEOUT) {
             return false;
         }
+        self.cancel();
+        true
+    }
+
+    pub(crate) fn cancel(&mut self) {
         self.queued.clear(); self.current=None; self.elapsed=0;
         // Cancel queued edges as well as held motion. Preserve their counters
         // so they cannot reappear when fresh traffic resumes after the timeout.
         if let Some(last)=self.accepted {
             self.latch.last=last.input; self.latch.sequence=last.sequence;
         }
-        self.latch.pending_jumps=0; self.latch.pending_uses=0;
-        self.latch.pending_attacks=[0;2]; self.latch.pending_rope=[0;2];
-        self.latch.received=self.received;
-        true
+        self.latch.cancel(); self.received=None;
     }
 
     pub fn accept(&mut self, sequence:u64, input:Input, sampled_micros:u64, now:Instant) -> Result<()> {
@@ -274,5 +276,27 @@ mod tests {
         }
         assert!(stream.accept(MAX_SAMPLES as u64+1,Input::default(),100,now).is_err());
         assert_eq!(stream.sequence(),MAX_SAMPLES as u64);
+    }
+
+    #[test]
+    fn suspended_host_cancels_buffered_controls_without_replaying_edges() {
+        let mut stream=TimedInput::default(); let now=Instant::now();
+        let run=Input{wish:Vec2::X,run:true,..Default::default()};
+        let edge=Input{jumps:1,uses:1,attack_presses:[1,1],rope_edges:[1,1],..run};
+        stream.accept(1,run,0,now).unwrap(); stream.sample(now);
+        stream.accept(2,edge,200_000,now).unwrap();
+        stream.cancel();
+        let (controls,buttons)=stream.sample(now);
+        assert_eq!(controls.wish,Vec2::ZERO); assert!(!controls.jump && !controls.use_pressed);
+        assert!(!buttons.primary && !buttons.alternate); assert_eq!(buttons.rope_edges,[0,0]);
+        assert_eq!(stream.sequence(),2); assert_eq!(stream.timing()["buffered_control_ms"],0.);
+        stream.accept(2,edge,200_000,now).unwrap();
+        assert_eq!(stream.sample(now).0.wish,Vec2::ZERO,"Duplicate revived suspended controls");
+        stream.accept(3,edge,800_000,now).unwrap();
+        let (controls,buttons)=stream.sample(now);
+        assert_eq!(controls.wish,Vec2::X); assert!(!controls.jump && !controls.use_pressed);
+        assert!(!buttons.primary && !buttons.alternate); assert_eq!(buttons.rope_edges,[0,0]);
+        stream.accept(4,Input{jumps:2,..edge},800_000,now).unwrap();
+        assert!(stream.sample(now).0.jump); assert!(!stream.sample(now).0.jump);
     }
 }

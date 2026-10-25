@@ -3465,3 +3465,88 @@ This validates the previously failing route section on the new implementation,
 not an exact replay of the earlier packet delivery or a complete campaign visit.
 Both full School Two orders and its remaining recovery matrix are still open.
 No screenshots were opened; the four tests close their owned windows normally.
+
+### Recover simulation time after brief host stalls
+
+The following full Red-first run fails at the Dice return jump in
+`private/coop/regression-suite-a73619bc4ed848188403d73f4c147a13` (256.48 seconds,
+exit 1). Its complete history records buffered controls growing from roughly
+100 ms to a peak of 872.9 ms. The failure and compact timing summary remain in
+`private/coop/school2-route-18bc548d83ff4c85b0a567cf142d0bc5`. This overrides any
+inference that the preceding partial-route pass made the section reliable.
+
+The host previously capped each elapsed frame at 100 ms before advancing its
+fixed simulation. Time above that cap was lost, while guest input sampling used
+elapsed real time. A headless regression with 350, 400 and 200 ms render stalls
+reproduces 78 permanently lost ticks (650 ms); its failing output is retained
+in `private/coop-clock-red.log`. This is a controlled reproduction of the clock
+defect, not a replay of the failed internet run's exact frame or packet timings.
+
+The co-op clock now retains short-frame debt and drains it with at most 12
+physics steps per rendered frame. A suspension or accumulated debt reaching
+the existing 500 ms input watchdog instead discards old time and cancels both
+players' stale controls. Accepted button counters remain consumed, so resumed
+traffic cannot replay cancelled jumps, uses, attacks or rope actions. Ordinary
+fresh controls resume normally. Presentation keeps its existing elapsed-time
+cap; the single-player clock and saved-world formats are unchanged.
+
+Reports include remaining simulation debt, and compact failure reports keep its
+peak. Automated regressions cover bounded catch-up with real input scheduling,
+long-pause recovery and cancelled-edge handling. Live validation of this change
+is recorded separately below; no new full-visit credit is awarded here.
+
+Build `9e65cb769a20883d181664d6d3a42315ddba1b2808d3318fa05c964730f529e2`
+passes 779 unit tests (one existing ignored), release compilation (five existing
+warnings), and both native shared-world and School Two checks. Logs are
+`private/coop-clock-{tests,release,world,school2}.log`. The internet suite with
+40/20 ms delay/jitter passes in
+`private/coop/regression-suite-e3a9acdb18664f03b94b3e9963472be7`:
+
+| Case | Seconds | Matching complete/world states | Final health |
+| --- | ---: | ---: | --- |
+| Contact and particle effects | 55.64 | 600 complete states | 100 / 100 |
+| Staged altar, Blue first | 47.88 | 428 | 100 / 100 |
+| Staged altar, Red first | 47.97 | 446 | 100 / 100 |
+| Normal entrance through Dice, Red first | 444.72 | 7,387 | 100 / 100 |
+
+The normal Dice route completes both return jumps and its ordinary checkpoint,
+with 153 coincident matching full reports. Its host control buffer has a
+17.3 ms median, 45.6 ms 95th percentile and 151.5 ms observed peak; it ends at
+26.1 ms. The observed simulation-debt peak is 34.9 ms, draining to 5.3 ms at
+the end. These are periodic measurements, not every frame or a guarantee of
+latency on other connections. The new `timing-summary.json` is automatically
+written alongside bounded recent movement by the common pair fixture, on both
+success and failure, and included in regression-suite results. It retains
+sample counts, median, 95th percentile, last value and the tick/epoch of each
+observed peak. No screenshot inspection is needed to obtain these results.
+
+A controlled Windows process-stall comparison also reproduces the defect in
+two real internet-connected clients. The private probe pauses only its own
+host child for nominal 350/400/200 ms intervals, always resumes the same process
+handle in a `finally` block, and leaves the guest running. After settling,
+build `3c10e1a` fails with a 915.5 ms median and 967.8 ms peak control backlog.
+Build `9e65cb7` has zero observed backlog across the 15 settled samples, at most
+8.1 ms of fractional simulation debt, and then passes the contact/effects checks
+with 739 matching complete states. The comparison exits successfully only when
+the old-build failure and new-build pass both occur. Evidence:
+`private/coop/host-stall-comparison-943ede69f7164f36ab0f4911bd3bfc55`.
+
+The regression is now `tools/test_coop_host_stalls.py`, records its own fixture
+hash and measured pause durations, and is included in the standard regression
+runner's default selection. To run it alone in Anode:
+
+```text
+python tools/test_coop_regressions.py --exe <built-executable> --data <base-directory> --only host-stalls
+```
+
+It checks that delay drains after the stalls, then exercises ordinary movement,
+contact and particle rendering. It does not award campaign traversal credit.
+
+The final public fixture passes through the runner in 66.61 seconds in
+`private/coop/regression-suite-076d44ff74484e358b036acbcd21efbf`, with 790 matching
+complete states. Measured pauses are 350.2, 400.2 and 200.5 ms. All 15 settled
+samples have zero control backlog; remaining fractional simulation debt peaks
+at 7.6 ms. The runner's fixture hash matches the source copy recorded by the
+test. All owned game windows close, Anode is released, and no screenshots are
+opened. Full School Two traversal in both orders and recovery coverage remain
+open; the overall estimate remains approximately 42%.

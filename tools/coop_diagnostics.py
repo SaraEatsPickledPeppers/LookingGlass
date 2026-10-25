@@ -1,5 +1,35 @@
 """Bounded movement evidence for diagnosing rendered runs without images."""
 import math
+import statistics
+
+
+TIMINGS = (('network_timing', 'round_trip_ms'), ('network_timing', 'oldest_pending_ms'),
+           ('network_timing', 'queued_input_samples'), ('network_timing', 'buffered_control_ms'),
+           ('frame_timing', 'frame_ms'), ('frame_timing', 'simulation_debt_ms'))
+
+
+def timing_summary(history):
+    """Observed timing statistics across the whole run, without gameplay rows.
+
+    Reports sample frames periodically, so these are observed peaks, not a
+    guarantee that every transient stall was recorded. They never award a pass.
+    """
+    clients = {}
+    for role, rows in history.items():
+        metrics = {}
+        for group, key in TIMINGS:
+            observations = [(row, (row.get(group) or {}).get(key)) for row in rows]
+            observations = [(row, value) for row, value in observations
+                            if type(value) in (float, int) and math.isfinite(value)]
+            if not observations:
+                continue
+            row, peak = max(observations, key=lambda pair: pair[1])
+            values = sorted(value for _, value in observations)
+            metrics[key] = dict(samples=len(values), median=statistics.median(values),
+                p95=values[math.ceil(len(values) * .95) - 1], last=observations[-1][1],
+                peak=dict(epoch=row['epoch'], tick=row['tick'], value=peak))
+        clients[role] = metrics
+    return dict(format=1, scope='Periodically observed timings; not a pass/fail result', clients=clients)
 
 
 def recent_movement(history, seconds=10, limit=80):
@@ -29,10 +59,7 @@ def recent_movement(history, seconds=10, limit=80):
                 break
         recent.reverse()
         peaks = {}
-        for group, key in (('network_timing', 'round_trip_ms'),
-                           ('network_timing', 'oldest_pending_ms'),
-                           ('network_timing', 'queued_input_samples'),
-                           ('network_timing', 'buffered_control_ms'), ('frame_timing', 'frame_ms')):
+        for group, key in TIMINGS:
             values = [(r['tick'], (r.get(group) or {}).get(key)) for r in recent]
             values = [(tick, value) for tick, value in values
                       if isinstance(value, (float, int)) and math.isfinite(value)]

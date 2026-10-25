@@ -195,6 +195,11 @@ pub struct RemoteInput {
 mod input_timeline;
 pub use input_timeline::{InputOutbox, TimedInput};
 impl RemoteInput {
+    pub(crate) fn cancel(&mut self) {
+        self.pending_jumps = 0; self.pending_uses = 0;
+        self.pending_attacks = [0; 2]; self.pending_rope = [0; 2];
+        self.received = None;
+    }
     pub fn sequence(&self) -> u64 {
         self.sequence
     }

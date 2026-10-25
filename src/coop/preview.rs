@@ -161,7 +161,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         let mut local_latch = RemoteInput::default();
         let mut keys = Input::default();
         let mut local_sequence = 0;
-        let mut accumulator = 0_f64;
+        let mut simulation_clock = super::clock::Clock::default();
         let mut menu = false;
         let mut menu_selected = 0;
         let mut copied_at: Option<Instant> = None;
@@ -272,7 +272,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 pitch = 0.;
                 keys = Input::default();
                 local_latch = RemoteInput::default();
-                accumulator = 0.;
+                simulation_clock = super::clock::Clock::default();
                 last_sent = 0;
                 weapon_buttons.block();
                 // Do not charge the synchronous asset-loading time to movement.
@@ -426,8 +426,9 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
             }
             if let (Some(host), Some(roster)) = (&mut host, &mut roster) {
                 if playing {
-                    accumulator += f64::from(elapsed);
-                    while accumulator >= f64::from(FIXED_DT) {
+                    let (steps, suspended) = simulation_clock.advance(get_frame_time());
+                    if suspended { host.cancel_controls(); local_latch.cancel(); }
+                    for _ in 0..steps {
                         // The diagnostic planner describes exact 24-tick input
                         // segments. Sampling once per render frame can hold a
                         // turn past its boundary, then discard the plan while
@@ -463,7 +464,6 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                             println!("PASS co-op checkpoint fixture: team wipe restored saved bodies, resources, character actions, shared world and NPCs exactly");
                             fixture_checkpoint_wiped = true;
                         }
-                        accumulator -= f64::from(FIXED_DT);
                     }
                     if launch.checkpoint_check && launch.travel_check && visit.epoch == 3
                         && roster.tick >= entered_tick + 120 && !fixture_checkpoint_saved {
@@ -522,7 +522,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         host.enter(map, entry, visit.difficulty, now)?;
                         pending_visit = Some(host.visit().clone());
                     }
-                } else { accumulator = 0.; }
+                } else { simulation_clock = super::clock::Clock::default(); }
             }
             clear_background(BLACK);
             if let Some(frame) = &display {
@@ -627,7 +627,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                             "particles": effects.steam.counts(), "effect_batches": effect_batches },
                         "network_timing": guest.as_ref().map(|g| g.input_timing())
                             .or_else(||host.as_ref().map(|h|h.input_timing())),
-                        "frame_timing": {"frame_ms": get_frame_time()*1000., "guest_poll_ms": guest_poll_ms, "replicate_ms": replicate_ms},
+                        "frame_timing": {"frame_ms": get_frame_time()*1000., "guest_poll_ms": guest_poll_ms, "replicate_ms": replicate_ms,
+                            "simulation_debt_ms": simulation_clock.deferred_ms()},
                         "combat": arena.snapshot(), "visit": visit, "completed_visits": if launch.host { Some(campaign.completed()) } else { None },
                         "route_driver": route_driver.as_ref().map(|d| &d.report) })) {
                         let _ = std::fs::write(path, bytes);

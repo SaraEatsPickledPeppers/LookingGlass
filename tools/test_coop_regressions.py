@@ -59,11 +59,14 @@ def result_from_log(log):
     fields = ('matching_sent_and_restored_states', 'matching_shared_world_states', 'matching_full_school_frames',
               'contact_distance', 'stationary_partner_unchanged',
               'both_models_and_particles_visible', 'checkpoint_sha256', 'resume_point', 'lifts',
-              'minimum_will', 'final_health', 'staged_initial_spawn')
+              'minimum_will', 'final_health', 'staged_initial_spawn', 'host_stalls')
     metrics = {key: result['evidence'][key] for key in fields if key in result['evidence']}
     rejoin = result['evidence'].get('rejoin')
     if rejoin:
         metrics['rejoin_preserved_resources_and_scenes'] = rejoin['resources_and_completed_scenes_preserved']
+    timing = folder / 'timing-summary.json'
+    if timing.exists():
+        metrics['timing_summary'] = json.loads(timing.read_text())
     return dict(build=result['build'], evidence=str(folder), scope=result['scope'],
                 first=result.get('first'), metrics=metrics)
 
@@ -114,6 +117,9 @@ def failure_from_log(log, rendered):
             result['recent_movement'] = dict(file=str(recent), clients={
                 role: {key: value[key] for key in ('epoch', 'first_tick', 'last_tick', 'samples', 'peaks')}
                 for role, value in data['clients'].items()})
+        timing = folder / 'timing-summary.json'
+        if timing.exists():
+            result['timing_summary'] = dict(file=str(timing), **json.loads(timing.read_text()))
         for role, state in result['clients'].items():
             command = state['route'].get('command')
             state['plans'] = [p.relative_to(folder).as_posix() for p in
@@ -129,7 +135,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--exe', type=Path, default=ROOT / 'target/release/looking-glass.exe')
     parser.add_argument('--data', type=Path, required=True)
-    parser.add_argument('--only', nargs='+', choices=('world', 'school2', 'presence', 'school',
+    parser.add_argument('--only', nargs='+', choices=('world', 'school2', 'presence', 'host-stalls', 'school',
                                                    'school-blue', 'school-red', 'lift-blue', 'lift-red',
                                                    'stairs-blue', 'stairs-red', 'school2-blue', 'school2-red',
                                                    'dice-blue', 'dice-red', 'altar-blue', 'altar-red',
@@ -160,7 +166,7 @@ def main():
         args.school_checkpoint = args.school_checkpoint.resolve()
         if not args.school_checkpoint.is_file():
             parser.error('The unchanged ordinary co-op checkpoint must exist')
-    selected = list(dict.fromkeys(args.only or ['world', 'school2', 'presence'] +
+    selected = list(dict.fromkeys(args.only or ['world', 'school2', 'presence', 'host-stalls'] +
                                  (['school'] if args.school_checkpoint else [])))
     if 'school' in selected and not args.school_checkpoint:
         parser.error('The school regression needs --school-checkpoint and --school-resume-point')
@@ -174,6 +180,7 @@ def main():
         'world': ([str(args.exe), '--data', str(args.data), '--coop-world-check'], 180, False),
         'school2': ([str(args.exe), '--data', str(args.data), '--school2-check'], 180, False),
         'presence': ([sys.executable, str(ROOT / 'tools/test_coop_presence.py'), *common], 300, True),
+        'host-stalls': ([sys.executable, str(ROOT / 'tools/test_coop_host_stalls.py'), *common], 300, True),
     }
     for first in ('blue', 'red'):
         cases['school-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school.py'), *common,
