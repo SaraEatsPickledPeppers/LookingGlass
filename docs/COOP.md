@@ -123,7 +123,7 @@ movement viewer both wait for helper shutdown before exiting.
 After tightening cancellation and the forged-message regression, all 21 focused
 co-op tests passed again. This final focused run includes the latest source changes.
 
-Overall estimate after completing the village, Pandemonium, both Fortress visits and Beyond verification rows: **about 42%**. Credited
+Overall estimate after completing the village, Pandemonium, both Fortress visits, Beyond and return-school verification rows: **about 42.1%**. Credited
 points are 8/10 for foundation/diagnostics, 7/15 for internet Host/Join,
 9/15 for two-player movement/presentation, paired school supports, dry/swimming arrival placement, complete delayed village/Pandemonium traversal in separate clients and rendered independent rope controls, and 7/20 for native targeting, host-owned
 weapons/damage, personal resources, timed respawns and full saved-state team wipes,
@@ -131,10 +131,12 @@ plus 8/20 for shared world replication, ordered contacts, the verified theatre
 ownership/reunion slice, school boarding barriers, visit history and restart/backup
 restoration of shared checkpoints, and native traversal of all six village scenes
 and all four Pandemonium scenes with either player arriving first (also verified through public internet clients).
-Full-campaign verification now earns 100/39 points (about 2.56/20), for the village,
-Pandemonium, both Fortress visits and Beyond's complete combined evidence. Total
-credited points are about 41.56, rounded to 42%. Standalone policy tests receive
-no campaign credit; 34 visits remain open.
+Full-campaign verification now earns 120/39 points (about 3.08/20), for those six
+visits' complete combined evidence. Total credited points are about 42.08, reported
+as 42.1%. The previous 41.56 estimate was rounded to 42%; future updates include
+completed milestones so rounding does not conceal progress. Standalone policy
+tests receive no campaign credit; 33 visits remain open. The first five historical
+passes still need the contact-system repeats described in the campaign matrix.
 
 Pandemonium now uses each replicated player's own rope grip in co-op, while the
 single-player controller and saved grip remain unchanged. The host advances its
@@ -3984,5 +3986,43 @@ world states and 53/35 full school frames. Evidence:
 The new Red-first recording also passes the targeting verifier with 55
 Blue-nearer and 15 Red-nearer samples and damage examples for both roles
 (`private/coop-return-targeting-eb3b335.json`). No screenshots were opened.
-Fresh full-route verification on this updated runtime and independent personal
-pickup healing remain open; the overall campaign estimate stays about 42%.
+At that checkpoint, full-route verification and independent pickup healing were
+still open. The subsequent complete results follow.
+
+### Return-school full traversal in both orders
+
+Both fresh entrance-to-Pool runs pass on `eb3b335`, using separate public internet
+clients with 40 ms delay and 20 ms jitter per sender. Blue leads in
+`private/coop/school-return-d39328d7967a4f53a567869cc51210c4/` (707.39 seconds),
+and Red in `private/coop/school-return-d12b98b34a694686a0ba0a86aa5e9bc6/`
+(833.98 seconds). These start at the normal return entrance and use ordinary
+movement, attacks and visit loadout; no checkpoint segment or staged position
+substitutes for the full route. The fixture now stops on the flat entrance
+landing and takes each player through the entire narrow library corner before
+bringing the partner forward, avoiding an unsupported paired waiting point.
+
+Both runs verify the library and observatory boarding waits/rides, the intended
+single-Alice Star and potion scene owners, frozen waiting partners, safe reunion,
+fresh guest rejoin preserving resources/progress, and the authored Pool transition.
+Neither run has a death, respawn or checkpoint rollback. Final Blue/Red health is
+100/95 and 100/61. All 12,192/14,193 comparable player and world states match, as
+do 308/401 coincident full school reports. Median buffered control delay is zero;
+95th percentiles are 11.80/8.23 ms, without the former retained idle delay.
+
+The Blue recording also proves both clients observe separate entitlement and
+healing from reward `3000003`: Blue 76 to 91, then Red 80 to 95. The uncollected
+partner copy remains available. The checker previously rejected the first event
+because the waiting player's Will regenerated normally: 0.023335 over 28 host
+ticks (0.020001 over 24 guest ticks). It now permits only unchanged Will or the
+difficulty-dependent passive recovery over that exact interval. Partner health,
+inventory and collection changes, extra refills, depletion and missing copies
+still fail. The recorded false failure has a regression test; all 18 fixture
+tests pass, including invalid resource changes and recovery caps/difficulties.
+Evidence: `private/coop-return-blue-rewards-eb3b335.json`.
+
+Together with the same-build recovery/targeting checks above and recorded
+single-player regressions, these results complete the return-school row. The
+earlier five rows retain their contact-repeat requirement. Overall estimated
+progress is 42.1%, with six combined verification rows and 33 visits still open.
+These checks used compact recorded state; no screenshots were opened. The game
+runtime is unchanged from the preceding input-delay fix.

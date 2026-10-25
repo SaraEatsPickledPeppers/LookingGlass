@@ -87,8 +87,11 @@ class SchoolReturnPair(SchoolPair):
             'Rejoin changed the continuing Star presentation clock'
 
     def entrance(self):
+        # Finish on the flat lower landing. The old intermediate target on
+        # the slope can keep delayed steering correcting back and forth;
+        # this supported landing is on the recorded ordinary walking route.
         self.passage([((-1888, 3290, -649), False),
-                      ((-1888, 2890, -480), True),
+                      ((-1860, 2752, -512), True),
                       ((-1888, 2290, -512), True)], speed_limit=40)
         self.save_checkpoint('entrance')
 
@@ -111,10 +114,12 @@ class SchoolReturnPair(SchoolPair):
                       ((-2304, 2624, -342), False), ((-2304, 2720, -334), False),
                       ((-2256, 2800, -256), True), ((-2304, 3248, -256), False)],
                      speed_limit=20)
-        self.go((-1664, 3248, -256))
         # These intermediate supports come from the successful native route.
-        # Cross the narrow corner in turn, then fight inside the corridor.
-        self.passage([((-1673, 3026, -250), True), ((-1477, 3020, -256), True),
+        # Complete the whole corner in turn, then fight inside the corridor.
+        # Pairing at its near end puts the partner on an adjacent outer slope;
+        # that is not a stable waiting place for the following planned turn.
+        self.passage([((-1664, 3248, -256), False),
+                      ((-1673, 3026, -250), True), ((-1477, 3020, -256), True),
                       ((-1200, 3008, -256), True)], first_exit=[((-1000, 3008, -256), False)])
         self.legs([((-208, 3008, -256), False), ((-208, 3968, -256), False),
                    ((208, 3968, -288), False), ((208, 4160, -264), False),

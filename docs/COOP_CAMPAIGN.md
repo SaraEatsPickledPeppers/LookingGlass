@@ -1,14 +1,15 @@
 # Co-op campaign verification matrix
 
 Source: `campaign::route()` in `src/campaign.rs`. Return visits are separate requirements.
-The village, Pandemonium, both Fortress visits and Beyond have the complete combined co-op evidence below.
+The village, Pandemonium, both Fortress visits, Beyond and return school have the complete combined co-op evidence below.
 Existing single-player route tests do not supply evidence for two-player play.
 Record build identities and reproducible evidence before changing a row to passed.
 
-Passed rows retain the build-specific evidence recorded below. Player contact
+The first five passed rows retain the build-specific evidence recorded below. Player contact
 was added afterward; earlier full traversals must be repeated with separate
 waiting/landing positions before release. The focused contact/effect checks
 in `COOP.md` do not substitute for those campaign repeats.
+The return-school row was verified with the contact system enabled.
 
 Each visit requires both host/guest roles and both first-arrival orders, coherent enemies
 and individual consumables, single-player cutscenes with safe reunion, shared-transport
@@ -691,7 +692,7 @@ both original portals and the gated return, without cheats or recovery
 | 5 | `fortress1` | `fortress1_start2` | Passed (combined evidence above): both delayed public full traversals to school, correct reveal owners/frozen partners/reunions and inspected middle views, ambush activation, fresh guest rejoin before exit; nearest-visible guard damage in both roles, individual healing, both actual death/spectator/respawn roles and saved-checkpoint wipe; shared boarding N/A |
 | 6 | `skool1` | `Initial` | Partial: Red-first public traversal through five scenes, both paired lifts, book crossing and recipe; fresh guest rejoin, personal Mallets and coherent full school snapshots; nearest-visible guard damage in both roles, separate healing, both combat death/spectator/respawn roles and saved-checkpoint wipe pass. Red library-to-exit and Blue theatre-to-exit checkpoint segments pass, including the explicit upper gap jump, airborne reunion and lower shelf. Both complete entrance-to-exit arrival orders remain open. |
 | 7 | `skool2` | `Initial` | Open. Native/component checks cover gym machinery, targeting/damage, pickups and paused clocks. Normal Red-first Dice/gym milestones and both ordinary laboratory stair climbs have internet evidence. On `844ea95`, the recorded Red laboratory-entrance-to-exit segment passes corrected offline verification; a fresh Blue greenhouse-to-exit segment passes live, including both portal directions, scene ownership/reunion, guest rejoin, ordered ingredient consumption/rewards and the return to `skool1_start2`. These are checkpoint segments, not full visits. Both complete traversal orders, the remaining recovery matrix and any earlier contact-system repeats remain required. Detailed build-specific evidence is in COOP.md. |
-| 8 | `skool1` | `skool1_start2` | Partial: Red theatre-to-Pool and Blue spiral-to-Pool checkpoint routes pass with shared lift waits, original scenes/reunions and fresh guest rejoin. Both death orders, moving spectator cameras, exact ten-second/25-health respawns and shared saved-checkpoint restoration pass over delayed public internet. Recorded host guard decisions select the nearer visible living player in both roles, with damage confined to the nearer player in checked intervals. Fresh full routes in both arrival orders and independent consumable-healing coverage are open; see COOP.md for exact evidence. |
+| 8 | `skool1` | `skool1_start2` | Passed on `eb3b335` (combined evidence in COOP.md): fresh entrance-to-Pool public routes in both arrival orders with delay/jitter, both shared lift waits/rides, original scene owners/reunions, trailing partner and fresh guest rejoin; both real death orders, moving spectator cameras, exact ten-second/25-health respawns and shared saved-checkpoint restoration; nearer-visible guard selection/damage in both roles; separate entitlement/healing from the same enemy reward and matching full player/world states. Contact enabled; starts with the normal return-visit loadout. |
 | 9 | `potears1` | `Initial` | Not run |
 | 10 | `potears2` | `Initial` | Not run |
 | 11 | `potears3` | `Initial` | Not run |

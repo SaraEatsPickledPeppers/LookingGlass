@@ -3,6 +3,7 @@ import copy
 import unittest
 from types import SimpleNamespace
 
+from check_coop_rewards import personal_rewards
 from test_coop_school import SchoolPair
 from test_coop_school2 import verify_reunion
 from test_coop_school_return import SchoolReturnPair
@@ -164,6 +165,70 @@ class RejoinResourcesTest(unittest.TestCase):
         for value in [float('nan'), float('inf')]:
             with self.assertRaises(AssertionError):
                 verify_rejoin_stats(self.stats(), self.stats(will=value), 116)
+
+
+class PersonalRewardIsolationTest(unittest.TestCase):
+    visit = 'skool1$return'
+    reward = 'drop:skool1$return:3000003'
+
+    def history(self):
+        def stats(health, will, collected=False):
+            return dict(sanity=health, will=will, difficulty='Normal', owned=[0, 1],
+                        collected=[self.reward] if collected else [],
+                        loot={self.visit: dict(drops=[] if collected else [dict(id=3000003)])})
+        # Recorded Blue collection interval: 28 ticks of ordinary Normal Will
+        # recovery in the waiting Red player, followed by her own healing.
+        rows = [dict(epoch=1, tick=tick, players=[dict(stats=s) for s in pair])
+                for tick, pair in [
+                    (74283, [stats(76, 30), stats(80, 1.7975634336471558)]),
+                    (74311, [stats(91, 30, True), stats(80, 1.820898413658142)]),
+                    (74339, [stats(91, 30, True), stats(95, 1.8442333936691284, True)])]]
+        return dict(host=rows, guest=copy.deepcopy(rows))
+
+    def test_passive_will_does_not_hide_separate_healing(self):
+        result = personal_rewards(self.history(), self.visit)
+        self.assertEqual(result['shared_reward_ids'], [self.reward])
+        for observations in result['observations'].values():
+            self.assertFalse(observations[self.reward][0]['partner_already_collected'])
+            self.assertTrue(observations[self.reward][1]['partner_already_collected'])
+
+    def test_shared_resources_loss_and_unearned_will_are_rejected(self):
+        for changes in [dict(sanity=95), dict(will=2.5), dict(will=1),
+                        dict(will=float('nan')), dict(owned=[0]),
+                        dict(collected=[self.reward]), dict(difficulty='Easy')]:
+            with self.subTest(changes=changes):
+                history = self.history()
+                history['host'][1]['players'][1]['stats'].update(changes)
+                with self.assertRaises(AssertionError):
+                    personal_rewards(history, self.visit)
+
+    def test_missing_partner_copy_and_missing_guest_proof_are_rejected(self):
+        history = self.history()
+        history['host'][1]['players'][1]['stats']['loot'][self.visit]['drops'] = []
+        with self.assertRaises(AssertionError):
+            personal_rewards(history, self.visit)
+        history = self.history()
+        history['guest'] = history['guest'][:2]
+        with self.assertRaises(AssertionError):
+            personal_rewards(history, self.visit)
+
+    def test_passive_recovery_respects_caps_and_difficulty(self):
+        for difficulty, before, after, valid in [
+                ('Normal', 9.99, 10, True), ('Normal', 30, 30, True),
+                ('Easy', 99.99, 100, True), ('Hard', 4, 4, True),
+                ('Normal', 9.99, 10.001, False), ('Hard', 4, 4.001, False),
+                ('Nightmare', 4, 4.02333498, False)]:
+            with self.subTest(difficulty=difficulty, before=before, after=after):
+                history = self.history()
+                for rows in history.values():
+                    for i, row in enumerate(rows):
+                        row['players'][1]['stats'].update(
+                            difficulty=difficulty, will=before if i == 0 else after)
+                if valid:
+                    personal_rewards(history, self.visit)
+                else:
+                    with self.assertRaises(AssertionError):
+                        personal_rewards(history, self.visit)
 
 
 class ReturnRejoinTest(unittest.TestCase):
