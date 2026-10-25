@@ -3909,3 +3909,26 @@ using the same frozen `01c1d34` runtime, public internet and 40/20 ms delay/jitt
 This is a theatre-to-Pool checkpoint run, not a fresh full visit or death test.
 Total progress remains about 42%; fresh full runs in both orders and the
 return recovery matrix remain open.
+
+The return-school recovery checks now pass in both death orders on `01c1d34`.
+`tools/test_coop_school_return_recovery.py` starts two clients at the normal
+return entrance, leaves one player outside the encounter and walks the other
+into actual guard attacks. Both victims spectate their moving partner for
+exactly 1,200 host ticks, return with 25 health at a clear position 48 units
+away, retain their personal inventory and regain their own camera. A subsequent
+both-dead wipe restores the ordinary starting checkpoint's resources, positions,
+quest flags, machinery and enemies. The return quest's restored timer is checked
+against the actual host ticks since respawn; ordinary resumed ticking must not
+be mistaken for retained pre-death progress. Replaying the original failed
+comparison also confirms that a stale timer or changed quest reward is rejected.
+
+Both cases pass through the compact runner as `return-recovery-blue` and
+`return-recovery-red`, in 89.80 and 96.22 seconds. Evidence is
+`private/coop/regression-suite-54669cb7e3c645f284c56d2bfc0fd856/summary.json`:
+1,233/1,351 matching player and shared-world states, and 23/61 matching full
+school frames. Public internet adds 40 ms delay and 20 ms jitter per sender.
+Anode was occupied, so these automated rendered runs used the user's permitted
+PC fallback. Both clients closed normally; no screenshots were opened.
+This completes the return visit's recovery component, not its full campaign row.
+Fresh route attempts still expose automated entrance/corner traversal problems;
+the latest proposed corner route remains under test. Overall credit stays 42%.

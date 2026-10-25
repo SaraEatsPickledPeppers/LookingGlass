@@ -59,7 +59,8 @@ def result_from_log(log):
     fields = ('matching_sent_and_restored_states', 'matching_shared_world_states', 'matching_full_school_frames',
               'contact_distance', 'stationary_partner_unchanged',
               'both_models_and_particles_visible', 'checkpoint_sha256', 'resume_point', 'lifts',
-              'minimum_will', 'final_health', 'staged_initial_spawn', 'host_stalls')
+              'minimum_will', 'final_health', 'staged_initial_spawn', 'host_stalls',
+              'host_recovery', 'guest_recovery', 'wipe')
     metrics = {key: result['evidence'][key] for key in fields if key in result['evidence']}
     rejoin = result['evidence'].get('rejoin')
     if rejoin:
@@ -140,7 +141,8 @@ def main():
                                                    'stairs-blue', 'stairs-red', 'school2-blue', 'school2-red',
                                                    'dice-blue', 'dice-red', 'altar-blue', 'altar-red',
                                                    'gym-jump-blue', 'gym-jump-red', 'school2-resume',
-                                                   'return-sp', 'return-chain', 'return-blue', 'return-red', 'return-resume'),
+                                                   'return-sp', 'return-chain', 'return-blue', 'return-red', 'return-resume',
+                                                   'return-recovery-blue', 'return-recovery-red'),
                         help='school and school2-resume resume checkpoints; school-blue/red and school2-blue/red are full routes; lift/stairs/altar/gym-jump are staged; dice is a partial School Two entrance route')
     parser.add_argument('--local', action='store_true')
     parser.add_argument('--delay-ms', type=int, default=40)
@@ -200,6 +202,8 @@ def main():
     for first in ('blue', 'red'):
         cases['return-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school_return.py'), *common,
                                     '--first', first, '--rejoin'], 1560, True)
+        cases['return-recovery-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school_return_recovery.py'),
+                                             *common, '--first', first], 600, True)
         cases['school-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school.py'), *common,
                                     '--first', first, '--rejoin'], 1500, True)
         cases['lift-' + first] = ([sys.executable, str(ROOT / 'tools/test_coop_school_lift.py'), *common,
