@@ -1,7 +1,7 @@
 //! Nonblocking session lifecycle shared by the menu, simulation and probes.
 //! A connected socket alone never means the guest is allowed to drive Alice.
 use super::{
-    protocol::{FromGuest, FromHost, Identity, Input, RemoteInput, Visit},
+    protocol::{FromGuest, FromHost, Identity, Input, InputOutbox, TimedInput, Visit},
     transport::{Peer, State, MAX_INPUT, MAX_STATE},
 };
 use anyhow::{bail, ensure, Result};
@@ -55,7 +55,7 @@ pub struct Host {
     local_ready: bool,
     guest_ready: bool,
     guest_loading: bool,
-    input: RemoteInput,
+    input: TimedInput,
 }
 impl Host {
     pub fn new(peer: Peer, identity: Identity, visit: Visit) -> Result<Self> {
@@ -72,7 +72,7 @@ impl Host {
             local_ready: false,
             guest_ready: false,
             guest_loading: false,
-            input: RemoteInput::default(),
+            input: TimedInput::default(),
         })
     }
     pub fn phase(&self) -> Phase {
@@ -90,6 +90,7 @@ impl Host {
     pub fn acknowledged_input(&self) -> u64 {
         self.input.sequence()
     }
+    pub fn input_timing(&self) -> serde_json::Value { self.input.timing() }
     pub fn send_frame(&self, frame: super::world::Frame) -> Result<bool> {
         if self.phase != Phase::Playing || !self.pending.is_empty() {
             return Ok(false);
@@ -111,7 +112,7 @@ impl Host {
         if result.is_err() {
             self.peer.disconnect();
             self.phase = Phase::Waiting;
-            self.input = RemoteInput::default();
+            self.input = TimedInput::default();
             self.pending.clear();
             self.deadline = None;
             self.guest_loading = false;
@@ -130,7 +131,7 @@ impl Host {
             } else {
                 Phase::Waiting
             };
-            self.input = RemoteInput::default();
+            self.input = TimedInput::default();
             self.guest_ready = false;
             self.guest_loading = false;
             self.pending.clear();
@@ -142,7 +143,7 @@ impl Host {
             self.phase = Phase::Checking;
             self.guest_ready = false;
             self.guest_loading = false;
-            self.input = RemoteInput::default();
+            self.input = TimedInput::default();
             self.pending.clear();
             self.deadline = Some(now + CHECK_TIMEOUT);
             queue(
@@ -212,6 +213,7 @@ impl Host {
                 FromGuest::Input {
                     epoch,
                     sequence,
+                    sampled_micros,
                     controls,
                 } => {
                     ensure!(
@@ -224,7 +226,7 @@ impl Host {
                     );
                     // In-flight input from a departing visit is ordinary, not an error.
                     if epoch == self.visit.epoch && self.phase == Phase::Playing {
-                        self.input.accept(sequence, controls, now)?;
+                        self.input.accept(sequence, controls, sampled_micros, now)?;
                     }
                 }
             }
@@ -272,7 +274,7 @@ impl Host {
         self.local_ready = false;
         self.guest_ready = false;
         self.guest_loading = false;
-        self.input = RemoteInput::default();
+        self.input = TimedInput::default();
         if matches!(self.phase, Phase::Loading | Phase::Playing) {
             queue(
                 &mut self.pending,
@@ -308,6 +310,8 @@ pub struct Guest {
     local_ready: bool,
     sequence: u64,
     sent_inputs: VecDeque<(u64, Instant)>,
+    input_started: Instant,
+    queued_controls: InputOutbox,
     input_round_trip_ms: Option<f32>,
     frame: Option<super::world::Frame>,
     last_tick: Option<u64>,
@@ -327,6 +331,8 @@ impl Guest {
             local_ready: false,
             sequence: 0,
             sent_inputs: VecDeque::new(),
+            input_started: now,
+            queued_controls: InputOutbox::default(),
             input_round_trip_ms: None,
             frame: None,
             last_tick: None,
@@ -351,6 +357,7 @@ impl Guest {
     pub fn input_timing(&self) -> serde_json::Value {
         serde_json::json!({
             "sent_input": self.sequence,
+            "queued_input_samples": self.queued_controls.len(),
             "round_trip_ms": self.input_round_trip_ms,
             "oldest_pending_ms": self.sent_inputs.front().map(|(_, at)| at.elapsed().as_secs_f32()*1000.),
         })
@@ -422,6 +429,8 @@ impl Guest {
                     self.phase = Phase::Loading;
                     self.deadline = now + LOAD_TIMEOUT;
                     self.sequence = 0;
+                    self.input_started = now;
+                    self.queued_controls.clear();
                     self.sent_inputs.clear();
                     self.input_round_trip_ms = None;
                     self.frame = None;
@@ -466,7 +475,8 @@ impl Guest {
                 }
             }
         }
-        flush(&self.peer, &mut self.pending)
+        flush(&self.peer, &mut self.pending)?;
+        self.flush_controls()
     }
     pub fn loaded(&mut self, epoch: u64) -> Result<()> {
         ensure!(
@@ -479,29 +489,33 @@ impl Guest {
         self.local_ready = true;
         Ok(())
     }
-    /// Backpressure returns false; caller retains the latest held controls and
-    /// cumulative edge counts. A successful send alone never moves the player.
+    /// Queue each sampled change through backpressure. True means accepted by
+    /// the bounded outbox; only the host's fixed ticks can apply these controls.
     pub fn controls(&mut self, controls: Input) -> Result<bool> {
-        if self.phase != Phase::Playing {
-            return Ok(false);
-        }
-        controls.validate()?;
-        let sequence = self
-            .sequence
-            .checked_add(1)
-            .ok_or_else(|| anyhow::anyhow!("Session input limit reached."))?;
-        let sent = self.peer.send(serde_json::to_vec(&FromGuest::Input {
-            epoch: self.visit.as_ref().unwrap().epoch,
-            sequence,
-            controls,
-        })?)?;
-        if sent {
-            self.sequence = sequence;
-            if self.sent_inputs.len() == 128 { self.sent_inputs.pop_front(); }
-            self.sent_inputs.push_back((sequence, Instant::now()));
-        }
-        Ok(sent)
+        if self.phase != Phase::Playing { return Ok(false); }
+        let sampled_micros=self.input_started.elapsed().as_micros().try_into()
+            .map_err(|_| anyhow::anyhow!("Session input clock limit reached."))?;
+        self.queued_controls.push(controls,sampled_micros)?;
+        self.flush_controls()?;
+        Ok(true)
     }
+    fn flush_controls(&mut self) -> Result<()> {
+        if self.phase != Phase::Playing || !self.pending.is_empty() { return Ok(()); }
+        while let Some(sample)=self.queued_controls.front() {
+            let sequence=self.sequence.checked_add(1)
+                .ok_or_else(||anyhow::anyhow!("Session input limit reached."))?;
+            if !self.peer.send(serde_json::to_vec(&FromGuest::Input {
+                epoch:self.visit.as_ref().unwrap().epoch,sequence,
+                sampled_micros:sample.sampled_micros,controls:sample.input,
+            })?)? { break; }
+            self.queued_controls.pop();
+            self.sequence=sequence;
+            if self.sent_inputs.len()==128 { self.sent_inputs.pop_front(); }
+            self.sent_inputs.push_back((sequence,Instant::now()));
+        }
+        Ok(())
+    }
+
 }
 
 #[cfg(test)]
@@ -601,6 +615,7 @@ mod tests {
                 serde_json::to_vec(&FromGuest::Input {
                     epoch: 1,
                     sequence: 2,
+                    sampled_micros: 0,
                     controls: Input {
                         wish: Vec2::X,
                         jumps: 2,

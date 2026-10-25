@@ -7,7 +7,7 @@ use macroquad::prelude::{Vec2, Vec3};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
-pub const REVISION: u32 = 4;
+pub const REVISION: u32 = 5;
 pub const INPUT_TIMEOUT: Duration = Duration::from_millis(500);
 const MAX_EDGES: u64 = 8;
 
@@ -86,7 +86,7 @@ impl Visit {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Input {
     pub wish: Vec2,
@@ -160,6 +160,8 @@ pub enum FromGuest {
     Input {
         epoch: u64,
         sequence: u64,
+        /// Relative client sampling time; never a world/simulation timestamp.
+        sampled_micros: u64,
         controls: Input,
     },
 }
@@ -188,6 +190,10 @@ pub struct RemoteInput {
     pending_attacks: [u64; 2],
     pending_rope: [u64; 2],
 }
+
+#[path = "input_timeline.rs"]
+mod input_timeline;
+pub use input_timeline::{InputOutbox, TimedInput};
 impl RemoteInput {
     pub fn sequence(&self) -> u64 {
         self.sequence
@@ -404,6 +410,7 @@ mod tests {
         let mut forged = serde_json::to_value(FromGuest::Input {
             epoch: 1,
             sequence: 1,
+            sampled_micros: 0,
             controls: Input::default(),
         })
         .unwrap();

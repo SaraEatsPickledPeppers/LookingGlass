@@ -30,7 +30,9 @@ def recent_movement(history, seconds=10, limit=80):
         recent.reverse()
         peaks = {}
         for group, key in (('network_timing', 'round_trip_ms'),
-                           ('network_timing', 'oldest_pending_ms'), ('frame_timing', 'frame_ms')):
+                           ('network_timing', 'oldest_pending_ms'),
+                           ('network_timing', 'queued_input_samples'),
+                           ('network_timing', 'buffered_control_ms'), ('frame_timing', 'frame_ms')):
             values = [(r['tick'], (r.get(group) or {}).get(key)) for r in recent]
             values = [(tick, value) for tick, value in values
                       if isinstance(value, (float, int)) and math.isfinite(value)]

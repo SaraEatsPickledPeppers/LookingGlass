@@ -625,7 +625,8 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         "audio": audio.report,
                         "presentation": { "visible_players": visible_players,
                             "particles": effects.steam.counts(), "effect_batches": effect_batches },
-                        "network_timing": guest.as_ref().map(|g| g.input_timing()),
+                        "network_timing": guest.as_ref().map(|g| g.input_timing())
+                            .or_else(||host.as_ref().map(|h|h.input_timing())),
                         "frame_timing": {"frame_ms": get_frame_time()*1000., "guest_poll_ms": guest_poll_ms, "replicate_ms": replicate_ms},
                         "combat": arena.snapshot(), "visit": visit, "completed_visits": if launch.host { Some(campaign.completed()) } else { None },
                         "route_driver": route_driver.as_ref().map(|d| &d.report) })) {

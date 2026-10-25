@@ -3404,3 +3404,64 @@ individual Dice. All three automatically produce the bounded movement report;
 the helper's recorded hash matches the tested file. These focused passes do
 not clear the separate full-route timing failure above. All owned windows close,
 Anode is released, and no screenshots are opened.
+
+### Preserve guest movement through delayed packet bursts
+
+The old host input latch preserves button counts but replaces held movement
+with the newest packet in a poll. A new regression sends a run-up, jump and
+turn together: the previous implementation immediately uses the final turn,
+so the jump never receives its preceding run-up. The failing test is retained
+in `private/coop-input-timeline-red.log`. This proves that input-order defect;
+it does not reconstruct the exact packets of the earlier full-route failure.
+
+Protocol revision 5 adds relative sampling times to guest controls. A bounded
+sender outbox keeps unsent changes during backpressure, merging only identical
+controls. The host preserves their intervals on its existing 120 Hz simulation
+clock. Late packets cannot skip whole intervals that were never simulated;
+fractional rounding is retained so ordinary jitter does not accumulate delay.
+Both queues are bounded, counters and clocks are validated, and the existing
+500 ms input timeout cancels queued edges as well as held movement. Visit and
+connection changes reset the queues. Local controls and saved world formats
+are unchanged; guests still cannot provide authoritative positions or state.
+
+Optional reports expose received/applied input sequences, queued sample counts
+and buffered movement time. Compact failure summaries retain peaks for these
+fields alongside their existing network timings. The new diagnostics are used
+to check that a fix for input ordering does not create growing control latency.
+
+Build `3c10e1aee105f1665f0035c81233e6844f6dc6b2259cd8c6e78df44febafc075`
+passes 776 unit tests with one existing ignored test and release compilation
+with five existing warnings. Six new regressions cover ordered bursts, an
+actual physics jump across a gap, sender backpressure, stale-input cancellation,
+sustained jitter without accumulating delay, and invalid clocks/counters or
+queue floods. Existing reconnection, level-change, single-player and save checks
+remain passing. Logs: `private/coop-input-timeline-tests-final.log` and
+`private/coop-input-timeline-release.log`. Rendered verification follows separately;
+these checks alone do not clear the full School Two failure or complete a visit.
+
+The native shared-world and School Two checks also pass on this build
+(`private/coop-input-timeline-world.log`, `private/coop-input-timeline-school2.log`).
+The subsequent public internet suite, with 40/20 ms delay/jitter, passes in
+`private/coop/regression-suite-ceb670ee82a843ab830a17d5928cc613`:
+
+| Case | Seconds | Matching complete/world states | Final health |
+| --- | ---: | ---: | --- |
+| Contact and particle effects | 56.03 | 624 complete states | 100 / 100 |
+| Staged altar, Blue first | 47.62 | 456 | 100 / 100 |
+| Staged altar, Red first | 49.89 | 475 | 100 / 100 |
+| Normal entrance through Dice, Red first | 445.27 | 7,445 | 100 / 100 |
+
+The normal route completes both return jumps, the stairs and an ordinary
+checkpoint, with the correct scene owner and both personal Dice. It also has
+209 coincident matching full reports. Its recorded timing includes a 653.3 ms
+round-trip peak and 622.8 ms oldest-pending-input peak. The host retains at most
+eight queued samples; reported buffered control time has a 303.7 ms median and
+381.0 ms maximum. The sender never accumulates an unsent sample in this run.
+These measurements expose the added scheduling delay rather than treating a
+successful traversal as proof of low latency. They are retained in
+`private/coop/school2-route-9515abce48654916818cf23a1cca0d85/input-timing-summary.json`.
+
+This validates the previously failing route section on the new implementation,
+not an exact replay of the earlier packet delivery or a complete campaign visit.
+Both full School Two orders and its remaining recovery matrix are still open.
+No screenshots were opened; the four tests close their owned windows normally.
