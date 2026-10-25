@@ -7,6 +7,7 @@ use std::collections::VecDeque;
 const MAX_SAMPLES: usize = 64;
 const MAX_SPAN_MICROS: u64 = 2_000_000;
 const TICK_UNITS: u128 = 1_000_000;
+const SETTLED_IDLE_UNITS: u128 = 30 * TICK_UNITS;
 
 #[derive(Clone, Copy)]
 pub struct SampledInput {
@@ -115,6 +116,18 @@ impl TimedInput {
         } else if self.queued.is_empty() && self.current.is_some_and(|s|s.input==input) {
             self.current.as_mut().unwrap().sequence=sequence;
             self.latch.accept(sequence,input,now)?;
+            // A late packet shifts playback behind the sender. Once the host
+            // has actually applied a quarter-second of unchanged idle, there
+            // are no movement intervals or pending actions to retain here.
+            // Confirm that idle through the latest sample instead of keeping
+            // old jitter as permanent latency for the next movement command.
+            // Short pauses, active controls and queued changes keep their time.
+            if self.elapsed >= SETTLED_IDLE_UNITS && pending.iter().all(|&n|n==0)
+                && input.wish==Vec2::ZERO && input.swim==Vec3::ZERO && input.rise==0.
+                && !input.primary && !input.alternate {
+                let confirmed=u128::from(sampled_micros-self.current.unwrap().at)*120;
+                self.elapsed=self.elapsed.max(confirmed);
+            }
         } else {
             ensure!(self.queued.len()<MAX_SAMPLES,"Too many pending co-op controls.");
             self.queued.push_back(sample);
@@ -261,6 +274,65 @@ mod tests {
             if tick>120 { assert!(stream.accepted.unwrap().sequence-stream.current.unwrap().sequence<8); }
         }
         assert!(largest<8,"Input latency grew throughout an ordinary jittered connection");
+    }
+
+    #[test]
+    fn an_idle_connection_recovers_from_a_brief_packet_delay() {
+        let mut stream=TimedInput::default(); let start=Instant::now();
+        let mut packets=VecDeque::new(); let mut last_delivery=0;
+        for number in 0..90_u64 {
+            let sampled=number*1_000_000/30;
+            let delay=if (300_000..500_000).contains(&sampled) {250_000} else {50_000};
+            last_delivery=last_delivery.max(sampled+delay);
+            let wish=if sampled<600_000 {
+                if sampled/100_000%2==0 {Vec2::X} else {Vec2::Y}
+            } else if sampled<2_000_000 {Vec2::ZERO} else {Vec2::X};
+            packets.push_back((last_delivery,number+1,sampled,Input{wish,..Default::default()}));
+        }
+        let mut resumed=None;
+        for tick in 0..360_u64 {
+            let micros=tick*1_000_000/120; let now=start+Duration::from_micros(micros);
+            while packets.front().is_some_and(|p|p.0<=micros) {
+                let (_,sequence,sampled,input)=packets.pop_front().unwrap();
+                stream.accept(sequence,input,sampled,now).unwrap();
+            }
+            let controls=stream.sample(now).0;
+            if micros>=2_000_000 && controls.wish==Vec2::X && resumed.is_none() {resumed=Some(micros);}
+        }
+        assert!(resumed.is_some_and(|time|time<=2_100_000),
+            "An earlier burst still delayed fresh movement after a long idle: {resumed:?}");
+    }
+
+    #[test]
+    fn idle_retiming_does_not_skip_short_pauses_or_active_controls() {
+        let active=[
+            Input{wish:Vec2::X,..Default::default()},
+            Input{swim:Vec3::Z,..Default::default()},
+            Input{rise:1.,..Default::default()},
+            Input{primary:true,..Default::default()},
+            Input{alternate:true,..Default::default()},
+        ];
+        let start=Instant::now();
+        for (input,ticks) in active.into_iter().map(|input|(input,36)).chain([(Input::default(),12)]) {
+            let mut stream=TimedInput::default();stream.accept(1,input,0,start).unwrap();
+            for tick in 0..ticks {stream.sample(start+Duration::from_secs_f64(tick as f64/120.));}
+            stream.accept(2,input,600_000,start+Duration::from_millis(300)).unwrap();
+            assert_eq!(stream.elapsed,ticks*TICK_UNITS,"An unsimulated active/short pause interval was skipped");
+        }
+        // Retiming a settled idle must not shorten the subsequent run-up or
+        // discard a queued jump, even when both arrive in the same poll.
+        let mut stream=TimedInput::default();stream.accept(1,Input::default(),0,start).unwrap();
+        for tick in 0..36 {stream.sample(start+Duration::from_secs_f64(tick as f64/120.));}
+        let now=start+Duration::from_millis(300);
+        stream.accept(2,Input::default(),600_000,now).unwrap();
+        let run=Input{wish:Vec2::X,run:true,..Default::default()};
+        stream.accept(3,run,700_000,now).unwrap();
+        stream.accept(4,Input{jumps:1,..run},900_000,now).unwrap();
+        for tick in 0..37 {
+            let c=stream.sample(now+Duration::from_secs_f64(tick as f64/120.));
+            assert_eq!(c.0.wish,if tick<12 {Vec2::ZERO} else {Vec2::X});
+            assert_eq!(c.0.jump,tick==36);
+        }
     }
 
     #[test]

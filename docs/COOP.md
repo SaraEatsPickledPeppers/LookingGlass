@@ -3932,3 +3932,57 @@ PC fallback. Both clients closed normally; no screenshots were opened.
 This completes the return visit's recovery component, not its full campaign row.
 Fresh route attempts still expose automated entrance/corner traversal problems;
 the latest proposed corner route remains under test. Overall credit stays 42%.
+
+The completed Red-first recovery recording also supplies return-area targeting
+evidence without another playthrough. `tools/check_coop_school_return_targeting.py`
+checks every recorded active host guard decision where both players are alive,
+visible and separated by more than 30 units in target distance. All 58 Blue-nearer
+and 14 Red-nearer samples select the nearer player. Both roles have observed
+damage intervals with the farther player's health unchanged. Deliberately
+reversing the recorded selections is rejected. Source:
+`private/coop/school-return-recovery-0bd3f6a852284ed393f8b32490dfed2c/`;
+compact result: `private/coop-return-targeting-recorded.json`.
+Target selection is transient host AI state, deliberately omitted from saved
+and replicated `Opponents`; the source run separately compares the resulting
+player and shared-world states received by the guest. This does not establish
+independent collection/healing of the same consumable by both players. Applying
+the existing personal-reward checker to the earlier spiral-to-Pool recording
+does not provide that evidence, so the pickup check remains open.
+
+A later full-route attempt still fails at the library corner, but its reports
+also expose roughly 370–393 ms of retained guest-input delay while round-trip
+time is near 220 ms and host simulation debt is under 10 ms. A deterministic
+input test reproduces the underlying timing problem: after a brief 250 ms
+packet delay, a long idle and a return to 50 ms delivery, new movement still
+waits 250 ms. The timeline retained the earlier burst's offset indefinitely.
+
+An unchanged idle can now confirm its timeline through the latest received
+sample once the host has actually applied 250 ms of neutral controls. This
+requires an empty queue, no pending button edges and no movement, swimming,
+vertical input or held attacks. Actual simulation time is not advanced. Short
+pauses, active controls and queued actions retain their timing. The regression
+now applies fresh movement within its 100 ms bound; tests also retain the
+run-up/jump order and the existing delayed crossing of a real physics gap.
+
+Build `eb3b335` passes all 786 Rust tests (one existing ignored test), the locked
+optimized build, 14 Python scene fixtures and the native co-op world check.
+The two-client public host-stall/contact/effect check passes in 64.91 seconds:
+controlled 350/400/200 ms stalls, zero buffered control delay in all 15 settled
+samples, less than 7.33 ms simulation debt, 36-unit player separation, stationary
+partner unchanged, both Alice models visible and actual particle/effect draws.
+All 759 comparable player states match. Evidence:
+`private/coop/regression-suite-c29e2b24a5104473a2202d1aec5cc53f/summary.json`.
+The preceding attempt failed before gameplay because the fresh invite address
+could not be resolved; its failed result is retained in suite
+`374926f6e773457287ccb42473344c0a`. Neither result proves the complete return route.
+
+Both return recovery orders pass again on `eb3b335`, in 89.26/95.91 seconds,
+including real deaths, moving spectator cameras, exact ten-second/25-health
+respawns and the shared saved-state wipe. The runs match 1,224/1,383 player and
+world states and 53/35 full school frames. Evidence:
+`private/coop/regression-suite-3492bab653ec43ce808973ebd7a122f4/summary.json`.
+The new Red-first recording also passes the targeting verifier with 55
+Blue-nearer and 15 Red-nearer samples and damage examples for both roles
+(`private/coop-return-targeting-eb3b335.json`). No screenshots were opened.
+Fresh full-route verification on this updated runtime and independent personal
+pickup healing remain open; the overall campaign estimate stays about 42%.
