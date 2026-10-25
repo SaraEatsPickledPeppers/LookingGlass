@@ -333,8 +333,10 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 keys.wish = if (2. ..4.).contains(&age) { if launch.host { Vec2::Y } else { Vec2::X } } else { Vec2::ZERO };
                 keys.swim = keys.wish.extend(0.);
                 if let Some(driver) = &mut route_driver {
-                    if let Some(frame) = &display { driver.sample(frame, &arena, &scene.world, &scene.map, local, &mut keys, now); }
-                    yaw = keys.yaw; pitch = keys.pitch;
+                    if !launch.host {
+                        if let Some(frame) = &display { driver.sample(frame, &arena, &scene.world, &scene.map, local, &mut keys, now); }
+                        yaw = keys.yaw; pitch = keys.pitch;
+                    }
                 } else if launch.travel_check {
                     let tick = display.as_ref().map_or(0, |f| f.tick);
                     keys.wish = if visit.epoch == 1 && (120..960).contains(&tick) { Vec2::Y } else { Vec2::ZERO };
@@ -410,7 +412,7 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
             // Only the host simulates a local body. A guest sends its counters
             // to the host; an unused local latch would accumulate every E/jump
             // until its pending-edge limit ended a long guest session.
-            if launch.host {
+            if launch.host && !(launch.drive && route_driver.is_some()) {
                 local_sequence += 1;
                 local_latch.accept(local_sequence, keys, now)?;
             }
@@ -421,6 +423,21 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                 if playing {
                     accumulator += f64::from(elapsed);
                     while accumulator >= f64::from(FIXED_DT) {
+                        // The diagnostic planner describes exact 24-tick input
+                        // segments. Sampling once per render frame can hold a
+                        // turn past its boundary, then discard the plan while
+                        // Alice is still moving toward an edge. Sample the host
+                        // from the current body before every physics step.
+                        // Human controls and the remote input path are unchanged.
+                        if launch.drive {
+                            if let Some(driver) = &mut route_driver {
+                                let frame = roster.frame(visit.epoch, host.acknowledged_input());
+                                driver.sample(&frame, &arena, &scene.world, &scene.map, local, &mut keys, now);
+                                yaw = keys.yaw; pitch = keys.pitch;
+                                local_sequence += 1;
+                                local_latch.accept(local_sequence, keys, now)?;
+                            }
+                        }
                         let check_wipe = launch.checkpoint_check && resumed.as_ref().is_some_and(|s|
                             roster.tick >= s.checkpoint.frame.tick + 120) && !fixture_checkpoint_wiped;
                         if check_wipe {

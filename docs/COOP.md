@@ -2813,3 +2813,52 @@ off and takes 42 fall damage. The complete suite correctly fails after that case
 This is a remaining corner/braking problem, not another missing takeoff. No full
 School Two repeat or new completed-visit credit is claimed. Progress remains
 about 42%, with five of 39 full visits verified. No images were opened.
+
+### Host test input sampling
+
+The host diagnostic controller previously sampled its planned inputs once per
+rendered frame, then held them across that frame's physics steps. A 24-tick
+segment could overrun its boundary before the next sample, changing a narrow
+turn and causing the controller to discard its remaining plan while still
+moving. The host now samples from its current body before every fixed physics
+step. Human controls, guest input delivery and production movement rules keep
+their existing behavior. This applies only to the explicit local route driver.
+
+Build `8f056d4f67ab9af79d2cfd93b2015afe9a47ba29cc306b181da6b4460e0fc41a`
+passes all 764 unit checks (one existing ignored test) and release compilation.
+The gym regression exercises the affected corner after the upper landing;
+two-client results are recorded separately from these unit/build checks.
+
+All four focused internet cases pass on this build with 40/20 ms injected
+delay/jitter (`private/coop/regression-suite-61202b59c5c14eb8b7e0e0a43931480d`):
+
+| Component | Seconds | Matching player/enemy and world states | Final health |
+| --- | ---: | ---: | --- |
+| Gym, Blue first | 103.22 | 1,484 | 100 / 100 |
+| Gym, Red first | 104.55 | 1,469 | 100 / 100 |
+| Altar, Blue first | 48.00 | 505 | 100 / 100 |
+| Altar, Red first | 46.00 | 451 | 100 / 100 |
+
+Both gym cases include the previously failing departure corner. Both altar
+cases include individual Dice pickups, the correctly owned scene, ambush and
+return. Neither pair dies, respawns or restores a checkpoint. These remain
+staged component results, not a complete School Two visit.
+
+The subsequent normal-entrance Red-first repeat passes the complete Dice
+section and return, including 7,463 matching player/enemy and shared-world
+states and 139 matching full reports. Both players retain 100 health at that
+milestone. The full run then fails after 810.23 seconds at the upper gym's
+departure toward `(1750, -2275, 440)`: Red remains grounded at
+`(1741.645, -2275.219, 440.031)`, about 8.36 units from the requested point,
+while the controller reports `settling landing`. Blue waits on the lower floor.
+There is no death, respawn or checkpoint reset; final health is 100/70.
+This is a different failure from the former host's fall around the railing.
+The cause of the remaining guest stall is not yet established.
+
+The failed suite and its verified Dice prefix are retained in
+`private/coop/regression-suite-8b87284ebafd4b89ad0115a9ede05ed6` and
+`private/coop/school2-route-7fb7f563e3f745918605f57e3f519293`.
+No full School Two traversal or new campaign visit is credited. Overall progress
+remains about 42%, with five of 39 full visits historically verified and the
+later player-contact changes still requiring their campaign repeats. All
+checks in this change used compact numerical reports; no images were opened.
