@@ -336,6 +336,7 @@ impl Arena {
             self.npcs.restore(&self.initial)?;
         }
         roster.finish_tick_with(world, cinematic, |at| !self.stage.interactions.hazardous(at))?;
+        self.stage.sync_school_return_items(roster);
         if generation != roster.checkpoint_generation {
             self.stage.sounds.clear();
             self.world_audio = crate::audio::world::State::default();

@@ -3611,3 +3611,44 @@ released; no screenshots are opened. Locked Rust tests pass 779 with one
 existing ignored test, the release build succeeds, and all seven source-package
 tests pass. These are component results; full School Two runs in both orders
 and its recovery matrix remain open. Overall completion remains about 42%.
+
+### Return-school reward gates
+
+Build `005d643` connects each player's carried Star and potion to the shared
+return-school quest. Either inventory, including a dead teammate's retained
+inventory, can supply a story reward. Opening the Star doors consumes all Star
+copies; the original potion performance consumes potion copies only from its
+Drinking phase onward. Ordinary personal resources are unchanged. The original
+single-player inventory method uses the same logic with one inventory.
+
+The completed potion performance now requests the authored Pool of Tears exit
+through the shared scene update. Previously that completion was only checked
+by contact traversal, which co-op deliberately suspends during a cutscene.
+The ordinary contact path retains its existing completion behavior.
+
+The new focused native check in `src/coop/school_return_check.rs` is part of
+`--coop-world-check`. It reproduces the missing Star gate before the fix, and
+then exposes the missing potion exit. After both corrections, all 16 gate/scene
+checks pass: both first arrivals, both reward-holder arrangements, and a living
+or dead waiting partner. They check unchanged personal resources, the original
+potion scene, its frozen partner, consumption timing and exact destination.
+The bodies and later prerequisite are staged; these are not lift traversal or
+network completion results. Evidence is in `private/coop-return-exit-check.log`.
+All 780 Rust unit tests pass, with one existing ignored test; the release build
+and seven source-package tests pass.
+
+The single-player `--school-return-check` still fails with `Lift did not release`
+in its staged Star/lift check on both the previous `9e65cb7` and new `005d643`
+builds. This remains unresolved and is not claimed as passing preservation or
+return traversal evidence. Logs are `private/coop-return-single-player-baseline.log`
+and `private/coop-return-single-player.log`.
+
+A new full School Two Red-first run on the unchanged `9e65cb7` build passes the
+normal Dice and gym components and reaches the laboratory, but times out in the
+rescue encounter at 1,309.41 seconds. Both players remain alive; the laboratory
+door blocks the leader and the remaining guards have no line of sight. Its
+ordinary laboratory checkpoints are retained in
+`private/coop/school2-route-b40b02356a1b49aa9a0160e28b630828`. Full traversal is
+still unproven. The complete route's internal watchdog now allows 28.5 minutes,
+below the runner's 29-minute limit with cleanup time; individual movement,
+combat and scene watchdogs remain unchanged.

@@ -83,6 +83,11 @@ class School2Pair(SchoolPair):
 
     def __init__(self, args):
         super().__init__(args)
+        # The complete route takes about 27 minutes. Keep its internal limit
+        # below the runner's 29-minute limit, leaving time for cleanup instead
+        # of inheriting the common pair fixture's 25-minute cutoff.
+        if not args.stage_at_altar and args.stop_after is None:
+            self.deadline += 210
         if args.stage_at_altar:
             self.start_at = (-992, -2816, -192)
             self.evidence['staged_initial_spawn'] = self.start_at

@@ -173,6 +173,13 @@ impl Stage {
             self.last_owner = id;
         }
     }
+    pub fn sync_school_return_items(&mut self, roster: &mut Roster) {
+        if let Some(state) = self.interactions.school.as_mut().and_then(|s| s.return_visit.as_mut()) {
+            // A dead teammate retains their inventory. Include it both when
+            // supplying a story reward and when consuming every spent copy.
+            state.inventory_many(&mut roster.players.each_mut().map(|body| &mut body.stats.school_items));
+        }
+    }
     pub fn school2_step(&mut self, dt: f32, roster: &mut Roster, world: &mut World,
         paused: bool) -> crate::combat::Feedback {
         let speaker = self.speaker();
@@ -287,6 +294,7 @@ impl Stage {
         inputs: &[(Controls, Input); 2],
         dt: f32,
     ) -> Result<()> {
+        self.sync_school_return_items(roster);
         if !roster.players[self.last_owner.index()].stats.alive() {
             if let Some(alive) = PlayerId::ALL
                 .into_iter()
@@ -397,6 +405,7 @@ impl Stage {
         if self.owner.is_none() && controls_scene(&self.interactions) {
             self.owner = Some(last);
         }
+        self.sync_school_return_items(roster);
         Ok(())
     }
     /// Original scene code receives exactly one actor. The other body is frozen
@@ -431,6 +440,7 @@ impl Stage {
             world,
             &mut roster.players[owner.index()].player,
         )?;
+        self.sync_school_return_items(roster);
         let feedback = self.school2_step(FIXED_DT, roster, world, true);
         self.sounds.feedback(roster.tick, &feedback);
         self.speech_step(roster, world, inputs[owner.index()].0.use_pressed);
@@ -605,6 +615,7 @@ fn apply(
 /// Authored school scene, with each player owning the real trigger in turn.
 /// This is a focused scene fixture, not a traversal or campaign completion claim.
 pub fn check(assets: &mut Assets) -> Result<()> {
+    super::school_return_check::check(assets)?;
     super::school2_pickup_check::check(assets)?;
     let map = Bsp::parse(&assets.read("maps/skool1.bsp")?)?;
     let visit = Visit {

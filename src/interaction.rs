@@ -1242,6 +1242,9 @@ impl Interactions {
         let mut events = Events::default();
         if dt <= 0. || !dt.is_finite() { return events; }
         self.presentation.update(dt);
+        // Co-op scenes deliberately suspend body-contact traversal. Their
+        // completed return performance must still request the authored exit.
+        events.transition = self.completed_school_return();
         if self
             .school
             .as_mut()
@@ -1484,17 +1487,16 @@ impl Interactions {
             }
         }
         if self.school.as_ref().is_some_and(|s| s.cinematic()) {
-            if self
-                .school
-                .as_ref()
-                .and_then(|s| s.return_visit.as_ref())
-                .is_some_and(|s| s.phase == crate::school_return::Phase::Complete)
-            {
-                events.transition = Some(("potears1".into(), Some("potears1_start1".into())));
-            }
+            events.transition = self.completed_school_return();
             return events;
         }
         events
+    }
+    fn completed_school_return(&self) -> Option<(String, Option<String>)> {
+        self.school.as_ref().filter(|s| s.cinematic())
+            .and_then(|s| s.return_visit.as_ref())
+            .is_some_and(|s| s.phase == crate::school_return::Phase::Complete)
+            .then(|| ("potears1".into(), Some("potears1_start1".into())))
     }
     fn contact_trigger(&self, index: usize) -> bool {
         let t = &self.triggers[index];
