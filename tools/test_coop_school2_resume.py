@@ -1,8 +1,9 @@
-"""Repeat School Two after the gym from an unchanged ordinary checkpoint.
+"""Repeat a School Two segment from an unchanged ordinary checkpoint.
 
-The full route retains checkpoint-gym.json automatically through the normal host
-save operation. This fixture copies those bytes into a fresh profile and uses
---coop-resume. Its result is always a segment, never a complete campaign visit.
+The route retains checkpoint-gym.json and checkpoint-laboratory-approach.json
+through the normal host save operation. Select the matching --resume-point;
+this fixture copies those bytes into a fresh profile and uses --coop-resume.
+Its result is always a segment, never a complete campaign visit.
 Run in Anode; no screenshot inspection or manual save-menu input is required.
 """
 import argparse
@@ -27,11 +28,15 @@ class School2Resume(School2Pair):
         assert school['quest']['stage'] == 'Laboratory' and school['quest']['items']['mushroom']
         assert len(school['boojums']) >= 3 and all(b['health'] <= 0 for b in school['boojums'][:3])
         assert payload['frame']['combat']['stage']['owner'] is None
+        if args.resume_point == 'laboratory-approach':
+            assert all(distance(b['player']['feet'], (-64, -2060, 0)) < 110
+                       for b in payload['frame']['players']), 'Not a laboratory approach checkpoint'
         super().__init__(args)
         (self.folder/'host'/'coop-checkpoint.json').write_bytes(saved)
         self.saved = payload
         self.evidence['checkpoint_sha256'] = hashlib.sha256(saved).hexdigest()
         self.evidence['checkpoint_tick'] = payload['frame']['tick']
+        self.evidence['resume_point'] = args.resume_point
         source = Path(__file__).read_bytes()
         (self.folder/'resume-fixture-source.py').write_bytes(source)
         self.evidence['resume_fixture_sha256'] = hashlib.sha256(source).hexdigest()
@@ -64,13 +69,16 @@ class School2Resume(School2Pair):
         self.verify_coherence()
         (self.folder/'milestone-resume.json').write_text(json.dumps(dict(
             passed=True, full_visit=False, phase='resume', build=self.build,
-            first=self.args.first, scope='Exact gym checkpoint restore and initial client agreement only',
+            first=self.args.first, scope='Exact checkpoint restore and initial client agreement only',
             internet=not self.args.local, delay_ms=self.args.delay_ms, jitter_ms=self.args.jitter_ms,
             evidence=self.evidence), indent=2))
-        print('PASS both clients resumed unchanged gym checkpoint with normal passive recovery', flush=True)
+        print('PASS both clients resumed unchanged checkpoint with normal passive recovery', flush=True)
         for role in self.commands:
             self.set(role, attack=True)
-        self.laboratory()
+        if self.args.resume_point == 'laboratory-approach':
+            self.laboratory_from_stairs()
+        else:
+            self.laboratory()
         self.greenhouse()
         self.rewards()
         assert self.arrived()
@@ -80,7 +88,7 @@ class School2Resume(School2Pair):
         (self.folder/'result.json').write_text(json.dumps(dict(passed=True, full_visit=False,
             build=self.build, internet=not self.args.local, first=self.args.first,
             delay_ms=self.args.delay_ms, jitter_ms=self.args.jitter_ms, evidence=self.evidence,
-            scope='Resumed School Two gym-to-exit segment only; not a complete traversal'), indent=2))
+            scope=f'Resumed School Two {self.args.resume_point}-to-exit segment only; not a complete traversal'), indent=2))
 
 
 if __name__ == '__main__':
@@ -88,6 +96,7 @@ if __name__ == '__main__':
     parser.add_argument('--exe', type=Path, default=ROOT/'target/release/looking-glass.exe')
     parser.add_argument('--data', type=Path, required=True)
     parser.add_argument('--checkpoint', type=Path, required=True)
+    parser.add_argument('--resume-point', choices=('gym', 'laboratory-approach'), default='gym')
     parser.add_argument('--first', choices=('blue', 'red'), default='red')
     parser.add_argument('--local', action='store_true')
     parser.add_argument('--rejoin', action='store_true')

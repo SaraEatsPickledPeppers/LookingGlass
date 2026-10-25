@@ -130,6 +130,7 @@ def main():
     parser.add_argument('--jitter-ms', type=int, default=20)
     parser.add_argument('--school-checkpoint', type=Path)
     parser.add_argument('--school2-checkpoint', type=Path)
+    parser.add_argument('--school2-resume-point', choices=('gym', 'laboratory-approach'), default='gym')
     parser.add_argument('--school-resume-point', choices=('theatre', 'balcony', 'spiral', 'library', 'bridge', 'descent'))
     parser.add_argument('--first', choices=('blue', 'red'), default='blue',
                         help='Arrival order for the resumed school case; full cases name their own order')
@@ -186,6 +187,7 @@ def main():
     if args.school2_checkpoint:
         cases['school2-resume'] = ([sys.executable, str(ROOT / 'tools/test_coop_school2_resume.py'), *common,
                                   '--checkpoint', str(args.school2_checkpoint),
+                                  '--resume-point', args.school2_resume_point,
                                   '--first', args.first, '--rejoin'], 1200, True)
     folder = EVIDENCE / ('regression-suite-' + uuid.uuid4().hex)
     folder.mkdir(parents=True)

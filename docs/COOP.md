@@ -3273,3 +3273,48 @@ dies or restores a checkpoint. The stair route still needs investigation;
 neither the complete resumed segment nor a complete School Two visit passes.
 The passing restore component remains separately recorded in
 `private/coop/school2-resume-53cc71a254b448ada847ccb95b23a8a1/milestone-resume.json`.
+
+The laboratory fixture now walks the supported stairs from their wider south
+entrance, one player at a time. Native replay reproduces both failed jump plans
+with exact timing, but a one-tick variation makes each miss. The new 17-point
+native walking route reaches the door in all nine cases (three recorded starts
+at three input/observation delays), without jumping or falling, in 32–44 seconds.
+The production game and its verified `844ea95` build are unchanged.
+
+The route also saves `checkpoint-laboratory-approach.json` normally before the
+climb. Use `test_coop_school2_resume.py --resume-point laboratory-approach` or
+the suite's `--school2-resume-point laboratory-approach` with that unchanged file
+to avoid repeating the gym return. Both clients verified exact restoration of
+the new checkpoint before the Blue-leading test.
+
+Rendered internet tests independently confirm that Red and Blue reach the
+upper laboratory doorway by walking. Neither full passage passes: the leading
+player dies fighting the entrance Diamond while the partner is still below.
+Red starts with 28 health; the Blue repeat starts with 83 and leaves the guard
+at 3 health before dying. The remaining combat approach needs both players to
+participate or the route's normal evasion/loot tactics; more health alone did
+not resolve it. No resources were edited and no deaths were accepted as a clean
+traversal. Evidence: `private/coop/school2-resume-e35bf359994042669e0421a334192a53`
+(335.70 seconds, gym resume) and
+`private/coop/school2-resume-0950299e6cdc4b30afc9d03c4ae107ce`
+(91.88 seconds, laboratory-approach resume). This remains component evidence,
+not a complete School Two visit.
+
+The fixture now regroups both players at the covered upper landing before the
+doorway. It uses short paired approaches, with the healthier player closest to
+the guard, then restores the requested scene order before the rescue trigger.
+Both players complete the stairs and defeat the entrance guard in two successive
+Red-owner internet tests. The first exposes another fixture error: a 20-second
+landing timeout expires while the Spice Drops scene still owns movement. The
+fixture now waits for the actual scene ending and grounded reunion instead.
+
+The repeat passes the rescue, Red-owned Spice Drops scene, reunion and Jumbogrow
+pickup, without death or edited resources. It also saves an unchanged ordinary
+`checkpoint-laboratory-entrance.json` after the entrance fight. The run then
+fails after 358.27 seconds when Red's slow step aside after the greenhouse portal
+times out under fire; the portal transfer itself has completed. Blue remains
+in the lower corridor. Greenhouse, reconnection, rewards, exit and the complete
+visit remain unverified by this run. Evidence:
+`private/coop/school2-resume-f4a0daa42b19416086a0a8a88d0df780` (repeat) and
+`private/coop/school2-resume-cd18c27bfc2c4005b61b1e72e43071f2`
+(235.47 seconds, earlier scene-wait failure). No screenshots were opened.

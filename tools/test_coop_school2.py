@@ -226,14 +226,55 @@ class School2Pair(SchoolPair):
                        (1040, -2560, 0), (480, -2560, 0), (250, -2290, 0), (-64, -2060, 0)]])
         finally:
             self._departure_first = original_order
-        self.go((-64, -1960, 256), navigate=True)
+        self.save_checkpoint('laboratory-approach')
+        self.laboratory_from_stairs()
+
+    def laboratory_from_stairs(self):
+        # The shortest search plan jumps onto the side of these curved stairs
+        # and pulls up a ledge. A single tick of input jitter can miss it. Walk
+        # around to the wide entrance and follow the supported stair centres;
+        # pass through one at a time so neither player blocks a narrow tread.
+        self.passage([(p, False) for p in [(-64, -2200, 0), (-416, -2200, 0),
+                      (-416, -2480, 0), (-272, -2448, 48), (-192, -2400, 80),
+                      (-128, -2336, 112), (-96, -2272, 128), (-32, -2272, 136),
+                      (64, -2368, 184), (192, -2464, 240), (256, -2528, 256),
+                      (416, -2528, 256), (432, -2400, 256), (288, -2208, 256),
+                      (160, -2112, 256)]])
+        # Regroup behind the doorway before waking its ranged guard. Holding
+        # one Alice at the exposed door while the partner climbs makes her
+        # absorb the entire fight. Approach together in short ordinary legs,
+        # with the healthier player nearest the guard. Stay south of the
+        # rescue trigger (y=-1232), then restore the requested scene order.
+        original_order = getattr(self, '_departure_first', None)
+        health = [b['stats']['sanity'] for b in self.bodies()]
+        self._departure_first = 'host' if health[0] >= health[1] else 'guest'
+        self.evidence['laboratory_guard_first'] = dict(role=self.first, health=health)
+        try:
+            for point in [(32, -1984, 256), (-64, -1744, 256), (-64, -1640, 256)]:
+                self.go(point, fight=False)
+            self.secure()
+            assert all(self.school(r)['quest']['stage'] == 'Laboratory' for r in self.reports)
+        finally:
+            self._departure_first = original_order
+        print('PASS School Two paired laboratory stairs and entrance fight', flush=True)
+        self.save_checkpoint('laboratory-entrance')
         self.go((-64, -1270, 256))
         self.wait(8)
         self.secure()
+        # The rescue fight starts the Spice Drops scene after reaching this
+        # point. Wait for its actual ending: go()'s short final landing check
+        # cannot complete while cinematic control owns the player.
+        self.set(self.partner)
+        self.set(self.first, (-64, -1020, 256))
+        self.until(lambda: all(r['route_driver']['scene'] == 'Old_Gnome_SpiceDrops'
+                              for r in self.reports.values()), 90)
+        for role in self.commands:
+            self.set(role)
+        self.until(lambda: all(self.school(r)['quest']['stage'] == 'Jumbogrow'
+                   and self.reports[r]['combat']['stage']['owner'] is None
+                   and all(b['player']['grounded'] for b in self.bodies(r))
+                   for r in self.reports), 90)
         self.go((-64, -1020, 256))
-        self.wait(18)
-        self.secure()
-        self.until(lambda: all(self.school(r)['quest']['stage'] == 'Jumbogrow' for r in self.reports), 60)
         self.legs([((40, -930, 256), False), ((150, -600, 256), False), ((36, -452, 256), False)])
         self.until(lambda: all(self.school(r)['quest']['items']['jumbogrow'] for r in self.reports), 15)
         print('PASS School Two rescue, Spice Drops and Jumbogrow', flush=True)
