@@ -103,9 +103,14 @@ class SchoolReturnPair(SchoolPair):
     def library(self):
         # The reward detour is another narrow walkway. Each player completes
         # the loop to the broad passage before the other follows.
-        # Return on the east side of the waiting player's entrance spot.
-        self.passage([((-2272, 2440, -256), True), ((-2256, 2800, -256), True),
-                      ((-2304, 3248, -256), False)])
+        # Descend and climb the observed lower supports before the short
+        # upper jump, as on the first visit. A running plan for the whole
+        # return can overshoot these narrow stairs on the delayed guest.
+        # Finish east of the waiting player before continuing past them.
+        self.passage([((-2272, 2440, -256), True), ((-2304, 2544, -352), False),
+                      ((-2304, 2624, -342), False), ((-2304, 2720, -334), False),
+                      ((-2256, 2800, -256), True), ((-2304, 3248, -256), False)],
+                     speed_limit=20)
         self.go((-1664, 3248, -256))
         # These intermediate supports come from the successful native route.
         # Cross the narrow corner in turn, then fight inside the corridor.

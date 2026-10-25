@@ -3891,3 +3891,21 @@ The 325.97-second result is
 `private/coop/regression-suite-08030788f20949bd9d1e62d80f1acd27/summary.json`.
 This certifies the resumed spiral-to-Pool segment only. Full fresh return runs
 in both arrival orders and the recovery checks are still required.
+
+The fresh Red-first attempt clears the entrance and theatre, then fails on the
+return from the reward walkway. Its long running plan overshoots the narrow
+lower stair supports and leaves Red on the floor below. The return fixture now
+uses the first visit's slow walking steps on those supports before planning
+the short upper jump. It still completes the passage separately for each
+player, with the upper arrival east of the waiting partner.
+
+Repeating the unchanged ordinary theatre checkpoint from that failed run passes
+through the whole remaining visit with Red leading. Both shared lifts, Star and
+potion scenes, fresh guest rejoin and the authored Pool entrance pass, with no
+deaths or wipes. Final health is 100/77; 11,375 player states, 11,375 shared-world
+states and 16 full school frames match. The 663.44-second result is
+`private/coop/regression-suite-004e37da10d443b5ab572ca3fcea71e8/summary.json`,
+using the same frozen `01c1d34` runtime, public internet and 40/20 ms delay/jitter.
+This is a theatre-to-Pool checkpoint run, not a fresh full visit or death test.
+Total progress remains about 42%; fresh full runs in both orders and the
+return recovery matrix remain open.
