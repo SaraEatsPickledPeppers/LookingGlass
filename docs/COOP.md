@@ -3172,3 +3172,104 @@ Progress remains about 42%, with five historical full visits that require the
 previously documented contact-system repeats before release. No images were
 opened during this investigation; temporary native replay modules are excluded
 from the public source.
+
+### Automated combat aim around partial cover
+
+The saved Red gym stall reproduces a projectile-clearance problem. Red's
+one-unit centre sight ray reaches the last Boojum, but its eight-unit projectile
+path hits the environment. Native Blade and Card flights from the eye hit the
+world instead of the target. The single-player route's existing centre/top-centre
+aim selection also falls back to that blocked centre at this particular pose.
+
+A scan of points inside the actual hitbox finds two exposed upper-side points.
+The real projectile simulation hits the Boojum from those points; the first
+requires the Blade's ordinary gravity correction. Evidence:
+`private/coop-gym-aim-center-results.json`,
+`private/coop-gym-aim-replay-results.json` and
+`private/coop-gym-aim-sampling.log`. These eye-origin checks establish the
+obstruction and candidate aim; rendered tests still need to verify the actual
+weapon launch and complete fight.
+
+The opt-in co-op driver now prefers an eight-unit-clear point, sampling exposed
+sides inside the hitbox if the standard point is blocked. All other enemy bodies
+remain in the collision context, including guards excluded from target
+selection. Blade throws use the existing gravity correction. Human aiming,
+weapon rules and single-player controls are unchanged. A portable projectile
+regression places both a parapet and a post in the way: centre/top-centre aiming
+fails, while the selected upper-side point produces a real Blade hit. The
+unselected-guard obstruction regression remains passing.
+
+Build `70209472a80c37f070a62a0c27a48b36432e8d106fe209905940ac0d3b6c6c79`
+passes all 769 unit tests (one existing ignored) and release compilation. Its
+expanded Red-leading internet gym test passes in 168.44 seconds with both
+players at 100 health, 2,591 matching shared states and 73 full school frames.
+All three Boojums die, all three scenes have the correct owner, the Laboratory
+quest opens, and both players finish grounded after reunion without respawning.
+This verifies the rendered combat sequence as well as the earlier native aim
+checks. Evidence: `private/coop/regression-suite-bf85294757af4e81a72439bff25a7c04`
+and `private/coop/gym-jump-0c78033198fb43d9bf0176ef01d26308`.
+
+The Blue-leading repeat fails earlier, after 101.70 seconds: the guest misses
+the final ascent jump while its attack command is false. It lands on the lower
+floor at 47 health; the host remains at 100. The recorded ten-segment plan has
+four grounded run-up segments, and observed positions drift about 17 units from
+the expected run-up before an early loss of jump height. The driver remains in
+timed navigation throughout. Exact collision and timing replay is still needed;
+this is not a passing gym result. Evidence:
+`private/coop/gym-jump-04902cb73e8944ba81b75b060077378e` and
+`private/coop-gym-follower-jump-failure.json`.
+
+The full normal Red-leading run on the same `7020947` build passes the entrance,
+Dice altar and complete gym sequence in one continuous route. Both verified
+component reports are retained in
+`private/coop/school2-route-a90e419b177747ea9f575711b8db052e`. No player dies,
+respawns or restores a checkpoint; final health is 100/37. The run stops after
+773.86 seconds because the laboratory fixture asks both players to wait at a
+narrow gym-return waypoint with no separate supported spot. The corrected
+fixture sends each player through the existing full return passage in turn.
+This remains a partial prefix, not a completed School Two visit.
+
+School Two now requests ordinary host checkpoints at its verified Dice and gym
+milestones. The opt-in local driver accepts only a neutral save command, invokes
+the same validated save operation as the host menu, and acknowledges success or
+failure once per command. No checkpoint request is sent by the guest over the
+network. Each fixture retains the original save bytes, tick and SHA-256 beside
+its component evidence, without requiring menu input or image inspection.
+
+`tools/test_coop_school2_resume.py --checkpoint <checkpoint-gym.json>` copies an
+unchanged gym save into an independent profile and uses the normal co-op resume
+path. It checks retained player resources and quest state before running the
+laboratory, greenhouse, rewards and exit; `--first red` and `--rejoin` select the
+scene owner and reconnect check. Resumed results explicitly cover only that
+segment. Full entrance-to-exit routes remain required for campaign credit.
+Source `4e42226fed20d08b75e38f0c261caa3cfaf55af1b3dc3bb6cc018bd39ebeb1af`
+passes all 770 unit tests (one existing ignored) and release compilation. The
+normal Red-leading internet run successfully saves both verified milestones:
+Dice at tick 50,229 with 100/100 health, and gym at tick 87,785 with 100/28 health,
+all three Boojums defeated and Laboratory active. Both retained file hashes
+match their receipts. Both players then complete the corrected gym return
+passage. The run stops after 989.97 seconds when Red dies in the next Boojum
+encounter; Blue is still at 100 health, waiting behind. This is not a full pass.
+Evidence: `private/coop/school2-route-f93a34241b8140fb8a8d967fed77864a`.
+
+The test now lets the healthier player lead that ground-level combat approach,
+restoring the requested arrival order before the laboratory scenes. The first
+gym-resume attempt exposed an overly strict
+test assertion: low Will regenerates normally while waiting for live reports.
+The opt-in driver now verifies the complete restored world and both players
+exactly before simulation, retaining a `route-resume.json` receipt. The neutral
+live-client check allows only the existing difficulty-based Will recovery over
+the recorded elapsed ticks.
+
+Final source `844ea959eadefaa1b6131d86f3f4211d89872ccef9ce19d17adcb6b59abec95e`
+passes all 770 unit tests (one existing ignored) and release compilation. Its
+internet resume test verifies the unchanged gym checkpoint before simulation
+and 36 matching shared states afterward. Both players repeat the gym return,
+and the healthier-player approach passes the previously fatal Boojum encounter
+with health 83/28. The resumed run stops after 403.97 seconds at the laboratory
+entrance climb: the guest remains grounded at approximately (-60, -2167, 128)
+while trying to reach (-64, -1960, 256), after 14 route plans. Neither player
+dies or restores a checkpoint. The stair route still needs investigation;
+neither the complete resumed segment nor a complete School Two visit passes.
+The passing restore component remains separately recorded in
+`private/coop/school2-resume-53cc71a254b448ada847ccb95b23a8a1/milestone-resume.json`.

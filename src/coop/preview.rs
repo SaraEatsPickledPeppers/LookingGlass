@@ -135,10 +135,15 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
         if resumed.is_none() {
             if let Some(roster) = &roster { arena.reset_characters(&roster.players); }
         }
-        if launch.checkpoint_check {
+        if launch.checkpoint_check || launch.route_driver.is_some() {
             if let Some(saved) = &resumed {
                 super::checkpoint::verify_restored(&saved.checkpoint, roster.as_ref().unwrap(), &arena)?;
                 println!("PASS co-op checkpoint fixture: both players, characters, world and NPCs restored exactly before simulation");
+                if launch.route_driver.is_some() {
+                    std::fs::write(crate::preferences::path("route-resume.json"), serde_json::to_vec(
+                        &serde_json::json!({"build":env!("LOOKING_GLASS_BUILD"), "verified":true,
+                            "epoch":visit.epoch, "tick":saved.checkpoint.frame.tick}))?)?;
+                }
             }
         }
         if let Some(host) = &mut host { host.loaded(visit.epoch)?; }
@@ -483,6 +488,18 @@ pub async fn run(assets: &mut Assets, options: &Options, launch: &Launch) -> Res
                         }
                     }
                     display = Some(frame);
+                    if launch.drive {
+                        if let Some(driver) = &mut route_driver {
+                            if let Some(command) = driver.checkpoint_request(visit.epoch, now) {
+                                // Use the normal host menu operation, including all save
+                                // validation and its atomic disk-before-memory commit.
+                                let result = checkpoint_store.save(&visit, roster, &mut arena, &scene.world, &campaign);
+                                if result.is_ok() { checkpoint_pending = false; }
+                                driver.checkpoint_result(command, visit.epoch, roster.tick,
+                                    result.err().map(|error| error.to_string()));
+                            }
+                        }
+                    }
                     if checkpoint_pending && !arena.stage.busy() && !arena.stage.story.busy()
                         && roster.players.iter().all(|b| b.stats.alive()) {
                         checkpoint_pending = false;

@@ -206,14 +206,26 @@ class School2Pair(SchoolPair):
                      first_exit=[(self.gym_exit, True)])
 
     def laboratory(self):
-        self.go((1880, -2940, 440))
+        # The return walkway has no paired waiting spot. Send each player
+        # through the whole passage before the other leaves the reunion pad.
         self.passage([(p, True) for p in [(1880, -2940, 440), (1710, -2800, 440),
                       (1472, -2560, 440), self.gym_exit, (1600, -2275, 440),
                       (1710, -2000, 448), (1950, -2016, 400), (2270, -2040, 250),
                       (2440, -2150, 192), (2400, -2150, 160), (2150, -2080, 0)]])
-        self.legs([(p, False) for p in [(2150, -3040, 0), (1470, -3040, 0),
-                   (1470, -2880, 0), (1440, -2880, 0), (1040, -2880, 0),
-                   (1040, -2560, 0), (480, -2560, 0), (250, -2290, 0), (-64, -2060, 0)]])
+        # The gym fight can leave its scene owner hurt. Share the next combat
+        # approach with the healthier partner instead of making the same body
+        # absorb every encounter while the other waits behind. Restore the
+        # requested arrival order before entering the laboratory scenes.
+        original_order = getattr(self, '_departure_first', None)
+        health = [b['stats']['sanity'] for b in self.bodies()]
+        self._departure_first = 'host' if health[0] > health[1] else 'guest' if health[1] > health[0] else self.first
+        self.evidence['laboratory_approach_first'] = dict(role=self.first, health=health)
+        try:
+            self.legs([(p, False) for p in [(2150, -3040, 0), (1470, -3040, 0),
+                       (1470, -2880, 0), (1440, -2880, 0), (1040, -2880, 0),
+                       (1040, -2560, 0), (480, -2560, 0), (250, -2290, 0), (-64, -2060, 0)]])
+        finally:
+            self._departure_first = original_order
         self.go((-64, -1960, 256), navigate=True)
         self.go((-64, -1270, 256))
         self.wait(8)
@@ -278,9 +290,10 @@ class School2Pair(SchoolPair):
         assert [o['enabled'] for o in new['objects']] == [o['enabled'] for o in old['objects']]
         assert [o['motion'] for o in new['objects']] == [o['motion'] for o in old['objects']]
 
-    def verify(self, partial=None):
+    def verify(self, partial=None, completed_scenes=frozenset()):
         expected = {'dice_cat'} if partial == 'dice' else (
             {'dice_cat', 'extendBleachers', 'Old_Gnome_Mushroom', 'OG1_Warp'} if partial == 'gym' else self.expected_scenes)
+        expected = expected - completed_scenes
         assert self.captures == expected, f'Unexpected scene coverage: {self.captures}'
         for role, rows in self.history.items():
             visit = [r for r in rows if r['epoch'] == 1]
@@ -316,6 +329,7 @@ class School2Pair(SchoolPair):
         self.wait(.5)
         self.until(lambda: all(r['combat']['stage']['owner'] is None for r in self.reports.values()), 180)
         self.verify(phase)
+        self.save_checkpoint(phase)
         (self.folder / f'milestone-{phase}.json').write_text(json.dumps(dict(
             passed=True, full_visit=False, phase=phase, build=self.build,
             scope=self.partial_scope(phase),

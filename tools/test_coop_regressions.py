@@ -123,17 +123,22 @@ def main():
                                                    'school-blue', 'school-red', 'lift-blue', 'lift-red',
                                                    'stairs-blue', 'stairs-red', 'school2-blue', 'school2-red',
                                                    'dice-blue', 'dice-red', 'altar-blue', 'altar-red',
-                                                   'gym-jump-blue', 'gym-jump-red'),
-                        help='school resumes a checkpoint; school-blue/red and school2-blue/red are full routes; lift/stairs/altar/gym-jump are staged; dice is a partial School Two entrance route')
+                                                   'gym-jump-blue', 'gym-jump-red', 'school2-resume'),
+                        help='school and school2-resume resume checkpoints; school-blue/red and school2-blue/red are full routes; lift/stairs/altar/gym-jump are staged; dice is a partial School Two entrance route')
     parser.add_argument('--local', action='store_true')
     parser.add_argument('--delay-ms', type=int, default=40)
     parser.add_argument('--jitter-ms', type=int, default=20)
     parser.add_argument('--school-checkpoint', type=Path)
+    parser.add_argument('--school2-checkpoint', type=Path)
     parser.add_argument('--school-resume-point', choices=('theatre', 'balcony', 'spiral', 'library', 'bridge', 'descent'))
     parser.add_argument('--first', choices=('blue', 'red'), default='blue',
                         help='Arrival order for the resumed school case; full cases name their own order')
     args = parser.parse_args()
     args.exe, args.data = args.exe.resolve(), args.data.resolve()
+    if args.school2_checkpoint:
+        args.school2_checkpoint = args.school2_checkpoint.resolve()
+        if not args.school2_checkpoint.is_file():
+            parser.error('The unchanged ordinary School Two checkpoint must exist')
     if not args.exe.is_file() or not args.data.is_dir():
         parser.error('--exe must be a built executable and --data an existing game-data directory')
     if not (0 <= args.delay_ms <= 500 and 0 <= args.jitter_ms <= 500):
@@ -148,6 +153,8 @@ def main():
                                  (['school'] if args.school_checkpoint else [])))
     if 'school' in selected and not args.school_checkpoint:
         parser.error('The school regression needs --school-checkpoint and --school-resume-point')
+    if 'school2-resume' in selected and not args.school2_checkpoint:
+        parser.error('The school2-resume regression needs --school2-checkpoint')
     common = ['--exe', str(args.exe), '--data', str(args.data),
               '--delay-ms', str(args.delay_ms), '--jitter-ms', str(args.jitter_ms)]
     if args.local:
@@ -176,6 +183,10 @@ def main():
         cases['school'] = ([sys.executable, str(ROOT / 'tools/test_coop_school_resume.py'), *common,
                            '--checkpoint', str(args.school_checkpoint), '--resume-point', args.school_resume_point,
                            '--first', args.first, '--rejoin'], 1200, True)
+    if args.school2_checkpoint:
+        cases['school2-resume'] = ([sys.executable, str(ROOT / 'tools/test_coop_school2_resume.py'), *common,
+                                  '--checkpoint', str(args.school2_checkpoint),
+                                  '--first', args.first, '--rejoin'], 1200, True)
     folder = EVIDENCE / ('regression-suite-' + uuid.uuid4().hex)
     folder.mkdir(parents=True)
     report_path = folder / 'summary.json'

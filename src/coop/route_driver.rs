@@ -1,5 +1,6 @@
 //! Explicit local test controller. Only ordinary client inputs leave this module;
-//! it cannot set positions, health, inventory, encounters or host world state.
+//! it cannot set positions, health, inventory or encounters. A neutral host
+//! command may request the same checkpoint operation as the pause menu.
 //! Each process plans from its own received view. The harness supplies goals via
 //! that process's isolated profile, never authoritative state through the wire.
 use super::{arena::Arena, protocol::Input, world::Frame, PlayerId};
@@ -52,6 +53,8 @@ struct Command {
     /// player's actual Will; old fixtures retain their Blade-only behavior.
     #[serde(default)]
     prefer_cards: bool,
+    #[serde(default)]
+    checkpoint: bool,
     capture: bool,
     finish: bool,
 }
@@ -89,6 +92,10 @@ impl Command {
                 && self.rope.is_none() && self.use_aim.is_none() && !self.navigate && !self.run && !self.jump,
                 "Invalid moving-step command");
         }
+        ensure!(!self.checkpoint || (self.goal.is_none() && self.marker.is_none()
+            && self.rope.is_none() && self.use_aim.is_none() && self.beyond_step.is_none()
+            && !self.navigate && !self.attack && !self.run && !self.jump && !self.finish),
+            "Checkpoint requests require neutral inputs");
         Ok(())
     }
 }
@@ -154,6 +161,7 @@ pub struct Report {
     pub phase: &'static str,
     pub reached: bool,
     pub captured: Option<u64>,
+    pub checkpoint: Option<CheckpointReport>,
     pub replans: usize,
     pub error: Option<String>,
     pub observed_epoch: u64,
@@ -174,6 +182,13 @@ pub struct Report {
     pub boojums: Vec<EnemyReport<crate::boojum::State>>,
     pub beyond_steps: Option<[Vec3; 15]>,
     pub network_states: VecDeque<NetworkState>,
+}
+#[derive(Serialize)]
+pub struct CheckpointReport {
+    pub command: u64,
+    pub epoch: u64,
+    pub tick: u64,
+    pub error: Option<String>,
 }
 #[derive(Serialize)]
 pub struct NetworkState {
@@ -316,12 +331,27 @@ fn landing_control(world: &World, player: &Player, goal: Vec3, lead: f32, radius
 
 // Selection policy must not remove unselected bodies from the collision
 // context: an idle guard can still stand between Alice and an active foe.
+fn attack_point(context: &crate::combat::Context<'_>, eye: Vec3, target: &crate::combat::Target) -> Option<Vec3> {
+    let standard=crate::route::fight::aim_point(context,eye,target);
+    let clear=|point| crate::combat::contact(context,eye,point,8.)
+        .is_some_and(|(id,_)|id==target.id);
+    if standard.is_some_and(clear) { return standard; }
+    // A narrow sight ray may see the centre while a real projectile clips
+    // the platform rim. Check exposed sides as well as the top of the body;
+    // all points stay inside its actual hit box and retain world occlusion.
+    let extent=(target.half-Vec3::splat(4.)).max(Vec3::ZERO);
+    for z in [1.,0.,-1.] { for x in [0.,-1.,1.] { for y in [0.,-1.,1.] {
+        let point=target.center+extent*vec3(x,y,z);
+        if clear(point) { return Some(point); }
+    }}}
+    standard
+}
 fn attack_target<'a>(world: &World, targets: &'a [crate::combat::Target], eye: Vec3,
-    eligible: impl Fn(usize) -> bool) -> Option<&'a crate::combat::Target> {
+    eligible: impl Fn(usize) -> bool) -> Option<(&'a crate::combat::Target, Vec3)> {
     let context = crate::combat::Context { world, targets };
     targets.iter().filter(|t| eligible(t.id) && t.center.distance(eye) < 1000.)
-        .filter(|t| crate::combat::contact(&context,eye,t.center,1.).is_some_and(|(id,_)| id==t.id))
-        .min_by(|a,b| a.center.distance_squared(eye).total_cmp(&b.center.distance_squared(eye)))
+        .filter_map(|t|attack_point(&context,eye,t).map(|point|(t,point)))
+        .min_by(|(a,_),(b,_)| a.center.distance_squared(eye).total_cmp(&b.center.distance_squared(eye)))
 }
 
 pub struct Driver {
@@ -398,6 +428,16 @@ impl Driver {
         }
     }
     fn fresh(&self, now: Instant) -> bool { now.duration_since(self.refreshed) < Duration::from_secs(3) }
+    /// Local host only; no save request is sent over the network. Acknowledging
+    /// failures as well as successes prevents a heartbeat from retrying disk I/O.
+    pub fn checkpoint_request(&self, epoch: u64, now: Instant) -> Option<u64> {
+        self.command.as_ref().filter(|c| c.checkpoint && c.epoch == epoch && self.fresh(now)
+            && self.report.checkpoint.as_ref().is_none_or(|r| (r.epoch,r.command) != (epoch,c.id)))
+            .map(|c| c.id)
+    }
+    pub fn checkpoint_result(&mut self, command: u64, epoch: u64, tick: u64, error: Option<String>) {
+        self.report.checkpoint = Some(CheckpointReport { command, epoch, tick, error });
+    }
     fn neutral(keys: &mut Input) {
         keys.wish = Vec2::ZERO; keys.swim = Vec3::ZERO; keys.rise = 0.;
         keys.run = false; keys.primary = false; keys.alternate = false; keys.weapon = None;
@@ -519,6 +559,7 @@ impl Driver {
             self.report.phase = "waiting for command"; return;
         };
         if !body.stats.alive() { self.report.phase = "spectating"; return; }
+        if command.checkpoint { self.report.phase = "saving checkpoint"; return; }
         if !command.watch_dialogue && arena.stage.story.busy() && arena.stage.owner == Some(local)
             && now.duration_since(self.used) >= Duration::from_millis(250) {
             keys.uses += 1; self.used = now;
@@ -547,15 +588,17 @@ impl Driver {
             // Match the native route's active-fight policy. A distant idle
             // guard may be visible beyond its engagement range; do not waste
             // Will on it before approaching. Keep every body in hit testing.
-            if let Some(target) = attack_target(world,&targets,body.player.eye(),|id|
+            if let Some((_,point)) = attack_target(world,&targets,body.player.eye(),|id|
                 !command.prefer_cards || !self.report.guards.iter().any(|guard|
                     guard.id == id && guard.state == crate::combat::State::Idle)) {
-                let delta = target.center-body.player.eye();
-                keys.yaw = delta.y.atan2(delta.x); keys.pitch = (delta.z/delta.length().max(1.)).asin().clamp(-1.56,1.56);
+                let delta = point-body.player.eye();
                 let cards = command.prefer_cards && body.stats.copies(1) > 0
                     && body.stats.will() >= crate::route::fight::CARD_COST;
                 keys.weapon = Some(if cards { 1 } else { 0 });
                 keys.primary = cards || delta.length()<80.; keys.alternate = !keys.primary;
+                let aim=if keys.alternate {crate::route::fight::lead(body.player.eye(),point,Vec3::ZERO)}
+                    else {delta.normalize_or_zero()};
+                keys.yaw=aim.y.atan2(aim.x); keys.pitch=aim.z.asin().clamp(-1.56,1.56);
             }
         }
         if let Some(index) = command.beyond_step {
@@ -709,6 +752,33 @@ impl Driver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn checkpoint_commands_are_neutral_fresh_and_acknowledged_once_even_on_failure() {
+        let value=serde_json::json!({"id":7,"heartbeat":1,"epoch":2,"goal":null,
+            "navigate":false,"attack":false,"capture":false,"finish":false,"checkpoint":true});
+        let command:Command=serde_json::from_value(value.clone()).unwrap();
+        command.validate().unwrap();
+        for (field,bad) in [("goal",serde_json::json!([0,0,0])),("attack",true.into()),
+            ("navigate",true.into()),("jump",true.into()),("finish",true.into()),
+            ("use_aim",serde_json::json!([0,0]))] {
+            let mut invalid=value.clone(); invalid[field]=bad;
+            assert!(serde_json::from_value::<Command>(invalid).unwrap().validate().is_err());
+        }
+        let mut driver=Driver::new(PathBuf::new());
+        let now=driver.refreshed;
+        driver.command=Some(command);
+        assert_eq!(driver.checkpoint_request(1,now),None);
+        assert_eq!(driver.checkpoint_request(2,now+Duration::from_secs(3)),None);
+        assert_eq!(driver.checkpoint_request(2,now),Some(7));
+        driver.checkpoint_result(7,2,100,Some("Wait until the scene finishes".into()));
+        assert_eq!(driver.checkpoint_request(2,now),None);
+        driver.command.as_mut().unwrap().heartbeat+=1;
+        assert_eq!(driver.checkpoint_request(2,now),None);
+        driver.command.as_mut().unwrap().id=8;
+        assert_eq!(driver.checkpoint_request(2,now),Some(8));
+        driver.checkpoint_result(8,2,120,None);
+        assert_eq!(driver.checkpoint_request(2,now),None);
+    }
     #[test]
     fn walking_routes_replan_when_a_new_obstacle_stops_progress() {
         let floor=(vec3(-200.,-200.,-100.),vec3(400.,200.,0.));
@@ -908,8 +978,31 @@ mod tests {
         let mut targets = vec![target(1,vec3(50.,0.,40.)), target(2,vec3(100.,0.,40.))];
         assert!(attack_target(&world,&targets,eye,|id| id!=1).is_none());
         targets.push(target(3,vec3(50.,50.,40.)));
-        assert_eq!(attack_target(&world,&targets,eye,|id| id!=1).unwrap().id,3);
-        assert_eq!(attack_target(&world,&targets,eye,|_| true).unwrap().id,1);
+        assert_eq!(attack_target(&world,&targets,eye,|id| id!=1).unwrap().0.id,3);
+        assert_eq!(attack_target(&world,&targets,eye,|_| true).unwrap().0.id,1);
+    }
+    #[test]
+    fn ranged_aim_finds_an_exposed_side_and_clears_the_projectile_path() {
+        let world=World::fixture(&[
+            (vec3(160.,-80.,0.),vec3(170.,80.,46.)),
+            (vec3(140.,-4.,46.),vec3(150.,4.,120.))]);
+        let targets=[crate::combat::Target{id:1,center:vec3(200.,0.,40.),half:vec3(20.,32.,32.)}];
+        let context=crate::combat::Context{world:&world,targets:&targets};
+        let eye=vec3(0.,0.,88.);
+        assert!(crate::route::fight::aim_point(&context,eye,&targets[0]).is_none(),
+            "The regression must require more than a centre or top-centre aim");
+        let (target,point)=attack_target(&world,&targets,eye,|_|true).unwrap();
+        assert_eq!(target.id,1);
+        assert!(point.y.abs()>8. && point.z>target.center.z);
+        let shoot=|point| {
+            let mut shot=crate::weapons::Projectile::thrown_blade(eye,
+                crate::route::fight::lead(eye,point,Vec3::ZERO));
+            let mut hit=None;
+            for _ in 0..120 {hit=hit.or(shot.contact_step(1./120.,&context).0);}
+            hit.map(|h|h.id)
+        };
+        assert_eq!(shoot(target.center),None);
+        assert_eq!(shoot(point),Some(1));
     }
     #[test]
     fn navigation_clock_does_not_skip_unsampled_steps_after_a_render_stall() {

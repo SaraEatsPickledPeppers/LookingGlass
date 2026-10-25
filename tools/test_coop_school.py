@@ -489,6 +489,29 @@ class SchoolPair(PandemoniumPair):
         print(f'Ready for ordinary menu checkpoint at {label}; create continue-{label} to proceed.',flush=True)
         self.until(lambda: (self.folder/f'continue-{label}').exists(),180)
 
+    def save_checkpoint(self, label):
+        """Ask the host to save normally, then retain the unchanged disk file."""
+        epoch = self.reports['host']['visit']['epoch']
+        for role in self.commands:
+            self.set(role, attack=False, epoch=epoch)
+        self.wait(.5)
+        self.commands['host']['checkpoint'] = True
+        command = self.commands['host']['id']
+        self.until(lambda: (self.reports['host']['route_driver'].get('checkpoint') or {}).get('command') == command, 15)
+        receipt = self.reports['host']['route_driver']['checkpoint']
+        assert receipt['epoch'] == epoch and receipt['error'] is None, receipt
+        saved = (self.folder/'host'/'coop-checkpoint.json').read_bytes()
+        payload = json.loads(saved)['payload']
+        assert payload['visit']['epoch'] == epoch and payload['frame']['tick'] == receipt['tick']
+        assert payload['frame']['checkpoint_generation'] == self.reports['host']['frame']['checkpoint_generation']
+        path = self.folder/f'checkpoint-{label}.json'
+        path.write_bytes(saved)
+        self.evidence.setdefault('checkpoints', {})[label] = dict(
+            file=path.name, sha256=hashlib.sha256(saved).hexdigest(), **receipt)
+        for role in self.commands:
+            self.set(role, attack=True, epoch=epoch)
+        print(f'PASS ordinary checkpoint retained at {label}', flush=True)
+
     def balcony_gap(self):
         # A short running approach followed by feedback steering is less brittle
         # than replaying a timed sequence of sideways inputs across this gap.
