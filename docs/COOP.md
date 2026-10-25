@@ -3841,3 +3841,26 @@ arrival, and the harness retried the same endpoint eight times. It now rejects
 that candidate and tries another supported spot, retaining the final ground,
 distance and height assertions. Narrow walkways use single-file passages
 instead of assuming there is room for two stopping positions at every turn.
+
+A further repeat from the unchanged spiral checkpoint traverses the upper
+library and gap, the Star gate, shared observatory boarding and physical ascent,
+then preserves scene and personal resource state across a fresh guest rejoin.
+That run still fails at the final stairs: its approximate target height was
+eleven units below the supported landing. The failed result remains recorded
+in `private/coop/regression-suite-e2f8564dc32e40a2a1d5f563e6661e3f/summary.json`.
+
+The exit replay now targets the observed stair landings and walks up the ramp
+with ordinary horizontal input, matching the native route. It retains precise
+landing checks and does not change collision, progression or player resources.
+The unchanged ordinary observatory checkpoint then passes through the potion
+scene and the shared Pool entrance on frozen runtime `01c1d34`, with Blue first,
+public internet transport, 40 ms added delay and 20 ms jitter. Both players
+finish at 100 health without deaths or wipes; 1,610 player states and 1,610
+shared-world states match, including five full school frames. Scene ownership,
+the frozen partner, spent quest items and the authored destination are checked.
+The compact result is
+`private/coop/regression-suite-8b066e4cac994efdbb5d6dcff90d7671/summary.json`
+(114.73 seconds). This is an observatory-to-Pool segment pass, not a complete
+visit or a reconnect test. Full fresh co-op return runs in both arrival orders
+and the recovery matrix remain open; total progress stays approximately 42%.
+All checks in this work used text reports without opening screenshots.

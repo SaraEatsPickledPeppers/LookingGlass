@@ -170,9 +170,15 @@ class SchoolReturnPair(SchoolPair):
         # Reach the authored potion contact first. Its single-Alice performance
         # takes the waiting partner through the normal shared level transition.
         self.set(self.partner)
-        for goal in ((-280, 4078, 1204), (-280, 4210, 1204),
-                     (208, 4240, 1280), (340, 4396, 1344)):
-            self.set(self.first, goal, navigate=True)
+        # Use observed supported stair landings, then walk up the ramp like
+        # the native route. Its old approximate goal height was below the
+        # actual floor and cannot satisfy precise network landing checks.
+        for goal, navigate, horizontal in (
+                ((-272, 4077, 1215), True, False),
+                ((-280, 4210, 1280), False, True),
+                ((202, 4231, 1280), True, False),
+                ((340, 4396, 1344), True, False)):
+            self.set(self.first, goal, navigate=navigate, horizontal=horizontal)
             self.until(lambda: self.reached(self.first) or self.arrived()
                        or self.reports['host']['route_driver']['scene'] == 'observatory_exit_cinematic', 60)
             if self.arrived() or self.reports['host']['route_driver']['scene'] == 'observatory_exit_cinematic':
