@@ -20,7 +20,9 @@ pub fn aboard(collider: &Collider, feet: Vec3) -> bool {
 /// A nearby lift is only a support if another surface is not at or above it. At a
 /// landing the downwards probe can hit both the floor and the lift underneath;
 /// carrying that body would pull it into the floor and stop every other rider.
-fn supported_by(world: &World, collider: &Collider, feet: Vec3) -> bool {
+/// At equal height, a straight vertical departure can pick up the body. A
+/// rotating/sideways platform must not recapture someone already on a landing.
+fn supported_by(world: &World, collider: &Collider, feet: Vec3, lifting_off: bool) -> bool {
     let support = collider.trace(
         feet + PLAYER_CENTER,
         feet + PLAYER_CENTER - Vec3::Z * 3.,
@@ -30,10 +32,11 @@ fn supported_by(world: &World, collider: &Collider, feet: Vec3) -> bool {
         return false;
     }
     let other = world.body_trace(feet, feet - Vec3::Z * 3.);
-    !(other.fraction < 1.
+    let landing = other.fraction < 1.
         && other.fraction <= support.fraction + 0.001
         && !other.start_solid
-        && other.normal.z > 0.65)
+        && other.normal.z > 0.65;
+    !landing || (lifting_off && (other.fraction - support.fraction).abs() <= 0.001)
 }
 
 pub fn carry(
@@ -46,11 +49,15 @@ pub fn carry(
     players: &mut [&mut Player],
 ) -> bool {
     let mut planned = Vec::with_capacity(players.len());
+    let lifting_off = to.translation.z > from.translation.z
+        && to.translation.truncate() == from.translation.truncate()
+        && to.rotation == from.rotation;
     for player in players.iter() {
-        let riding = solid && player.velocity.z <= 1. && supported_by(world, previous, player.feet);
+        let carried = to.translation
+            + to.rotation * from.rotation.inverse() * (player.feet - from.translation);
+        let riding = solid && player.velocity.z <= 1.
+            && supported_by(world, previous, player.feet, lifting_off);
         if riding {
-            let carried = to.translation
-                + to.rotation * from.rotation.inverse() * (player.feet - from.translation);
             let Some((feet, normal)) = next.rider_feet(carried) else {
                 return false;
             };
@@ -238,6 +245,27 @@ mod tests {
             ));
             assert_eq!(bodies.each_ref().map(|p| p.feet), before);
         }
+    }
+
+    #[test]
+    fn rising_lift_takes_riders_off_a_coplanar_landing() {
+        let world = World::fixture(&[(vec3(-100., -100., -8.), vec3(100., 100., 0.))]);
+        let mut bodies = [Player::new(vec3(-48., 0., 0.04)), Player::new(vec3(48., 0., 0.04))];
+        assert!(carry(&world, &platform(0.), &platform(1.), pose(Vec3::ZERO, 0.),
+            pose(Vec3::Z, 0.), true, &mut bodies.each_mut()),
+            "A rising lift at the same height as its landing must pick up both riders");
+        assert!(bodies.iter().all(|body| body.feet.z > 1. && world.body_clear(body.feet)));
+    }
+
+    #[test]
+    fn nearly_arrived_rotating_lift_does_not_recapture_a_landed_body() {
+        let world = World::fixture(&[(vec3(20., -100., -8.), vec3(100., 100., 2.))]);
+        let mut bodies = [Player::new(vec3(-48., 0., 2.038)), Player::new(vec3(48., 0., 2.04))];
+        let landed = bodies[1].feet;
+        assert!(carry(&world, &platform(1.998), &platform(2.), pose(Vec3::Z * 1.998, 0.),
+            pose(Vec3::Z * 2., 0.05), true, &mut bodies.each_mut()));
+        assert_eq!(bodies[1].feet, landed);
+        assert!(bodies[0].feet.y.abs() > 1. && world.body_clear(bodies[0].feet));
     }
 
     #[test]

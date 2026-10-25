@@ -78,7 +78,10 @@ pub fn drive(r: &mut Route) -> Result<()> {
     r.walk_xy(vec2(-1888., 3290.))?;
     r.wait(5.)?;
     r.navigate(vec3(-1888., 2890., -480.))?;
-    r.walk_xy(vec2(-1888., 2290.))?;
+    // The approach can leave Alice on the raised edge beside the entrance
+    // stairs. Plan ordinary movement/jumps down to the lower landing instead
+    // of holding a straight walking input against that edge.
+    r.navigate(vec3(-1888., 2290., -512.))?;
     for goal in [vec3(-2340., 2368., -480.), vec3(-2256., 2544., -480.)] {
         r.walk(goal, true)?;
     }

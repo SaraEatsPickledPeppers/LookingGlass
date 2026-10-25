@@ -3637,9 +3637,9 @@ network completion results. Evidence is in `private/coop-return-exit-check.log`.
 All 780 Rust unit tests pass, with one existing ignored test; the release build
 and seven source-package tests pass.
 
-The single-player `--school-return-check` still fails with `Lift did not release`
+At this checkpoint, single-player `--school-return-check` failed with `Lift did not release`
 in its staged Star/lift check on both the previous `9e65cb7` and new `005d643`
-builds. This remains unresolved and is not claimed as passing preservation or
+builds. This was unresolved here and was not passing preservation or
 return traversal evidence. Logs are `private/coop-return-single-player-baseline.log`
 and `private/coop-return-single-player.log`.
 
@@ -3718,5 +3718,56 @@ executable/source identities are rechecked after the run. All owned windows
 close and Anode is released. No screenshots were opened.
 
 This is a partial checkpoint segment, not a complete School Two visit. Both
-full arrival orders, recovery coverage, the return observatory lift and later
+full arrival orders, recovery coverage, complete return traversal and later
 campaign visits remain open. Overall completion remains approximately 42%.
+
+### Observatory departure and landing regressions
+
+The return observatory lift could not leave its bottom landing: the support
+test gave the static floor priority even when the floor and lift were at the
+same height. A straight vertical ascent now picks up those riders. A floor
+above the lift still takes priority, and a rotating or sideways platform
+cannot recapture someone who has already stepped onto a landing. Obstructions
+still stop the mover and every rider together.
+
+Two asset-free regressions cover coplanar departure and a rotating lift just
+below its landing. They run with the ordinary Rust tests in GitHub checks.
+The original departure logic fails the new test. An initially broader fix
+failed the existing native spiral-landing check; the narrower correction
+passes both arrival orders, as well as the obstruction and paused/restored
+moving-support checks. All 784 Rust tests pass, with one existing ignored test.
+
+`--coop-world-check` now includes eight integrated observatory cases: Blue or
+Red arrives first, watches or skips the original Star scene, and continues
+directly or through repeated snapshot round trips. The lift waits for its
+partner; the scene retains its first arrival and freezes the waiting player;
+both bodies reach the top separately, without damage, respawn, checkpoint
+recovery or potion consumption. Only starting positions and quest rewards are
+staged. These checks do not certify an entrance-to-exit or internet traversal.
+Evidence is in `private/coop-return-lift-refined-world.log`; all eight cases
+and the existing spiral landing checks pass without opening screenshots.
+
+The eleven single-player Star/potion scene cases now pass, including the
+actual observatory ascent, watched/skipped scenes, paused clocks and restored
+shots. The following full return route exposed a separate entrance navigation
+blockage at approximately `(-1895, 2854, -471)`. The unchanged `6d66fdd` build
+reproduces the same blockage through `--school-return-chain-check`, so full
+return traversal remains a separate open check. Logs are
+`private/coop-return-lift-fixed-sp.log` and
+`private/coop-return-route-baseline-chain.log`.
+
+The return route now plans ordinary movement and jumps down from the raised
+entrance edge instead of holding a straight walking input there. On frozen
+runtime `a9eaf40`, it crosses that obstruction and continues through the theatre
+approach, but later falls and blocks on the library approach at approximately
+`(-1583, 2983, -550)`. `--school-return-check` therefore still exits with failure;
+the eleven scene checks pass, but neither complete return traversal nor the
+School Two/return chain is certified. See `private/coop-return-lift-final-sp.log`.
+
+The compact runner's `fixture-scenes world` suite passes on that same frozen
+executable: 12 Python fixtures in 0.16 seconds and the native paired world
+checks in 12.41 seconds. Its machine-readable report is
+`private/coop/regression-suite-a29d6576f7cf44309b6a093256621e9a/summary.json`.
+The locked release build, seven source-package tests and source audit pass.
+Overall completion remains approximately 42%; no campaign row is added by
+these focused checks. No desktop or image inspection was needed.
