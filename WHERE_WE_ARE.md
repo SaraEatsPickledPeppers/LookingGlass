@@ -1,171 +1,145 @@
-# Where We Are — Looking Glass Linux Port
+# Where We Are — Looking Glass Console-First Launcher
 
 **Last updated:** 2026-10-28  
-**Status:** Phase 2 complete, Phase 3 **COMPLETE**, Phase 4 **COMPLETE**, Phase 5 **MOSTLY COMPLETE**, Phase 6 **COMPLETE**
+**Status:** Core engine complete, pivoting to console-first game & mod launcher
 
 ---
 
-## ✅ Phase 1: Core Build Support — COMPLETE
+## ✅ Completed: Rust Engine Foundation
 
-| Task | Status |
-|------|--------|
-| `build.rs` Linux stack size (8MB) | ✅ Done |
-| GitHub Actions CI (ubuntu-latest + windows-latest) | ✅ Done |
-| `cargo build --release --locked` on Linux | ✅ Verified working |
-| Binary runs (`--list`, `--validate-all`) | ✅ Verified (needs game data) |
-
-**Files changed:** `build.rs`, `.github/workflows/ci.yml`
+| Component | Status |
+|-----------|--------|
+| Rust reimplementation of Alice (2011) | ✅ Complete |
+| Macroquad-based rendering & game framework | ✅ Complete |
+| BSP parsing, asset loading, campaign system | ✅ Complete |
+| Linux port (build, CI, packaging, testing) | ✅ Complete |
+| Gamepad support (gilrs, PS4/Xbox) | ✅ Complete |
+| Wayland + X11 window focus | ✅ Complete |
+| Audio device selection (rodio/cpal) | ✅ Complete |
+| Performance profiling (--profile, F11 overlay) | ✅ Complete |
+| Structured JSON logging (--verbose/--debug) | ✅ Complete |
+| Automated validation suite (689 tests) | ✅ Complete |
 
 ---
 
-## ✅ Phase 2: Platform Abstraction — COMPLETE
+## 🎯 New Direction: Console-First Game & Mod Launcher
 
-| Part | Task | Status | Key Changes |
-|------|------|--------|-------------|
-| **Part 1** | Window Focus (`src/look.rs`) | ✅ | 3-tier: x11rb (X11) → xdotool (Wayland) → `true` fallback |
-| **Part 2** | Audio Regression Fix | ✅ | `"Windows output device"` → `"audio output device"` |
-| **Part 3** | Platform Conditional Audit | ✅ | Found 5 sites; 2 need work (focus, gamepad); gamepad → Tier 5 |
-| **Part 4** | CI Hardening | ✅ | xdotool, xvfb, xvfb-run wrapping |
+**Goal:** Build a functional-first game & mod launcher as a **console application** before making a GUI launcher.
 
-**Files changed:**
-- `Cargo.toml` — Added `x11rb = "=0.14.0"` (optional, feature `"x11"`)
-- `src/look.rs` — Three `#[cfg]` implementations of `window_focused()`
-- `src/audio/regression.rs` — Platform-agnostic error message
-- `.github/workflows/ci.yml` — Added xdotool, xvfb, xvfb-run
-- `PHASE2_PLAN.md`, `LINUX_PORT_PLAN.md` — Gamepad moved to Tier 5/Phase 7
+### Why Console-First?
+- Faster iteration: TUI/CLI development is quicker than GUI
+- Scriptable/automatable: Works in SSH, CI, headless environments
+- Unix philosophy: Composable tools that do one thing well
+- Can wrap existing game binaries, Wine/Proton, Flatpak, AppImage, native Linux ports
+- Foundation for future GUI (Tauri, egui, or native) without rewriting core logic
 
-**Build verified:**
-```bash
-cargo build              # default (xdotool fallback) ✓
-cargo build --features x11   # x11rb implementation ✓
-cargo test --locked      # passes ✓
+---
+
+## 📋 Roadmap
+
+### Phase 1: Core Launcher Infrastructure (Console/TUI)
+
+| Task | Status | Priority |
+|------|--------|----------|
+| **Game registry**: Scan for installed games (Steam, Heroic, Lutris, Flatpak, AppImage, native) | 🔄 Planned | High |
+| **Launch command abstraction**: Unified interface for `steam://`, `flatpak run`, `wine`, `proton`, native binaries | 🔄 Planned | High |
+| **Config system**: TOML/JSON config for game entries, launch args, env vars, prefixes | 🔄 Planned | High |
+| **TUI interface**: ratatui/crossterm-based interactive game list, search, filters | 🔄 Planned | High |
+| **Mod profile system**: Per-game mod lists with enable/disable, load order, profiles | 🔄 Planned | High |
+| **Save management**: Backup/restore/sync saves per game/profile | 🔄 Planned | Medium |
+
+### Phase 2: Mod Management
+
+| Task | Status | Priority |
+|------|--------|----------|
+| **Mod source abstraction**: NexusMods API, Mod.io, local directories, Git repos | 🔄 Planned | High |
+| **Mod installation**: Extract archives, handle conflicts, track installed files | 🔄 Planned | High |
+| **Dependency resolution**: Mod load order, conflicts, requirements | 🔄 Planned | Medium |
+| **Profile switching**: Quick swap between mod sets (vanilla, QoL, overhaul, etc.) | 🔄 Planned | Medium |
+
+### Phase 3: Platform Integration
+
+| Task | Status | Priority |
+|------|--------|----------|
+| **Steam integration**: Library parsing, Proton version selection, Steam Input configs | 🔄 Planned | Medium |
+| **Heroic/Gog integration**: Wine prefix management, GOG Galaxy compatibility | 🔄 Planned | Medium |
+| **Flatpak/Steam Deck support**: Deck UI mode, controller navigation | 🔄 Planned | Medium |
+| **Desktop entries**: Generate `.desktop` files for launched games with custom icons | 🔄 Planned | Low |
+
+### Phase 4: Advanced Features
+
+| Task | Status | Priority |
+|------|--------|----------|
+| **Benchmarking**: Built-in FPS/frame time capture, comparison reports | 🔄 Planned | Low |
+| **Sync/cloud**: Optional save/mod profile sync via Git/rclone/Syncthing | 🔄 Planned | Low |
+| **Plugin system**: Lua/WASM plugins for custom launch logic, UI extensions | 🔄 Planned | Low |
+| **GUI prototype**: Tauri/egui frontend sharing core library | 🔄 Planned | Low |
+
+---
+
+## 🏗️ Architecture Vision
+
+```
+looking-glass-launcher/
+├── src/
+│   ├── core/           # Game registry, launch abstraction, config
+│   ├── mod/            # Mod management, sources, installation
+│   ├── platform/       # Steam, Heroic, Flatpak, Wine/Proton integrations
+│   ├── tui/            # ratatui-based console interface
+│   ├── save/           # Save backup/restore/sync
+│   └── cli/            # CLI argument parsing, subcommands
+├── Cargo.toml          # Workspace with core lib + cli binary
+└── tests/              # Integration tests
 ```
 
----
-
-## ✅ Phase 3: Setup/Launch Scripts — COMPLETE
-
-### What was completed:
-
-| Task | Description | Priority | Status |
-|------|-------------|----------|--------|
-| **tools/linux_setup.sh** | Core setup logic: find game data, validate PK3s, extract 7z, write config | High | ✅ **COMPLETE** |
-| **Setup.sh** | Entry point: arg parsing, GUI dialog detection (zenity/kdialog/yad), calls linux_setup.sh | High | ✅ **COMPLETE** |
-| **Launch.sh** | Entry point: binary discovery order, auto cargo build, passes args through | High | ✅ **COMPLETE** |
-| **Rust logging** | Add `--verbose/--debug` flags, structured logging to `~/.local/share/LookingGlass/logs/` | Medium | ✅ **COMPLETE** |
-
-### What was completed:
-- **tools/linux_setup.sh**: All core functions implemented:
-  - `find_game_data` - Searches 5 locations for game data
-  - `validate_base` - Validates 5 required PK3s, 36 maps, village map FAKK v42
-  - `extract_base_paks` - Extracts from .7z/.zip with prefix detection
-  - `download_game_data` - Downloads from Internet Archive with SHA256 verification
-  - `write_config` / `write_receipt` - Atomic writes to private/data-path.txt and private/setup.json
-  - Language handling: `test_language`, `import_languages`, `apply_language`, `switch_installed_language`
-  - `main_setup` - Full orchestration matching Windows Setup.cmd logic
-  - `find_extractor`, `get_archive_entries`, `compute_sha256`, `check_cancel`
-- **Setup.sh**: Updated to delegate to linux_setup.sh with all arguments (--language, --data, --download, --gui, --dry-run, --verbose)
-- **Launch.sh**: Binary discovery working (pre-built, cargo release, private playtest dirs)
-- **Rust logging** (`src/logging.rs`): 
-  - `--verbose` / `-v` flag for INFO level logging
-  - `--debug` flag for DEBUG level logging
-  - Structured JSON logging to `~/.local/share/LookingGlass/logs/looking-glass-YYYYMMDD-HHMMSS.log`
-  - Non-blocking file appender with rotation via `tracing-appender`
-  - Dependencies added: `chrono`, `tracing`, `tracing-subscriber`, `tracing-appender`
-
-### What was attempted (agents stalled):
-- Multiple agents spawned for the above tasks
-- All stalled after ~10 minutes (watchdog timeout)
-- **Fixed**: Re-deployed as many small agents (one per function) - all completed successfully
+**Key principles:**
+- **Library-first**: Core logic in `looking-glass-launcher-core` crate, thin CLI/TUI wrappers
+- **No game data**: Never bundle game files; only manage launch configuration
+- **Cross-platform**: Linux primary, Windows/macOS via conditional compilation
+- **Unix-native**: Leverages system tools (flatpak, steam, wine) rather than reimplementing
 
 ---
 
-## 📋 Phase 4+: Future Phases (from LINUX_PORT_PLAN.md)
+## 🔧 Current Repo State
 
-| Phase | Focus | Status |
-|-------|-------|--------|
-| **Phase 4** | Packaging (AppImage/tarball, `tools/package_linux.py`) | ✅ **COMPLETE** |
-| **Phase 5** | Testing & Validation (full test suite, campaign checks, manual playthrough) | ✅ **MOSTLY COMPLETE** (689 tests pass, validation passes, campaign has known slime timeout) |
-| **Phase 6** | Documentation & Polish (INSTALL.md Linux section, README badge) | ✅ **COMPLETE** |
-| **Phase 7** | Feature Parity & Polish (gamepad via gilrs, Wayland-native focus, audio devices) | 🔄 **IN PROGRESS** (6 agents deployed) |
-
----
-
-## 🎯 Immediate Next Steps
-
-1. **Install required system packages (user needs to run):**
-   ```bash
-   sudo dnf install -y zenity xdotool  # for GUI dialogs and window focus fallback
-   ```
-
-2. **Test current build with game data** once available
-   - Need `Alice1_2011_vanilla.7z` from Internet Archive
-   - Run `Setup.sh --download` or `Setup.sh --data /path/to/Alice1`
-   - Run `Launch.sh` to start game
-   - Test `--verbose` / `--debug` flags for logging
-
-3. **Phase 5: Testing & Validation** - ✅ **MOSTLY COMPLETE**
-   - `cargo test --locked` — 689 tests, 687 passed, 2 ignored, 0 failed
-   - `cargo run -- --validate-all` — All 36 maps validated
-   - `cargo run -- --campaign-route-check` — Fails at pandemonium (known slime timeout)
-   - Game launches and runs (village level tested)
-
-4. **Phase 7: Feature Parity & Polish** - Next major phase
-   - Gamepad support via gilrs/SDL3
-   - Wayland-native window focus improvements
-   - Advanced audio configuration
+- **Fork**: `https://github.com/SaraEatsPickledPeppers/LookingGlass`
+- **Clean**: No game files, no build artifacts, no test outputs
+- **CI**: GitHub Actions for Linux + Windows builds
+- **Packaging**: `tools/package_linux.py` for tarball/AppImage releases
+- **Docs**: `docs/INSTALL.md`, `README.md`, `docs/KNOWN_ISSUES.md` updated for Linux
 
 ---
 
-## 📁 Key Files to Reference
+## 📁 Key Files (Updated for New Direction)
 
 | File | Purpose |
 |------|---------|
-| `LINUX_PORT_PLAN.md` | Full 7-phase plan |
-| `PHASE2_PLAN.md` | Phase 2 detailed breakdown |
-| `agents.md` | Agent instructions for this project |
-| `WHERE_WE_ARE.md` | This file |
-| `build.rs` | Stack size for Windows + Linux |
-| `src/look.rs` | Window focus detection (3-tier Linux impl) |
-| `.github/workflows/ci.yml` | CI with Linux + Windows matrix |
+| `WHERE_WE_ARE.md` | This file — project status & roadmap |
+| `agents.md` | Agent instructions for launcher development |
+| `Cargo.toml` | Will become workspace root for launcher crates |
+| `src/main.rs` | Current game binary — will become `looking-glass` game binary |
+| `tools/package_linux.py` | Packaging for launcher releases |
+| `.github/workflows/` | CI for launcher + game engine |
 
 ---
 
-## 🤖 Agent Deployment Strategy (Revised - EXECUTED SUCCESSFULLY)
+## 🤖 Agent Deployment Strategy (Updated)
 
-**Previous issue:** Large tasks caused agent stalls.
+**New approach for launcher development:**
+1. **One agent per core module** (registry, launch, mod, platform, tui, save, cli)
+2. **Integration agents** for cross-cutting concerns (config, logging, error handling)
+3. **Test agents** per module with property-based testing where applicable
+4. **Small scope**: Each agent owns one crate or one well-defined feature
 
-**New approach:** Deploy many small agents:
-1. One agent per shell function in `tools/linux_setup.sh` ✅ **COMPLETED** (10 agents)
-2. One agent for `Setup.sh` wrapper ✅ **ALREADY EXISTS** (no agent needed)
-3. One agent for `Launch.sh` wrapper ✅ **ALREADY EXISTS** (no agent needed)
-4. One agent for Rust logging module ✅ **COMPLETED**
-5. One agent to wire logging into `main.rs` argument parsing ✅ **COMPLETED** (integrated in logging.rs agent)
-
-**Results:** All 11 agents completed successfully in <5 minutes each. Phase 3 **FULLY COMPLETE**.
+**Avoid:** Large agents that try to build entire subsystems — they stall.
 
 ---
 
 ## 💡 Notes for Next Session
 
-- Game data installed — extracted from `Alice1_2011_vanilla.7z` (already in project root)
-- `xdotool` installed, `zenity` already present (Fedora default)
-- All Rust builds pass; binary runs with game data configured
-- Windows support fully preserved via `#[cfg]` — no breaking changes
-- **Phase 3 COMPLETE**: Setup.sh → linux_setup.sh integration tested and working (dry-run verified)
-- **Rust logging complete**: --verbose/-v and --debug flags added, structured JSON logging to ~/.local/share/LookingGlass/logs/
-- **Phase 4 COMPLETE**: 
-  - `tools/package_linux.py` created for tarball and AppImage packaging
-  - Tarball format working (tested and verified)
-  - AppImage format supported (requires FUSE at build time)
-  - `.github/workflows/release.yml` created for automated Linux releases on tag push
-- **Phase 5 MOSTLY COMPLETE**:
-  - `cargo test --locked` — 689 tests, 687 passed, 2 ignored, 0 failed
-  - `--validate-all` — All 36 maps validated
-  - `--campaign-route-check` — Fails at pandemonium (known slime timeout, not Linux-specific)
-  - Game launches and runs (village level tested)
-- **Phase 6 COMPLETE**:
-  - `docs/INSTALL.md` — Comprehensive Linux instructions (5 distro families, tarball/AppImage, troubleshooting)
-  - `README.md` — Linux support section with system requirements, quick start, tested distros
-  - `docs/KNOWN_ISSUES.md` — Linux-specific known issues section
-- Ready for Phase 7: Feature Parity & Polish (gamepad, Wayland-native focus, audio)
+- **Start with Phase 1**: Game registry + launch abstraction + config system
+- **Use existing engine** as a test game: the Alice reimplementation validates the launcher
+- **TUI library**: `ratatui` + `crossterm` (mature, fast, no GPU needed)
+- **Config format**: TOML (human-editable, typed via serde)
+- **First milestone**: `lg-launch --list` shows installed games, `lg-launch alice` runs the engine
+- **Preserve game engine**: Keep `looking-glass` binary working; launcher wraps it
