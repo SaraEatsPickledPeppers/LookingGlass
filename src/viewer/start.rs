@@ -19,7 +19,7 @@ pub async fn choose(
     maps: &[String],
 ) -> Start {
     menu.frontend = true;
-    menu.open(Page::Main, preferences, audio.settings);
+    menu.open(Page::Main, preferences, audio.settings.clone());
     loop {
         match menu
             .run(preferences, audio, store, Vec3::ZERO, 0., input)

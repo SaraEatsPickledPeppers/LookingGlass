@@ -74,7 +74,7 @@ pub fn output(assets: &mut Assets) -> Result<()> {
     let model = events::Model::load(assets, "models/alice.tik")?;
     let eye = vec3(-4144., 6120., 280.);
     let mut audio = Audio::new(false, Some("private/audio-regression-output.wav".into()));
-    ensure!(audio.playback.is_some(), "No usable Windows output device");
+    ensure!(audio.playback.is_some(), "No usable audio output device");
     audio.settings = Settings::default();
     // Start with isolated player feedback so silence/pause and repetition are measurable.
     audio.player_state(assets, 100., false, false, false);

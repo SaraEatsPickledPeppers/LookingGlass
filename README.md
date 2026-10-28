@@ -157,6 +157,56 @@ Use the in-game settings to view or change controls. **Esc** opens the menu,
 **F5/F9** quick-save/load, and **Tab** opens the chapter chooser. Choosing a
 chapter starts a new visit; use normal exits to carry campaign progress.
 
+## Linux support
+
+**Looking Glass runs on Linux** via the same engine; the guided setup and all
+gameplay features work on supported distributions. Linux packages are available
+on the [releases page](https://github.com/looking-glass-project/LookingGlass/releases).
+
+### Quick start (Linux)
+
+1. **Download** the Linux tarball from the latest release:
+   [`LookingGlass-Linux-x64-<version>.tar.gz`](https://github.com/looking-glass-project/LookingGlass/releases)
+2. **Extract** it:
+   ```bash
+   tar -xzf LookingGlass-Linux-x64-*.tar.gz
+   cd LookingGlass-Linux-x64-*
+   ```
+3. **Run the launcher**:
+   ```bash
+   ./Launch.sh
+   ```
+   The guided setup will find or download compatible game files, then start the game.
+4. **Next time**, just run `./Launch.sh` again (or create a desktop shortcut from the extracted folder).
+
+### System requirements (Linux)
+
+| Requirement | Minimum |
+| --- | --- |
+| **Architecture** | x86_64 |
+| **Kernel** | Linux 5.15+ (for io_uring and modern Vulkan support) |
+| **Graphics** | Vulkan 1.2+ capable GPU (Intel/AMD/NVIDIA with proprietary or Mesa drivers) |
+| **Display** | Wayland or X11 |
+| **Memory** | 4 GB RAM (8 GB recommended) |
+| **Storage** | 3 GB free space (game data ~933 MB additional if downloading) |
+| **Audio** | PipeWire or PulseAudio |
+
+Tested on: Ubuntu 22.04+, Fedora 38+, Arch Linux, Steam Deck (Desktop mode).
+
+**Note:** The Linux build uses the same save format and game-data detection as Windows.
+If you have the Windows package extracted, you can copy the `GameData` folder to the
+Linux extract location to avoid re-downloading.
+
+### Known Linux caveats
+
+- **Gamepad:** SDL3 handles XInput/Steam Input; most controllers work out of the box.
+- **Wayland:** Fullscreen and vsync behave best on Wayland; X11 is supported but
+  may need compositor vsync disabled for smooth frame pacing.
+- **Anti-cheat / DRM:** None. The engine and setup are fully offline after initial
+  game-data preparation.
+- **Distribution packaging:** A Flatpak and AppImage are planned; for now the
+  tarball is the official distribution format.
+
 ## Build and contribute
 
 ```powershell

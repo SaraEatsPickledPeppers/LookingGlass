@@ -8,6 +8,7 @@ use crate::{assets::Assets, bsp::Bsp, collision::World};
 use anyhow::{ensure, Context, Result};
 use macroquad::prelude::{vec3, Vec3};
 use rodio::{dynamic_mixer, Decoder, OutputStream, Sink, Source};
+use rodio::cpal::traits::{DeviceTrait, HostTrait};
 use std::{
     collections::{BTreeMap, BTreeSet},
     io::Cursor,
@@ -129,11 +130,12 @@ fn settings_path() -> PathBuf {
 }
 const MAX_PCM: usize = 8_000_000; // 32 MB per decoded effect, with a separate level cache budget.
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Settings {
     pub music: f32,
     pub effects: f32,
     pub muted: bool,
+    pub device_id: Option<String>,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -141,6 +143,7 @@ impl Default for Settings {
             music: 0.5,
             effects: 0.7,
             muted: false,
+            device_id: None,
         }
     }
 }
@@ -151,6 +154,11 @@ impl Settings {
             if let Some((key, value)) = line.split_once('=') {
                 if key == "muted" {
                     s.muted = value == "true";
+                }
+                if key == "device_id" {
+                    if !value.is_empty() {
+                        s.device_id = Some(value.to_string());
+                    }
                 }
                 if let Ok(n) = value.parse::<f32>() {
                     if n.is_finite() {
@@ -170,8 +178,8 @@ impl Settings {
         std::fs::write(
             settings_path(),
             format!(
-                "music={}\neffects={}\nmuted={}\n",
-                self.music, self.effects, self.muted
+                "music={}\neffects={}\nmuted={}\ndevice_id={}\n",
+                self.music, self.effects, self.muted, self.device_id.unwrap_or_default()
             ),
         )?;
         Ok(())
@@ -564,13 +572,56 @@ impl<S> Drop for Monitor<S> {
         self.flush();
     }
 }
+/// Enumerate available output devices using rodio's cpal backend.
+/// Returns a vector of (device_id, device_name) pairs.
+pub fn enumerate_output_devices() -> Vec<(String, String)> {
+    let mut devices = Vec::new();
+    // Use rodio's cpal host to enumerate devices
+    let host = rodio::cpal::default_host();
+    if let Ok(device_iter) = host.output_devices() {
+        for device in device_iter {
+            if let Ok(name) = device.name() {
+                // Use the device name as the ID for simplicity
+                // In a more complex implementation, we could use a unique identifier
+                devices.push((name.clone(), name));
+            }
+        }
+    }
+    devices
+}
+
+/// Find a device by its name/ID
+fn find_output_device(device_id: &str) -> Option<rodio::Device> {
+    let host = rodio::cpal::default_host();
+    if let Ok(device_iter) = host.output_devices() {
+        for device in device_iter {
+            if let Ok(name) = device.name() {
+                if name == device_id {
+                    return Some(device);
+                }
+            }
+        }
+    }
+    None
+}
 struct Playback {
     _stream: OutputStream,
     mixer: Arc<dynamic_mixer::DynamicMixerController<f32>>,
 }
 impl Playback {
-    fn open(data: Arc<MonitorData>, record: bool) -> Result<Self> {
-        let (stream, handle) = OutputStream::try_default()?;
+    fn open(data: Arc<MonitorData>, record: bool, device_id: Option<&str>) -> Result<Self> {
+        let (stream, handle) = if let Some(device_id) = device_id {
+            // Try to use the selected device
+            if let Some(device) = find_output_device(device_id) {
+                OutputStream::try_from_device(&device)?
+            } else {
+                // Device not found, fall back to default
+                eprintln!("Selected audio device '{}' not found, falling back to default", device_id);
+                OutputStream::try_default()?
+            }
+        } else {
+            OutputStream::try_default()?
+        };
         let (mixer, source) = dynamic_mixer::mixer(2, 44100);
         handle.play_raw(Monitor {
             source,
@@ -672,10 +723,15 @@ impl Audio {
         if capture.is_some() {
             monitor.samples.lock().unwrap().reserve(44100 * 2 * 30);
         }
+        // Load settings first to get the device_id
+        let settings = std::fs::read_to_string(settings_path())
+            .map(|s| Settings::parse(&s))
+            .unwrap_or_default();
+        let device_id = settings.device_id.as_deref();
         let (playback, status) = if disabled {
             (None, "Sound disabled by launch option".into())
         } else {
-            match Playback::open(monitor.clone(), capture.is_some()) {
+            match Playback::open(monitor.clone(), capture.is_some(), device_id) {
                 Ok(p) => (Some(p), "Sound ready".into()),
                 Err(e) => {
                     eprintln!("Audio output unavailable: {e:#}");
@@ -706,9 +762,7 @@ impl Audio {
             resolved: 0,
             clips: vec![None; 4],
             world_clips: BTreeMap::new(),
-            settings: std::fs::read_to_string(settings_path())
-                .map(|s| Settings::parse(&s))
-                .unwrap_or_default(),
+            settings,
             status,
             fade_elapsed: 0.,
             stride: 0.,

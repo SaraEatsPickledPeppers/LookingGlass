@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libx11-dev libasound2-dev pkg-config xdotool xvfb fuse
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.86
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: linux-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run cargo build --release
+        run: cargo build --release --locked
+
+      - name: Create build info
+        run: |
+          EXE_SHA256=$(sha256sum target/release/looking-glass | cut -d' ' -f1)
+          cat > build_info.json <<EOF
+          {
+            "version": "${{ github.ref_name }}",
+            "build_date": "$(date -u +%Y-%m-%d)",
+            "rust_version": "1.86",
+            "target_triple": "x86_64-unknown-linux-gnu",
+            "executable_sha256": "$EXE_SHA256",
+            "engine_source_zip_sha256": "placeholder",
+            "extractor_sha256": "placeholder"
+          }
+          EOF
+
+      - name: Package Linux tarball
+        run: |
+          python3 tools/package_linux.py \
+            --exe target/release/looking-glass \
+            --output looking-glass-linux-x86_64.tar.gz \
+            --format tarball \
+            --build-info build_info.json \
+            --verbose
+
+      - name: Try to create AppImage (optional)
+        run: |
+          python3 tools/package_linux.py \
+            --exe target/release/looking-glass \
+            --output looking-glass-linux-x86_64.AppImage \
+            --format appimage \
+            --build-info build_info.json \
+            --verbose || echo "AppImage creation failed (likely FUSE not available), continuing with tarball only"
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: looking-glass-linux
+          path: |
+            looking-glass-linux-x86_64.tar.gz
+            looking-glass-linux-x86_64.tar.gz.sha256
+            looking-glass-linux-x86_64.AppImage
+            looking-glass-linux-x86_64.AppImage.sha256
+          if-no-files-found: ignore
+
+  release:
+    name: Create Release
+    needs: build-linux
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: looking-glass-linux
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/looking-glass-linux-x86_64.tar.gz
+            artifacts/looking-glass-linux-x86_64.tar.gz.sha256
+            artifacts/looking-glass-linux-x86_64.AppImage
+            artifacts/looking-glass-linux-x86_64.AppImage.sha256
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

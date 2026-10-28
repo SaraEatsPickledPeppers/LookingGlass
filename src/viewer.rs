@@ -519,9 +519,85 @@ fn starting_stats(options: &Options, map: &str, entry: Option<&str>) -> Stats {
     stats
 }
 
+/// Draw the performance overlay with FPS, frame time, and memory usage
+fn draw_perf_overlay(ui: &crate::ui::Ui, metrics: &crate::frame_profile::RealtimeMetrics) {
+    let scale = crate::ui::overlay_scale();
+    let padding = 12.0 * scale;
+    let line_height = 20.0 * scale;
+    let font_size = 16.0 * scale;
+
+    // Background panel
+    let width = 220.0 * scale;
+    let height = 10.0 * line_height + padding * 2.0;
+    let x = screen_width() - width - padding;
+    let y = padding;
+
+    ui.panel(Rect::new(x, y, width, height));
+
+    let canvas = crate::ui::Canvas::new(width, height);
+
+    // Title
+    ui.font.draw_left(
+        canvas,
+        "Performance",
+        Rect::new(x + padding, y + padding, width - padding * 2.0, line_height),
+        font_size,
+        crate::ui::INK,
+    );
+
+    let mut line = 1;
+    let draw_line = |label: &str, value: &str, line: usize| {
+        let lx = x + padding;
+        let ly = y + padding + line as f32 * line_height;
+        ui.font.draw_left(
+            canvas,
+            label,
+            Rect::new(lx, ly, width * 0.55, line_height),
+            font_size,
+            crate::ui::INK,
+        );
+        ui.font.draw_left(
+            canvas,
+            value,
+            Rect::new(lx + width * 0.55, ly, width * 0.45, line_height),
+            font_size,
+            crate::ui::SELECTED,
+        );
+    };
+
+    draw_line(
+        "FPS:",
+        &format!("{:.1} (min {:.1} / max {:.1})", metrics.fps, metrics.min_fps, metrics.max_fps),
+        line,
+    );
+    line += 1;
+    draw_line(
+        "Frame:",
+        &format!("{:.2} ms (min {:.2} / max {:.2})", metrics.frame_time_ms, metrics.min_frame_ms, metrics.max_frame_ms),
+        line,
+    );
+    line += 1;
+    draw_line(
+        "Memory:",
+        &format!("{:.1} MB", metrics.memory_mb),
+        line,
+    );
+    line += 1;
+    draw_line(
+        "Frames:",
+        &metrics.frame_count.to_string(),
+        line,
+    );
+    line += 1;
+    draw_line("F11:", "Toggle overlay", line);
+}
+
 mod start;
 
 pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
+    // Initialize profiling if --profile flag is set
+    crate::frame_profile::init_from_cli(options.profile);
+
     // Release cursor/audio before Miniquad destroys its native request queue.
     prevent_quit();
     let ui = crate::ui::Ui::load(&mut assets)?;
@@ -706,6 +782,7 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
     let mut inventory_menu = false;
     let mut help_until = 0.0;
     let mut fullbright = false;
+    let mut show_perf_overlay = false;
     let mut selected = current;
     let mut chapters = crate::chapters::Chapters::default();
     let mut selected_entry: Option<String> = None;
@@ -885,11 +962,11 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
                 && !menu
                 && !inventory_menu
             {
-                escape_menu.open(crate::menu::Page::Main, &preferences, audio.settings);
+                escape_menu.open(crate::menu::Page::Main, &preferences, audio.settings.clone());
             } else if is_key_pressed(KeyCode::F3) {
                 menu = false;
                 inventory_menu = false;
-                escape_menu.open(crate::menu::Page::Audio, &preferences, audio.settings);
+                escape_menu.open(crate::menu::Page::Audio, &preferences, audio.settings.clone());
             }
         }
         if escape_menu.page.is_some() {
@@ -970,10 +1047,10 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
                         Ok(())
                     };
                     if !saves_enabled {
-                        escape_menu.open(crate::menu::Page::Main, &preferences, audio.settings);
+                        escape_menu.open(crate::menu::Page::Main, &preferences, audio.settings.clone());
                         escape_menu.message = "New Game is unavailable in a staged preview".into();
                     } else if let Err(e) = saved {
-                        escape_menu.open(crate::menu::Page::Main, &preferences, audio.settings);
+                        escape_menu.open(crate::menu::Page::Main, &preferences, audio.settings.clone());
                         escape_menu.message = format!("Could not preserve the current game: {e:#}");
                     } else {
                         post_game = false;
@@ -988,6 +1065,10 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
             continue;
         }
         let elapsed = get_frame_time();
+        // Record frame time for profiling
+        let elapsed_ns = (elapsed * 1_000_000_000.0) as u64;
+        crate::frame_profile::record_frame_time(elapsed_ns);
+        crate::frame_profile::record_memory();
         let mut weapon_click;
         let mut weapon_input_enabled = false;
         let mut pending_transition = None;
@@ -1331,7 +1412,7 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
             audio_changed = true;
         }
         if audio_changed {
-            if let Err(e) = audio.settings.save() {
+            if let Err(e) = audio.settings.clone().save() {
                 notice = format!("Could not save sound settings: {e}");
             }
         }
@@ -1348,6 +1429,9 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
         }
         if pressed(KeyCode::F2) {
             fullbright = !fullbright;
+        }
+        if pressed(KeyCode::F11) && !menu && !inventory_menu && !console_input {
+            show_perf_overlay = !show_perf_overlay;
         }
         if pressed(KeyCode::V) && !menu && !inventory_menu && !console_input {
             third_person = !third_person;
@@ -2202,7 +2286,7 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
                 Ok(true) => (),
             }
             escape_menu.post_game = true;
-            escape_menu.open(crate::menu::Page::Credits, &preferences, audio.settings);
+            escape_menu.open(crate::menu::Page::Credits, &preferences, audio.settings.clone());
             escape_menu.message = "Campaign complete / Continue replays the final encounter".into();
             clock.pause();
             continue;
@@ -3311,6 +3395,12 @@ pub async fn run(mut assets: Assets, mut options: Options) -> Result<()> {
             ui.cursor();
         }
         console.draw(&ui);
+        // Draw performance overlay if enabled
+        if show_perf_overlay {
+            if let Some(metrics) = crate::frame_profile::get_realtime_metrics() {
+                draw_perf_overlay(&ui, &metrics);
+            }
+        }
         if save_requested || autosave_requested {
             if !saves_enabled {
                 if save_requested {

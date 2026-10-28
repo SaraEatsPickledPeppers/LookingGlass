@@ -59,6 +59,7 @@ mod lighting;
 mod look;
 mod loot;
 mod loot_art;
+mod logging;
 mod magma;
 mod materials;
 mod menu;
@@ -146,6 +147,9 @@ pub struct Options {
     pub start_at: Option<macroquad::prelude::Vec3>,
     pub story_preview: Option<String>,
     pub shelf_preview: bool,
+    pub verbose: bool,
+    pub debug: bool,
+    pub profile: bool,
 }
 
 fn main() {
@@ -182,6 +186,9 @@ fn run() -> Result<()> {
         start_at: None,
         story_preview: None,
         shelf_preview: false,
+        verbose: false,
+        debug: false,
+        profile: false,
     };
     let mut args = std::env::args().skip(1);
     let mut mode = "view";
@@ -458,6 +465,9 @@ fn run() -> Result<()> {
                         .into(),
                 )
             }
+            "--verbose" | "-v" => o.verbose = true,
+            "--debug" => o.debug = true,
+            "--profile" => o.profile = true,
             "--help" | "-h" => {
                 println!("Decorations: original map props, vegetation and furnishings use their authored placements. --decorations-check audits accepted/deferred models on every map; --decorations-render-check captures staged before/after views. See docs/DECORATIONS.md for remaining scripted props.");
                 println!("--level-swap-check stress-tests full level/actor/effect replacement and character material state on the GPU without using player saves.");
@@ -488,7 +498,7 @@ fn run() -> Result<()> {
                 println!("Registry: --registry-check fingerprints a fresh visit of all 39 campaign entries (snapshot plus event signature) without a window. --registry-record <file> stores the hashes; --registry-baseline <file> fails on any difference. See docs/LEVEL_REGISTRY.md.");
                 println!("Campaign chain: --campaign-legs-check runs the eight opening route legs under the chain's assertions and hands each exit to the next visit through the shared transition (--difficulty easy|normal|hard|nightmare); --route-difficulty-check proves that a route's difficulty reaches its world. Both are headless. See docs/CAMPAIGN.md.");
                 println!("Campaign chain, whole: --campaign-route-check runs the route legs back to back on one Stats and ledger and prints one PASS line per leg, the reward provenance and FRONTIER <map$entry> (--campaign-from/--campaign-to <n|map[$entry]>, --campaign-strict, --campaign-skip-cinematics, --campaign-allow-retry, --difficulty, and --campaign-expect frontier=<visit>|no-checkpoint, which pins an honest failure so that its check exits 0 only while it holds); it writes private/campaign-chain/NN-<map>-<first|return>.json and report.json and resumes from a checkpoint. --campaign-graph-check checks the exit graph of all 39 visits. Both are headless. --campaign-save-chain-write then --campaign-save-chain-read (two processes) write and reload real saves at each boundary and open a window: they run only in the Anode seat.");
-                println!("Looking Glass - Rust movement prototype\n\n  --data <base folder>    Folder containing your PK3 files\n  --map <name>            Level to display; default skool1\n  --list                 List levels without opening a window\n  --inspect              Inspect the selected level\n  --validate-all         Validate every map, collider and FTX image\n  --physics-check        Run a deterministic walking/jump route (skool1)\n  --character-check      Validate Alice mesh and all animation clips\n  --fly                  Start in free flight instead of walking\n  --capture <file.png>    Save a screenshot when the frame limit is reached\n  --frames <count>        Exit after this many frames (for testing)\n\nControls: WASD move; Space jump/climb; Shift run; mouse/arrows look (no button needed).\nV first/third person; F4 walk/fly; Q/E vertical in flight; P pause/release cursor; click to resume; R recover; Enter retry; Home restart.\nTab level chooser in the main menu or game; H brief help; F2 fullbright; F12 screenshot; Esc original main menu; F3 sound settings.\nAlice locomotion and static-world movement. Combat and story are unfinished.");
+                println!("Looking Glass - Rust movement prototype\n\n  --data <base folder>    Folder containing your PK3 files\n  --map <name>            Level to display; default skool1\n  --list                 List levels without opening a window\n  --inspect              Inspect the selected level\n  --validate-all         Validate every map, collider and FTX image\n  --physics-check        Run a deterministic walking/jump route (skool1)\n  --character-check      Validate Alice mesh and all animation clips\n  --fly                  Start in free flight instead of walking\n  --capture <file.png>    Save a screenshot when the frame limit is reached\n  --frames <count>        Exit after this many frames (for testing)\n  --verbose, -v          Enable INFO level structured logging\n  --debug                Enable DEBUG level structured logging (implies --verbose)\n  --profile              Run performance benchmark and output JSON results (requires --frames)\n\nControls: WASD move; Space jump/climb; Shift run; mouse/arrows look (no button needed).\nV first/third person; F4 walk/fly; Q/E vertical in flight; P pause/release cursor; click to resume; R recover; Enter retry; Home restart.\nTab level chooser in the main menu or game; H brief help; F2 fullbright; F11 perf overlay; F12 screenshot; Esc original main menu; F3 sound settings.\nAlice locomotion and static-world movement. Combat and story are unfinished.");
                 return Ok(());
             }
             // Flags a registered visit contributes (`--<id>-check`, `--<id>-route-check`, ...).
@@ -498,6 +508,9 @@ fn run() -> Result<()> {
             },
         }
     }
+    // Initialize structured logging early, after argument parsing
+    let _logging_guard = logging::LoggingGuard::init(o.verbose, o.debug)?;
+
     if o.capture.is_some() && o.frames.is_none() {
         bail!("--capture requires --frames");
     }

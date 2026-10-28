@@ -395,6 +395,7 @@ pub struct Menu {
     mouse_navigation: bool,
     draft: Preferences,
     draft_audio: audio::Settings,
+    audio_devices: Vec<(String, String)>,
     binding: Option<usize>,
     save_labels: [String; 6],
     save_dates: [String; 6],
@@ -566,6 +567,7 @@ impl Menu {
             mouse_navigation: false,
             draft: Preferences::default(),
             draft_audio: audio::Settings::default(),
+            audio_devices: Vec::new(),
             binding: None,
             save_labels: Default::default(),
             save_dates: Default::default(),
@@ -602,6 +604,23 @@ impl Menu {
         if page == Page::LoadSave {
             self.selected = self.save_selected;
             self.save_film.open(self.save_selected, get_time());
+        }
+        if page == Page::Audio {
+            // Fetch available audio devices
+            self.audio_devices = audio::enumerate_output_devices();
+            // If no devices found, add a default entry
+            if self.audio_devices.is_empty() {
+                self.audio_devices.push(("default".to_string(), "Default".to_string()));
+            }
+            // Ensure the current device_id is in the list, if not, reset to first device
+            if let Some(device_id) = &self.draft_audio.device_id {
+                if !self.audio_devices.iter().any(|(id, _)| id == device_id) {
+                    self.draft_audio.device_id = self.audio_devices.first().map(|(id, _)| id.clone());
+                }
+            } else {
+                // No device selected, use the first one
+                self.draft_audio.device_id = self.audio_devices.first().map(|(id, _)| id.clone());
+            }
         }
     }
     pub fn close(&mut self) {
@@ -709,6 +728,20 @@ impl Menu {
         } else if page == Page::Video && row == 0 {
             let (w,h) = SIZES[self.draft.resolution];
             self.draw_lettering(canvas, control, &format!("{w} x {h}"), selected);
+            for (art, right) in [("ui/control/hslider_prev", false), ("ui/control/hslider_next", true)] {
+                if let Some(texture) = self.textures.get(art) {
+                    let scale = (control.rect.h/texture.height()).min(1.);
+                    let width = texture.width()*scale;
+                    let height = texture.height()*scale;
+                    self.art(canvas, art, Rect::new(if right {control.rect.right()-width} else {control.rect.x},
+                        control.rect.y+(control.rect.h-height)*0.5, width, height), 1.);
+                }
+            }
+        } else if page == Page::Audio && row == 3 {
+            let device_name = self.draft_audio.device_id.as_ref()
+                .and_then(|id| self.audio_devices.iter().find(|(d, _)| d == id).map(|(_, name)| name.as_str()))
+                .unwrap_or("Default");
+            self.draw_lettering(canvas, control, device_name, selected);
             for (art, right) in [("ui/control/hslider_prev", false), ("ui/control/hslider_next", true)] {
                 if let Some(texture) = self.textures.get(art) {
                     let scale = (control.rect.h/texture.height()).min(1.);
@@ -939,6 +972,10 @@ impl Menu {
                     buttons.push(Button { rect: Rect::new(68., 298., 220., 24.),
                         text: "Mute".into(), art: String::new(), hover: String::new(),
                         click: Click::Row(2), lettering: None, setting: None });
+                    // Output device selector
+                    buttons.push(Button { rect: Rect::new(68., 328., 220., 24.),
+                        text: "Output Device".into(), art: String::new(), hover: String::new(),
+                        click: Click::Row(3), lettering: None, setting: None });
                 }
                 let group = match page {
                     Page::Video => "group_video", Page::Audio => "group_audio", _ => "group_game",
@@ -1034,6 +1071,16 @@ impl Menu {
                 self.draft_audio.effects = (self.draft_audio.effects + delta * 0.05).clamp(0., 1.)
             }
             (Page::Audio, 2) => self.draft_audio.muted = !self.draft_audio.muted,
+            (Page::Audio, 3) => {
+                if !self.audio_devices.is_empty() {
+                    let current_index = self.draft_audio.device_id.as_ref()
+                        .and_then(|id| self.audio_devices.iter().position(|(d, _)| d == id))
+                        .unwrap_or(0);
+                    let new_index = (current_index as i32 + if delta < 0. { -1 } else { 1 })
+                        .rem_euclid(self.audio_devices.len() as i32) as usize;
+                    self.draft_audio.device_id = Some(self.audio_devices[new_index].0.clone());
+                }
+            }
             (Page::Game, 0) => {
                 self.draft.sensitivity = (self.draft.sensitivity + delta * 0.1).clamp(0.2, 3.)
             }
@@ -1587,7 +1634,7 @@ impl Menu {
             let focused = crate::look::window_focused();
             input.update(prefs, focused);
             self.using_pad = input.using_pad;
-            self.save_film.update_audio(audio.settings, focused);
+            self.save_film.update_audio(audio.settings.clone(), focused);
             let previous_selected = self.selected;
             let buttons = self.buttons(page);
             self.selected = self.selected.min(buttons.len().saturating_sub(1));
@@ -1702,14 +1749,14 @@ impl Menu {
                         }
                         match click {
                             Click::Back | Click::Cancel => {
-                                action = self.back(page, prefs, audio.settings)
+                                action = self.back(page, prefs, audio.settings.clone())
                             }
-                            Click::Page(p) => self.open(p, prefs, audio.settings),
+                            Click::Page(p) => self.open(p, prefs, audio.settings.clone()),
                             Click::Action(a) => {
                                 if a == Action::Chapters {
                                     // Keep the main menu underneath the modal chapter chooser.
                                 } else if matches!(a, Action::Save(_) | Action::Load(_)) {
-                                    self.open(Page::LoadSave, prefs, audio.settings);
+                                    self.open(Page::LoadSave, prefs, audio.settings.clone());
                                 } else {
                                     self.close();
                                 }
@@ -1760,7 +1807,7 @@ impl Menu {
                                     if self.frontend {
                                         action = Some(Action::Load(slot));
                                     } else {
-                                        self.open(Page::ConfirmLoad(slot), prefs, audio.settings);
+                                        self.open(Page::ConfirmLoad(slot), prefs, audio.settings.clone());
                                     }
                                 } else {
                                     self.message =
@@ -1779,7 +1826,7 @@ impl Menu {
                                 if slot == Slot::Auto {
                                     self.message = "Choose a manual slot or the quick save.".into();
                                 } else if store.exists(slot) {
-                                    self.open(Page::ConfirmSave(slot), prefs, audio.settings);
+                                    self.open(Page::ConfirmSave(slot), prefs, audio.settings.clone());
                                 } else {
                                     action = Some(Action::Save(slot));
                                 }
@@ -1793,14 +1840,15 @@ impl Menu {
                             Click::Apply => {
                                 let display_changed = prefs.resolution != self.draft.resolution
                                     || prefs.fullscreen != self.draft.fullscreen;
-                                match self.draft.save().and_then(|_| self.draft_audio.save()) {
+                                let draft_audio = self.draft_audio.clone();
+                                match self.draft.save().and_then(|_| draft_audio.clone().save()) {
                                     Ok(()) => {
                                         *prefs = self.draft.clone();
-                                        audio.settings = self.draft_audio;
+                                        audio.settings = draft_audio.clone();
                                         if display_changed {
                                             prefs.display();
                                         }
-                                        self.open(Page::Settings, prefs, audio.settings);
+                                        self.open(Page::Settings, prefs, draft_audio);
                                         self.message = "Settings saved".into();
                                     }
                                     Err(e) => {

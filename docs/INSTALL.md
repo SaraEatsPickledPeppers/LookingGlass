@@ -144,3 +144,135 @@ The compiler downloads the locked open-source dependencies. It does not fetch Al
 ```powershell
 .\target\release\looking-glass.exe --data "D:\Games\Alice1\bin\base" --map gvillage
 ```
+
+---
+
+# Install and run Looking Glass on Linux
+
+Looking Glass is an unfinished, independently written Rust recreation using your own American McGee's Alice game data. All 39 visits have completed automated campaign routes, but original-game fidelity and broader device validation remain unfinished. The current launch opens the main menu; see [the campaign audit](CAMPAIGN_RUN_AUDIT.md) for exact evidence.
+
+## System dependencies
+
+Install the following packages before running Looking Glass:
+
+| Distribution | Command |
+| --- | --- |
+| **Fedora / RHEL / CentOS** | `sudo dnf install mesa-libGL libX11 libXcursor libXi libXrandr libXinerama alsa-lib libxkbcommon libxcb libxcb-icccm libxcb-image libxcb-keysyms libxcb-randr libxcb-render libxcb-shape libxcb-shm libxcb-sync libxcb-util libxcb-xfixes libxcb-xinerama libxcb-xkb libxkbcommon-x11` |
+| **Debian / Ubuntu / Mint** | `sudo apt install libgl1 libx11-6 libxcursor1 libxi6 libxrandr2 libxinerama1 libasound2 libxkbcommon0 libxcb1 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render0 libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-util1 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0` |
+| **Arch / Manjaro** | `sudo pacman -S mesa libx11 libxcursor libxi libxrandr libxinerama alsa-lib libxkbcommon libxcb xcb-util xcb-util-image xcb-util-keysyms xcb-util-renderutil xcb-util-wm libxkbcommon-x11` |
+| **openSUSE** | `sudo zypper install Mesa-libGL1 libX11-6 libXcursor1 libXi6 libXrandr2 libXinerama1 libasound2 libxkbcommon0 libxcb1 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render0 libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-util1 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0` |
+| **Void Linux** | `sudo xbps-install mesa-libs libX11 libXcursor libXi libXrandr libXinerama alsa-lib libxkbcommon libxcb xcb-util xcb-util-image xcb-util-keysyms xcb-util-renderutil xcb-util-wm libxkbcommon-x11` |
+
+**Optional but recommended:**
+- `xdotool` — window focus and automation (some window managers)
+- `zenity` (GTK) or `kdialog` (KDE) — GUI file dialogs in Setup.sh
+- `fuse3` — required for AppImage execution
+- `libgtk-3-0` / `libgtk-4-1` — if using GTK file dialogs
+
+## Install the Linux preview
+
+Two distribution formats are available from the [GitHub Releases](https://github.com/looking-glass-project/LookingGlass/releases):
+
+### Option 1: Tarball (`.tar.gz`) — recommended
+
+1. Download `LookingGlass-Linux-x64-<version>.tar.gz`
+2. Extract it to a writable location:
+   ```bash
+   tar -xzf LookingGlass-Linux-x64-<version>.tar.gz
+   cd LookingGlass-Linux-x64-<version>
+   ```
+3. Make scripts executable (if not already):
+   ```bash
+   chmod +x Setup.sh Launch.sh
+   ```
+4. Run setup:
+   ```bash
+   ./Setup.sh
+   ```
+5. Launch the game:
+   ```bash
+   ./Launch.sh
+   ```
+
+### Option 2: AppImage — portable single file
+
+1. Download `LookingGlass-Linux-x64-<version>.AppImage`
+2. Make it executable:
+   ```bash
+   chmod +x LookingGlass-Linux-x64-<version>.AppImage
+   ```
+3. Run it directly:
+   ```bash
+   ./LookingGlass-Linux-x64-<version>.AppImage
+   ```
+   The AppImage bundles Setup and Launch; on first run it opens the setup wizard.
+
+**AppImage notes:**
+- Requires **FUSE 3** (`fuse3` package) for extraction at runtime
+- On some distributions, enable AppImage integration or use `--appimage-extract-and-run` if FUSE is unavailable
+- The AppImage is self-contained; no separate Setup.sh/Launch.sh files are extracted
+
+## First-time setup
+
+1. **Launch Setup.sh** (or the AppImage). The guided window defaults to local game files. It searches beside the executable, in `~/Downloads`, and at a previously saved location.
+2. If no game files are found, use **Choose archive** or **Choose folder**.
+3. Choose your **Language** (English, German, French, Spanish, Dutch; Dutch uses English spoken dialogue).
+4. Select **Set up**. Setup validates and imports the required files, then opens the game. Choose **New Game**.
+5. Subsequent launches: run `./Launch.sh` (tarball) or the AppImage again.
+
+**Game files:** Same as Windows — use an existing compatible folder or archive you are entitled to use (English 2011 vanilla). The optional download fetches `Alice1_2011_vanilla.7z` from [Internet Archive](https://archive.org/details/alice_202106). See the Windows section for full details on file layout and entitlement.
+
+## Changing files, updates and saves
+
+- Open **Setup.sh** to choose a different archive or folder. Setup validates required game and language packs and the map layout before changing the remembered path.
+- Downloaded files must match the expected size and SHA-256 checksum. Local folders are checked for archive structure and map format.
+- For an archive, setup imports required packs to `private/game-data`. It does not extract or run the original executables. Imports are isolated and reusable.
+- All local settings, imported files, downloads and saves are under `private/`. External folders are copied; setup does not modify them.
+- Moving the whole Looking Glass folder keeps imported data working.
+- For updates, extract the new release into a **new folder** and keep the old one. Follow that release's save-compatibility notes before copying your `private/` folder. Setup never resets your saves. Original-game saves are not compatible.
+- Removing the Looking Glass folder removes its local saves/imports; keep a backup. An external data folder is unaffected.
+
+## Choosing or changing the language
+
+English, German, French, Spanish and Dutch are supported. Dutch uses English spoken dialogue. Choose **Language** during setup.
+
+To change it later, open **Setup.sh**, select another language and click **Apply language**. If its files are unavailable, choose a compatible folder, archive or **Download**. Your game files, mods and saved progress are kept. Use **Launch.sh** to return to the game.
+
+## Troubleshooting
+
+| Problem | What to do |
+| --- | --- |
+| **AppImage won't run** | Install `fuse3` (`sudo dnf install fuse3` / `sudo apt install fuse3` / `sudo pacman -S fuse3`). Or run with `--appimage-extract-and-run`. |
+| **Setup.sh / Launch.sh: Permission denied** | Run `chmod +x Setup.sh Launch.sh` in the extracted folder. |
+| **Missing libraries (libGL, libX11, alsa, etc.)** | Install the system dependencies listed above for your distribution. |
+| **Window doesn't focus / input issues** | Install `xdotool` (`sudo dnf install xdotool` / `sudo apt install xdotool` / `sudo pacman -S xdotool`). Some Wayland compositors need `xdotool` for focus helper. |
+| **No file dialog in Setup.sh** | Install `zenity` (GTK) or `kdialog` (KDE): `sudo dnf install zenity` / `sudo apt install zenity` / `sudo pacman -S zenity`. |
+| **No game files found / Set up is disabled** | Use **Choose archive** or **Choose folder**. The optional **Download from Internet Archive** requires a separate entitlement confirmation. |
+| **Download fails or is unavailable** | Retry, or download the named archive yourself and choose it in setup. No previous game setting is replaced. |
+| **Integrity check fails** | The download is incomplete or different. Obtain the compatible archive again, or select an existing compatible folder. |
+| **Missing pack / unsupported map format** | Select the English 2011 vanilla archive or its Alice1 folder. |
+| **Unpacking fails** | Check free space (3 GB) and that the download is complete. Retry setup. |
+| **Access denied** | Move the whole folder to a writable location such as `~/Documents/LookingGlass`. Do not run from `/opt`, `/usr`, or read-only mounts. |
+| **Extractor missing (tarball)** | Re-extract the complete tarball. Source users can install `p7zip` (`7z`) or select already extracted files. |
+| **Wayland: cursor / scaling issues** | Try `GDK_BACKEND=x11 ./Launch.sh` or set `WINIT_UNIX_BACKEND=x11` to force X11 backend. |
+| **Audio not working** | Ensure `alsa-lib` / `pipewire-alsa` is installed. Try `Launch.sh` with `ALSA_DEVICE=default` or your specific device. |
+
+This is an **unsigned preview**. Verify the release source and checksum; do not disable system security. Report launch errors with the exact message, distribution, kernel version, and release name. Do not post original game files, private paths or personal saves publicly.
+
+## Build from source on Linux
+
+Install a Rust toolchain and system dependencies using the [official Rust installation instructions](https://www.rust-lang.org/tools/install). The project's minimum Rust version is declared in `Cargo.toml` (currently 1.86). Also install the system dependencies listed above.
+
+From the project folder:
+
+```bash
+cargo build --release --locked
+./Setup.sh
+./Launch.sh
+```
+
+The compiler downloads the locked open-source dependencies. It does not fetch Alice game files. Advanced data selection is also available without setup:
+
+```bash
+./target/release/looking-glass --data "/home/user/Games/Alice1/bin/base" --map gvillage
+```

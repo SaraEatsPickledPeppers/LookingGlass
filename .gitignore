@@ -28,6 +28,12 @@
 !/docs/media/gameplay/dry-landing.mp4
 !/docs/media/gameplay/pool-of-tears.mp4
 !/docs/media/gameplay/pale-realm.mp4
+
+# Release artifacts
+looking-glass-linux-*.tar.gz
+looking-glass-linux-*.tar.gz.sha256
+looking-glass-linux-*.AppImage
+looking-glass-linux-*.AppImage.sha256
 *.wav
 *.mp3
 *.ogg

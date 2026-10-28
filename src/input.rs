@@ -4,6 +4,9 @@ use crate::preferences::Preferences;
 use macroquad::prelude::*;
 use std::collections::HashSet;
 
+#[cfg(all(feature = "gamepad", not(windows)))]
+use gilrs::{Button, Axis, EventType, Gilrs};
+
 pub const KEYS: &[(&str, KeyCode)] = &[
     ("W", KeyCode::W),
     ("S", KeyCode::S),
@@ -204,17 +207,139 @@ struct RawState {
 extern "system" {
     fn XInputGetState(index: u32, state: *mut RawState) -> u32;
 }
-fn read_pad(index: u32) -> Option<RawPad> {
-    #[cfg(windows)]
-    {
-        let mut state = RawState::default();
-        // Fixed C layout, writable state, index checked by XInput; Windows 10+ system API.
-        (unsafe { XInputGetState(index, &mut state) } == 0).then_some(state.pad)
+impl Input {
+    fn read_pad(&mut self, index: u32) -> Option<RawPad> {
+        #[cfg(windows)]
+        {
+            let mut state = RawState::default();
+            // Fixed C layout, writable state, index checked by XInput; Windows 10+ system API.
+            (unsafe { XInputGetState(index, &mut state) } == 0).then_some(state.pad)
+        }
+        #[cfg(all(feature = "gamepad", not(windows)))]
+        {
+            self.read_pad_gilrs(index)
+        }
+        #[cfg(all(not(feature = "gamepad"), not(windows)))]
+        {
+            let _ = index;
+            None
+        }
     }
-    #[cfg(not(windows))]
-    {
-        let _ = index;
-        None
+
+    #[cfg(all(feature = "gamepad", not(windows)))]
+    fn read_pad_gilrs(&mut self, index: u32) -> Option<RawPad> {
+        // Initialize gilrs if not already done
+        let gilrs = self.gilrs.get_or_insert_with(|| {
+            Gilrs::new().expect("Failed to initialize gilrs")
+        });
+
+        // Process all pending events
+        while let Some(event) = gilrs.next_event() {
+            Self::handle_gilrs_event(gilrs, &mut self.pad_states, event);
+        }
+
+        // Return the state for the requested index if available
+        if index < 4 {
+            self.pad_states[index as usize]
+        } else {
+            None
+        }
+    }
+
+    #[cfg(all(feature = "gamepad", not(windows)))]
+    fn handle_gilrs_event(
+        gilrs: &mut Gilrs,
+        pad_states: &mut [Option<RawPad>; 4],
+        event: gilrs::Event,
+    ) {
+        use gilrs::{Button, Axis, EventType};
+
+        let gamepad_id = event.id;
+
+        // Map gilrs gamepad to our 0-3 index (use the first 4 gamepads)
+        // GamepadId implements From<GamepadId> for usize
+        let our_index = (usize::from(gamepad_id)) % 4;
+        if our_index >= 4 {
+            return;
+        }
+
+        match event.event {
+            EventType::ButtonChanged(button, value, _) => {
+                // Get or create the pad state
+                let pad_state = pad_states[our_index].get_or_insert_with(RawPad::default);
+                // ButtonChanged value is f32 (0.0 = released, >0.0 = pressed)
+                Self::handle_button_change(pad_state, button, value > 0.0);
+            }
+            EventType::AxisChanged(axis, value, _) => {
+                // Get or create the pad state
+                let pad_state = pad_states[our_index].get_or_insert_with(RawPad::default);
+                Self::handle_axis_change(pad_state, axis, value);
+            }
+            EventType::Connected => {
+                // Gamepad connected - state will be built from subsequent events
+            }
+            EventType::Disconnected => {
+                // Gamepad disconnected - clear state
+                if our_index < 4 {
+                    pad_states[our_index] = None;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[cfg(all(feature = "gamepad", not(windows)))]
+    fn map_gilrs_id_to_index(&self, gamepad_id: gilrs::GamepadId) -> usize {
+        // Simple mapping: use the order of connected gamepads
+        // For now, just use the raw index modulo 4
+        // A more sophisticated implementation would track connected gamepads
+        (usize::from(gamepad_id)) % 4
+    }
+
+    #[cfg(all(feature = "gamepad", not(windows)))]
+    fn handle_button_change(pad: &mut RawPad, button: Button, pressed: bool) {
+        use gilrs::Button;
+
+        let mask = match button {
+            Button::South => 0x1000,      // A
+            Button::East => 0x2000,       // B
+            Button::West => 0x4000,       // X
+            Button::North => 0x8000,      // Y
+            Button::LeftTrigger => 0x100,  // LB
+            Button::RightTrigger => 0x200, // RB
+            Button::Select => 0x20,       // Back
+            Button::LeftThumb => 0x40,    // L Stick
+            Button::RightThumb => 0x80,   // R Stick
+            Button::DPadUp => 1,          // D Up
+            Button::DPadDown => 2,        // D Down
+            Button::DPadLeft => 4,        // D Left
+            Button::DPadRight => 8,       // D Right
+            Button::Start => 0x10,        // Start
+            Button::LeftTrigger2 => 0x10000, // LT
+            Button::RightTrigger2 => 0x20000, // RT
+            _ => return,
+        };
+
+        if pressed {
+            pad.buttons |= mask as u16;
+        } else {
+            pad.buttons &= !(mask as u16);
+        }
+    }
+
+    #[cfg(all(feature = "gamepad", not(windows)))]
+    fn handle_axis_change(pad: &mut RawPad, axis: Axis, value: f32) {
+        use gilrs::Axis;
+
+        match axis {
+            Axis::LeftStickX => pad.lx = (value * 32767.0) as i16,
+            Axis::LeftStickY => pad.ly = (value * 32767.0) as i16,
+            Axis::RightStickX => pad.rx = (value * 32767.0) as i16,
+            Axis::RightStickY => pad.ry = (value * 32767.0) as i16,
+            Axis::LeftZ => pad.lt = (value * 255.0) as u8,
+            Axis::RightZ => pad.rt = (value * 255.0) as u8,
+            _ => {}
+        }
     }
 }
 fn stick(x: i16, y: i16, deadzone: f32) -> Vec2 {
@@ -304,13 +429,17 @@ pub struct Input {
     pub using_pad: bool,
     pub disconnected: bool,
     focused: bool,
+    #[cfg(all(feature = "gamepad", not(windows)))]
+    gilrs: Option<Gilrs>,
+    #[cfg(all(feature = "gamepad", not(windows)))]
+    pad_states: [Option<RawPad>; 4],
 }
 impl Input {
     pub fn update(&mut self, prefs: &Preferences, focused: bool) {
-        let mut raw = self.slot.and_then(read_pad);
+        let mut raw = self.slot.and_then(|i| self.read_pad(i));
         if raw.is_none() && get_time() >= self.retry {
             self.slot = (0..4).find(|i| {
-                if let Some(p) = read_pad(*i) {
+                if let Some(p) = self.read_pad(*i) {
                     raw = Some(p);
                     true
                 } else {

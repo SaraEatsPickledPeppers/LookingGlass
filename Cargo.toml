@@ -14,7 +14,7 @@ image = { version = "=0.24.9", default-features = false, features = ["tga", "jpe
 # Macroquad's newer fontdue patch needs a newer compiler than the user's Rust 1.86.
 fontdue = "=0.9.3"
 # Independent WAV/MP3 playback; does not load the game's Miles DLLs.
-rodio = { version = "=0.20.1", default-features = false, features = ["wav", "symphonia-mp3"] }
+rodio = { version = "=0.20.1", default-features = false, features = ["symphonia-wav", "symphonia-mp3"] }
 hound = "=3.5.1"
 # Symphonia metadata's latest encoding_rs patch requires Rust 1.88.
 encoding_rs = "=0.8.35"
@@ -24,9 +24,29 @@ serde_json = { version = "=1.0.145", features = ["float_roundtrip"] }
 # Enable serialization on the same math types used by Macroquad.
 glam = { version = "=0.27.0", features = ["serde"] }
 sha2 = "=0.10.9"
+chrono = "=0.4.40"
+
+# Structured logging
+tracing = "=0.1.41"
+tracing-subscriber = { version = "=0.3.18", features = ["fmt", "json", "env-filter"] }
+tracing-appender = "=0.2.5"
+
+# Optional X11 support for window focus detection
+x11rb = { version = "=0.14.0", optional = true }
+# Optional Wayland support for window focus detection
+wayland-client = { version = "=0.31.15", optional = true }
+wayland-protocols = { version = "=0.32.13", optional = true, features = ["staging", "unstable", "client"] }
+# Optional gamepad support via gilrs
+gilrs = { version = "=0.10.0", optional = true }
 
 [profile.dev]
 opt-level = 1
 
 [profile.release]
 lto = "thin"
+
+[features]
+default = []
+x11 = ["x11rb"]
+wayland = ["wayland-client", "wayland-protocols"]
+gamepad = ["gilrs"]

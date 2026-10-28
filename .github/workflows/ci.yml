@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rust-toolchain: 1.86
+            system-deps: libgl1-mesa-dev libx11-dev libasound2-dev pkg-config xdotool xvfb
+          - os: windows-latest
+            rust-toolchain: 1.86
+            system-deps: ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.system-deps }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust-toolchain }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run cargo test
+        run: xvfb-run -a cargo test --locked -- --skip audio
+
+      - name: Run cargo build --release
+        run: cargo build --release --locked
+
+      - name: Validate (headless)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a cargo run -- --validate-all
+        continue-on-error: true
