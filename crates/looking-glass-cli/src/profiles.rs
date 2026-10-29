@@ -209,6 +209,7 @@ pub struct LauncherConfig {
     pub game_path: Option<PathBuf>,
     pub mod_directory: Option<PathBuf>,
     pub reshade_path: Option<PathBuf>,
+    pub data_directory: Option<PathBuf>,
     pub default_profile: String,
     pub profiles: HashMap<String, ModProfile>,
 }
@@ -224,6 +225,7 @@ impl Default for LauncherConfig {
             game_path: None,
             mod_directory: None,
             reshade_path: None,
+            data_directory: None,
             default_profile: "vanilla".to_string(),
             profiles,
         }

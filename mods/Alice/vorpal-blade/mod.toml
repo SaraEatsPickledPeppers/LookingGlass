@@ -1,0 +1,12 @@
+id = "vorpal-blade"
+name = "Vorpal Blade Renamed"
+version = "1.0.0"
+manifest_version = 2
+author = "Test"
+description = "Renames the eyestaff weapon to HELLO WORLD BLADE"
+game_target = "Alice"
+
+[[assets]]
+source = "assets/models/w_eyestaff.tik"
+target = "models/w_eyestaff.tik"
+type = "Other"

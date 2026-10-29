@@ -1,0 +1,78 @@
+TIKI
+setup
+{
+	path models/weapons/eyestaff
+	surface all shader eyestaff.tga
+}
+
+init
+{
+	server
+	{
+		classname 		Eyestaff
+		name			"HELLO WORLD BLADE"
+		hand			righthand
+		setrank		8
+		ammorequired	0.4
+		alternate ammorequired 1
+		firetype 		projectile
+		setsize "0 0 0" "0 0 0"
+		anim idle
+
+		maxrange		6000
+		minrange		50
+		alternate maxrange 6000
+		alternate minrange 300
+
+		cache			models/fx_eyestaff_spiral.tik
+		cache			models/fx_eyestaff_launcher.tik
+		cache			models/prj_eyestaff_comet.tik
+		cache			models/fx_eyestaff_fire1.tik
+		cache			models/fx_eyestaff_pulse.tik
+		cache			models/fx_eyestaff_spark.tik
+		cache			models/fx_eyestaff_charge.tik
+		cache			models/fx_beam.tik
+		cache			models/hud_foldout_eyestaff.tik
+	}
+	client
+	{
+		tagemitter tag_barrel spiral
+		(
+			model models/fx_eyestaff_spiral.tik
+			spawnrate 20
+			no_deadtime
+//			life 0.9
+			velocity 1000
+			startoff
+			parentlink
+		)
+	}
+}
+
+animations
+{
+	idle		notmoving.tan
+	{
+		server
+		{
+			first setframe 0
+		}
+	}
+	fire		notmoving.tan
+	{
+		server
+		{
+			0 eyestaffbeamattack
+		}
+	}
+	primarystop	notmoving.tan
+	{
+		server
+		{
+			0 eyestaffbeamstop
+		}
+	}
+}
+/*QUAKED Item_Eyestaff (0 1 0) (-30 -30 0) (30 30 75)
+Jabberwock eyestaff -- don't place me in a map unless you're a scripter guy
+*/

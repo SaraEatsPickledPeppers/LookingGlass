@@ -1,0 +1,266 @@
+resource
+Label
+{
+    rect 100 100 200 24
+    groupid group_video
+    title "Video Mode"
+    fontjustify left center
+}
+resource
+Slider
+{
+    rect 320 100 200 24
+    groupid group_video
+    linkcvar r_mode
+}
+resource
+Label
+{
+    rect 100 140 200 24
+    groupid group_video
+    title "Fullscreen"
+    fontjustify left center
+}
+resource
+CheckBox
+{
+    rect 320 140 24 24
+    groupid group_video
+    linkcvar r_fullscreen
+}
+
+resource
+Label
+{
+    rect 100 100 200 24
+    groupid group_audio
+    title "Music Volume"
+    fontjustify left center
+}
+resource
+Slider
+{
+    rect 320 100 200 24
+    groupid group_audio
+    linkcvar s_musicvolume
+}
+resource
+Label
+{
+    rect 100 140 200 24
+    groupid group_audio
+    title "Sound Volume"
+    fontjustify left center
+}
+resource
+Slider
+{
+    rect 320 140 200 24
+    groupid group_audio
+    linkcvar s_volume
+}
+
+resource
+Label
+{
+    rect 100 100 200 24
+    groupid group_control
+    title "Key Bindings"
+    fontjustify left center
+}
+resource
+FakkBindList
+{
+    rect 100 140 420 300
+    groupid group_control
+    name bindlist
+}
+
+resource
+Label
+{
+    rect 100 100 200 24
+    groupid group_game
+    title "Mouse Sensitivity"
+    fontjustify left center
+}
+resource
+Slider
+{
+    rect 320 100 200 24
+    groupid group_game
+    linkcvar sensitivity
+}
+resource
+Label
+{
+    rect 100 140 200 24
+    groupid group_game
+    title "Invert Mouse"
+    fontjustify left center
+}
+resource
+CheckBox
+{
+    rect 320 140 24 24
+    groupid group_game
+    linkcvar m_invert_pitch
+}
+resource
+Label
+{
+    rect 100 180 200 24
+    groupid group_game
+    title "Camera Distance"
+    fontjustify left center
+}
+resource
+Slider
+{
+    rect 320 180 200 24
+    groupid group_game
+    linkcvar cg_cameradist
+}
+resource
+Label
+{
+    rect 100 220 200 24
+    groupid group_game
+    title "Always Run"
+    fontjustify left center
+}
+resource
+CheckBox
+{
+    rect 320 220 24 24
+    groupid group_game
+    linkcvar cl_run
+}
+resource
+Label
+{
+    rect 100 260 200 24
+    groupid group_game
+    title "Subtitles"
+    fontjustify left center
+}
+resource
+CheckBox
+{
+    rect 320 260 24 24
+    groupid group_game
+    linkcvar ui_subtitles
+}
+resource
+Label
+{
+    rect 100 300 200 24
+    groupid group_game
+    title "Custom Mod Option"
+    fontjustify left center
+}
+resource
+CheckBox
+{
+    rect 320 300 24 24
+    groupid group_game
+    linkcvar mod_custom_option
+}
+
+resource
+Button
+{
+    rect 100 100 200 30
+    groupid group_main
+    title "Video"
+    stuffcommand "activategroup group_video"
+}
+resource
+Button
+{
+    rect 100 150 200 30
+    groupid group_main
+    title "Audio"
+    stuffcommand "activategroup group_audio"
+}
+resource
+Button
+{
+    rect 100 200 200 30
+    groupid group_main
+    title "Controls"
+    stuffcommand "activategroup group_control"
+}
+resource
+Button
+{
+    rect 100 250 200 30
+    groupid group_main
+    title "Game"
+    stuffcommand "activategroup group_game"
+}
+
+resource
+Button
+{
+    rect 100 400 150 30
+    groupid group_video
+    title "Apply"
+    stuffcommand "ui_setcvars"
+}
+resource
+Button
+{
+    rect 270 400 150 30
+    groupid group_video
+    title "Cancel"
+    stuffcommand "ui_restorecvars"
+}
+resource
+Button
+{
+    rect 100 400 150 30
+    groupid group_audio
+    title "Apply"
+    stuffcommand "ui_setcvars"
+}
+resource
+Button
+{
+    rect 270 400 150 30
+    groupid group_audio
+    title "Cancel"
+    stuffcommand "ui_restorecvars"
+}
+resource
+Button
+{
+    rect 100 400 150 30
+    groupid group_control
+    title "Apply"
+    stuffcommand "ui_setcvars"
+}
+resource
+Button
+{
+    rect 270 400 150 30
+    groupid group_control
+    title "Cancel"
+    stuffcommand "ui_restorecvars"
+}
+resource
+Button
+{
+    rect 100 400 150 30
+    groupid group_game
+    title "Apply"
+    stuffcommand "ui_setcvars"
+}
+resource
+Button
+{
+    rect 270 400 150 30
+    groupid group_game
+    title "Cancel"
+    stuffcommand "ui_restorecvars"
+}

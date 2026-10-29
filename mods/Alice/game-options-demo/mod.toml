@@ -1,0 +1,10 @@
+id = "game-options-demo"
+name = "Game Options Demo"
+version = "1.0.0"
+manifest_version = 2
+author = "LookingGlass Mod Team"
+description = "Adds a custom toggleable option to the Game Options menu"
+game_target = "Alice"
+assets = [
+    {source = "assets/ui/controls.urc", target = "ui/controls.urc", type = "Ui"}
+]

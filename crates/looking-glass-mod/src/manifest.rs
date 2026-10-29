@@ -1,6 +1,6 @@
 use crate::migration::migrate_manifest_v1_to_v2;
 use anyhow::{Context, Result};
-use jsonschema::{Draft, JSONSchema};
+use jsonschema::validator_for;
 use semver::VersionReq;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -231,15 +231,18 @@ impl ModManifest {
         // Load and compile schema
         let schema_content = include_str!("../mod.schema.json");
         let schema: serde_json::Value = serde_json::from_str(schema_content)?;
-        let compiled = JSONSchema::options()
-            .with_draft(Draft::Draft7)
-            .compile(&schema)
+
+        // Create validator using new jsonschema 0.60 API
+        let validator = validator_for(&schema)
             .map_err(|e| anyhow::anyhow!("Failed to compile JSON schema: {}", e))?;
 
         // Validate
         let value = serde_json::to_value(self)?;
-        if let Err(errors) = compiled.validate(&value) {
-            let error_msgs: Vec<String> = errors.map(|e| e.to_string()).collect();
+        if let Err(_) = validator.validate(&value) {
+            // Collect all validation errors using iter_errors
+            let error_msgs: Vec<String> = validator.iter_errors(&value)
+                .map(|e| e.to_string())
+                .collect();
             return Err(anyhow::anyhow!(
                 "Manifest validation failed:\n{}",
                 error_msgs.join("\n")

@@ -30,7 +30,7 @@ impl ModIntegration {
         let merged_config = config_manager.get_merged();
 
         // Get mods directory from config or use default
-        let game_config = merged_config.get_game_config("Alice").cloned().unwrap_or_else(|| {
+        let game_config = merged_config.game_configs.get("Alice").cloned().unwrap_or_else(|| {
             GameConfig {
                 game_target: GameTarget::Alice,
                 mods_dir: None,
@@ -43,12 +43,15 @@ impl ModIntegration {
 
         // Use XDG data directory as fallback
         let xdg = looking_glass_mod::config::resolve_xdg_paths();
-        let default_mods_dir = xdg.looking_glass_data().join("mods").join("Alice");
 
-        let discovery = ModDiscovery::new(
-            mods_dir.clone().unwrap_or(default_mods_dir.clone()),
-            "Alice".to_string(),
-        );
+        // ModDiscovery expects the base directory (parent of "mods"), not the game-specific mods dir
+        // If config provides mods_dir, use its parent. Otherwise use XDG data dir.
+        let base_dir = mods_dir
+            .clone()
+            .map(|p| p.parent().unwrap_or(&p).to_path_buf())
+            .unwrap_or_else(|| xdg.looking_glass_data());
+
+        let discovery = ModDiscovery::new(base_dir, "Alice".to_string());
 
         let mut integration = Self {
             registry: ModRegistry::new(),
@@ -66,9 +69,12 @@ impl ModIntegration {
     }
 
     /// Create a new ModIntegration with custom mods directory
+    /// The mods_dir parameter should be the game-specific mods directory (e.g., /path/to/mods/Alice)
+    /// We pass its parent to ModDiscovery which expects the base directory containing "mods/"
     pub fn with_mods_dir(game_version: String, mods_dir: PathBuf) -> Result<Self> {
         let config_manager = ConfigManager::new()?;
-        let discovery = ModDiscovery::new(mods_dir.clone(), "Alice".to_string());
+        let base_dir = mods_dir.parent().unwrap_or(&mods_dir).to_path_buf();
+        let discovery = ModDiscovery::new(base_dir, "Alice".to_string());
 
         let mut integration = Self {
             registry: ModRegistry::new(),
@@ -88,7 +94,7 @@ impl ModIntegration {
         let config_manager = ConfigManager::new()?;
         let xdg = looking_glass_mod::config::resolve_xdg_paths();
         let discovery = ModDiscovery::new(
-            xdg.looking_glass_data().join("mods").join("Alice"),
+            xdg.looking_glass_data(), // ModDiscovery will append "mods/Alice"
             "Alice".to_string(),
         );
 
@@ -126,44 +132,66 @@ impl ModIntegration {
     /// Reload all mods from disk
     pub fn reload_mods(&mut self) -> Result<()> {
         if !self.enabled {
+            tracing::info!("Mod integration disabled, skipping mod load");
             return Ok(());
         }
+
+        tracing::info!("Reloading mods...");
 
         // Unload existing mods
         for mod_id in self.registry.get_load_order() {
             self.registry.unregister(&mod_id)?;
         }
 
+        // Check for mod injection via environment variables (from launcher)
+        let env_mods = self.get_env_mods();
+
         // Discover installed mods
         let installed_mods = self.discovery.discover()?;
+        tracing::info!("Discovered {} installed mods", installed_mods.len());
+        for m in &installed_mods {
+            tracing::info!("  Found mod: {} v{} (enabled: {})", m.manifest.id, m.manifest.version, m.enabled);
+        }
 
-        // Get enabled/disabled mods from config
-        let merged_config = self.config_manager.get_merged();
-        let game_config = merged_config.get_game_config("Alice");
-        let enabled_mods: Vec<String> = game_config
-            .map(|gc| gc.enabled_mods.clone())
-            .unwrap_or_default();
-        let disabled_mods: Vec<String> = game_config
-            .map(|gc| gc.disabled_mods.clone())
-            .unwrap_or_default();
+        // Determine which mods to load
+        let mods_to_load = if !env_mods.is_empty() {
+            // Use environment variable injection (from launcher)
+            tracing::info!("Using mod injection from environment variables");
+            self.filter_mods_by_env(installed_mods, &env_mods)?
+        } else {
+            // Use config-based mod selection
+            let merged_config = self.config_manager.get_merged();
+            let game_config = merged_config.game_configs.get("Alice");
+            let enabled_mods: Vec<String> = game_config
+                .map(|gc| gc.enabled_mods.clone())
+                .unwrap_or_default();
+            let disabled_mods: Vec<String> = game_config
+                .map(|gc| gc.disabled_mods.clone())
+                .unwrap_or_default();
 
-        // Filter and sort mods based on config
-        let mut mods_to_load: Vec<InstalledMod> = installed_mods
-            .into_iter()
-            .filter(|m| {
-                if !enabled_mods.is_empty() && !enabled_mods.contains(&m.manifest.id) {
-                    return false;
-                }
-                if disabled_mods.contains(&m.manifest.id) {
-                    return false;
-                }
-                m.enabled
-            })
-            .collect();
+            tracing::info!("Config enabled_mods: {:?}", enabled_mods);
+            tracing::info!("Config disabled_mods: {:?}", disabled_mods);
 
-        // Sort by load order (dependencies first, then load_order constraints)
-        // For now, just use the order from discovery (alphabetical)
-        // The ModRegistry::sort_load_order will handle dependency ordering
+            installed_mods
+                .into_iter()
+                .filter(|m| {
+                    if !enabled_mods.is_empty() && !enabled_mods.contains(&m.manifest.id) {
+                        tracing::info!("  Skipping mod {} (not in enabled_mods)", m.manifest.id);
+                        return false;
+                    }
+                    if disabled_mods.contains(&m.manifest.id) {
+                        tracing::info!("  Skipping mod {} (in disabled_mods)", m.manifest.id);
+                        return false;
+                    }
+                    m.enabled
+                })
+                .collect()
+        };
+
+        tracing::info!("Mods to load: {}", mods_to_load.len());
+        for m in &mods_to_load {
+            tracing::info!("  Will load: {}", m.manifest.id);
+        }
 
         // Load mods
         for installed_mod in mods_to_load {
@@ -175,7 +203,79 @@ impl ModIntegration {
         // Sort load order based on dependencies
         self.registry.sort_load_order()?;
 
+        tracing::info!("Mods loaded successfully");
         Ok(())
+    }
+
+    /// Get mod paths from environment variables set by launcher
+    fn get_env_mods(&self) -> Vec<(String, PathBuf)> {
+        let mut mods = Vec::new();
+
+        // Check LOOKING_GLASS_MODS (colon-separated paths)
+        if let Ok(mods_str) = std::env::var("LOOKING_GLASS_MODS") {
+            for path_str in mods_str.split(':') {
+                let path = PathBuf::from(path_str);
+                // Extract mod ID from path (last component)
+                if let Some(mod_id) = path.file_name().and_then(|s| s.to_str()) {
+                    mods.push((mod_id.to_string(), path));
+                }
+            }
+            tracing::info!("Found {} mods from LOOKING_GLASS_MODS", mods.len());
+            return mods;
+        }
+
+        // Check LOOKING_GLASS_MOD_{i} (individual mod paths)
+        let mut i = 0;
+        loop {
+            let key = format!("LOOKING_GLASS_MOD_{}", i);
+            if let Ok(path_str) = std::env::var(&key) {
+                let path = PathBuf::from(path_str);
+                if let Some(mod_id) = path.file_name().and_then(|s| s.to_str()) {
+                    mods.push((mod_id.to_string(), path));
+                }
+                i += 1;
+            } else {
+                break;
+            }
+        }
+
+        if !mods.is_empty() {
+            tracing::info!("Found {} mods from LOOKING_GLASS_MOD_{{i}}", mods.len());
+        }
+
+        mods
+    }
+
+    /// Filter installed mods based on environment variable injection
+    fn filter_mods_by_env(&self, installed_mods: Vec<InstalledMod>, env_mods: &[(String, PathBuf)]) -> Result<Vec<InstalledMod>> {
+        // Build a set of mod IDs from environment variables
+        let env_mod_ids: std::collections::HashSet<_> = env_mods.iter().map(|(id, _)| id.clone()).collect();
+
+        // Also check LOOKING_GLASS_MOD_ORDER for load order
+        let load_order: Vec<String> = std::env::var("LOOKING_GLASS_MOD_ORDER")
+            .map(|s| s.split(',').map(|s| s.to_string()).collect())
+            .unwrap_or_default();
+
+        if !load_order.is_empty() {
+            tracing::info!("Mod load order from env: {:?}", load_order);
+        }
+
+        // Filter installed mods to only those in env_mods
+        let mut filtered: Vec<InstalledMod> = installed_mods
+            .into_iter()
+            .filter(|m| env_mod_ids.contains(&m.manifest.id))
+            .collect();
+
+        // Sort by load order if specified
+        if !load_order.is_empty() {
+            filtered.sort_by(|a, b| {
+                let a_pos = load_order.iter().position(|id| id == &a.manifest.id).unwrap_or(usize::MAX);
+                let b_pos = load_order.iter().position(|id| id == &b.manifest.id).unwrap_or(usize::MAX);
+                a_pos.cmp(&b_pos)
+            });
+        }
+
+        Ok(filtered)
     }
 
     /// Get the mod registry
@@ -378,13 +478,15 @@ struct ConfigSchemaValidator {
 #[async_trait::async_trait]
 impl looking_glass_mod::loader::ConfigValidator for ConfigSchemaValidator {
     async fn validate(&self, value: &serde_json::Value) -> Result<()> {
-        let schema = jsonschema::JSONSchema::options()
-            .with_draft(jsonschema::Draft::Draft7)
-            .compile(&self.schema)
+        // Create validator using new jsonschema 0.60 API
+        let validator = jsonschema::validator_for(&self.schema)
             .map_err(|e| anyhow::anyhow!("Failed to compile config schema: {}", e))?;
 
-        if let Err(errors) = schema.validate(value) {
-            let error_msgs: Vec<String> = errors.map(|e| e.to_string()).collect();
+        if let Err(_) = validator.validate(value) {
+            // Collect all validation errors using iter_errors
+            let error_msgs: Vec<String> = validator.iter_errors(value)
+                .map(|e| e.to_string())
+                .collect();
             return Err(anyhow::anyhow!(
                 "Config validation failed:\n{}",
                 error_msgs.join("\n")

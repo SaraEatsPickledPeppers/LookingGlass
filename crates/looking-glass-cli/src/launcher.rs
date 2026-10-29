@@ -14,6 +14,7 @@ pub struct LaunchOptions {
     pub game_path: PathBuf,
     pub mod_directory: PathBuf,
     pub reshade_path: Option<PathBuf>,
+    pub data_directory: Option<PathBuf>,
     pub profile: ModProfile,
     pub mods: Vec<InstalledMod>,
     pub extra_args: Vec<String>,
@@ -89,8 +90,13 @@ impl GameLauncher {
                 candidates.into_iter().find(|p| p.exists())
             });
 
+        // Determine data directory
+        let data_directory = self.config.data_directory.clone();
+
         // Discover mods
-        let discovery = ModDiscovery::new(mod_directory.clone(), "Alice".to_string());
+        // ModDiscovery expects the base directory (parent of "mods"), not the game-specific mods dir
+        let base_dir = mod_directory.parent().unwrap_or(&mod_directory).to_path_buf();
+        let discovery = ModDiscovery::new(base_dir, "Alice".to_string());
         let all_mods = if no_mods {
             Vec::new()
         } else {
@@ -119,15 +125,19 @@ impl GameLauncher {
                 .collect()
         };
 
+        // no_mods should be true if explicitly requested OR if profile is vanilla
+        let effective_no_mods = no_mods || profile_name == "vanilla";
+
         Ok(LaunchOptions {
             game_path,
             mod_directory,
             reshade_path,
+            data_directory,
             profile,
             mods: selected_mods,
             extra_args,
             extra_env,
-            no_mods,
+            no_mods: effective_no_mods,
             use_reshade,
         })
     }
@@ -143,6 +153,16 @@ impl GameLauncher {
 
         // Add extra arguments
         cmd.args(&options.extra_args);
+
+        // Pass --no-mods flag to game if no mods should be loaded
+        if options.no_mods {
+            cmd.arg("--no-mods");
+        }
+
+        // Pass --data argument to game
+        if let Some(data_dir) = &options.data_directory {
+            cmd.arg("--data").arg(data_dir);
+        }
 
         // Set up environment
         let mut env = options.extra_env;
@@ -231,7 +251,9 @@ impl GameLauncher {
                     .join("mods")
             });
 
-        let discovery = ModDiscovery::new(mod_directory, game_id.to_string());
+        // ModDiscovery expects the base directory (parent of "mods"), not the game-specific mods dir
+        let base_dir = mod_directory.parent().unwrap_or(&mod_directory).to_path_buf();
+        let discovery = ModDiscovery::new(base_dir, game_id.to_string());
         let installed_mod = discovery.install_from_archive(archive_path)
             .context("Failed to install mod")?;
 
