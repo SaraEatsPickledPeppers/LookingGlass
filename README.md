@@ -28,7 +28,7 @@ and automated validation (689 tests passing).
 
 **Or build from source:**
 ```bash
-git clone https://github.com/looking-glass-project/LookingGlass
+git clone https://github.com/SaraEatsPickledPeppers/LookingGlass
 cd LookingGlass
 cargo build --release --locked
 ./Setup.sh --download   # or ./Setup.sh --data /path/to/Alice1
@@ -171,7 +171,7 @@ sudo apt-get install -y build-essential libgl1-mesa-dev libx11-dev libasound2-de
     pkg-config p7zip-full zenity xdotool
 
 # Build
-git clone https://github.com/looking-glass-project/LookingGlass
+git clone https://github.com/SaraEatsPickledPeppers/LookingGlass
 cd LookingGlass
 cargo build --release --locked
 

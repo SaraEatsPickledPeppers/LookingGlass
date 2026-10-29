@@ -59,13 +59,13 @@
 
 ### Phase 2B: First Proof-of-Concept Mods
 
-| Mod Idea | Purpose | Tests Launcher Feature |
-|----------|---------|------------------------|
-| **Options Menu Extender** | Add custom settings tabs (FOV, render scale, debug toggles) | Mod UI injection, config persistence |
-| **Level Select / Debug Menu** | Warp to any map, spawn items, noclip, god mode | Mod command registration, runtime console |
-| **HUD Customizer** | Toggle/move HUD elements, show FPS, show coords | Mod render hooks, settings UI |
-| **Campaign Route Visualizer** | Show visit graph, mark completed, allow jump | Mod save integration, campaign data access |
-| **Input Remapper UI** | In-game rebind menu with glyph preview | Mod input hooks, button-glyphs integration |
+| Mod Idea | Purpose | Tests Launcher Feature | Status |
+|----------|---------|------------------------|--------|
+| **Options Menu Extender** | Add custom settings tabs (FOV, render scale, debug toggles) | Mod UI injection, config persistence | ✅ Done |
+| **Level Select / Debug Menu** | Warp to any map, spawn items, noclip, god mode | Mod command registration, runtime console | ✅ Done |
+| **HUD Customizer** | Toggle/move HUD elements, show FPS, show coords | Mod render hooks, settings UI | ✅ Done |
+| **Campaign Route Visualizer** | Show visit graph, mark completed, allow jump | Mod save integration, campaign data access | 🔄 Planned |
+| **Input Remapper UI** | In-game rebind menu with glyph preview | Mod input hooks, button-glyphs integration | 🔄 Planned |
 
 ### Phase 2C: Launcher Hardening
 
@@ -73,8 +73,39 @@
 |------|--------|
 | Config file (`~/.config/looking-glass/config.toml`) for data path, mod dir, default profile | ✅ Done |
 | `--dry-run` flag to print resolved launch command | ✅ Done |
-| Mod validation on install (schema, dependencies) | 🔄 Planned |
+| Mod validation on install (schema, dependencies) | ✅ Done |
 | Integration test: `cargo test --locked` covers launcher + mod load | ✅ Done |
+| Native mod support (Rust dynamic libraries via `libloading`) | 🔄 Next |
+| Lua scripting support for mods (mlua) | 🔄 Planned |
+| Mod install UX improvements (search, install from URL, update) | 🔄 Planned |
+| Mod profile management UI in CLI | 🔄 Planned |
+
+### Phase 2D: Release Packaging & Test Infrastructure
+
+| Task | Status | Notes |
+|------|--------|-------|
+| **Release Packaging** — Package releases into tarballs and AppImages | 🔄 Planned | `tools/package_linux.py` already supports `--format tarball` and `--format appimage` |
+| **Port PowerShell Testing Tools** — Port `tools/` PowerShell scripts to Linux/Rust equivalents | 🔄 Planned | See list below |
+
+#### PowerShell Files to Port
+
+| PowerShell Script | Purpose | Target |
+|-------------------|---------|--------|
+| `analyze.ps1` | Ghidra analysis | Linux/Rust equivalent |
+| `test_ants.ps1` | Ant regression tests | Linux/Rust equivalent |
+| `test_burrow.ps1` | Burrow tests | Linux/Rust equivalent |
+| `test_campaign_chain.ps1` | Campaign chain validation | Linux/Rust equivalent |
+| `test_chess.ps1` | Chess tests | Linux/Rust equivalent |
+| `test_clock.ps1` | Clock tests | Linux/Rust equivalent |
+| `test_imp.ps1` | IMP tests | Linux/Rust equivalent |
+| `test_magma.ps1` | Magma tests | Linux/Rust equivalent |
+| `test_render_fx.ps1` | Renderer checks | Linux/Rust equivalent |
+| `test_residents.ps1` | Residents tests | Linux/Rust equivalent |
+| `test_sky_performance.ps1` | Sky performance tests | Linux/Rust equivalent |
+| `test_snarks.ps1` | Snarks tests | Linux/Rust equivalent |
+| `test_visibility.ps1` | Visibility tests | Linux/Rust equivalent |
+| `test_wildlife.ps1` | Wildlife tests | Linux/Rust equivalent |
+| `windows_setup.ps1` | Windows GUI setup | Already has Linux equivalent in `Setup.sh`/`linux_setup.sh` |
 
 ---
 

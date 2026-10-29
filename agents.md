@@ -297,6 +297,7 @@ pub fn platform_specific() { ... } // macOS, etc.
 - **XDG compliance**: Use `directories` crate for config/data/cache paths
 - **Error handling**: `anyhow::Result` with context; user-friendly messages in CLI
 - **Logging**: `tracing` with structured JSON to `~/.local/share/looking-glass/logs/`
+- **No hardcoded paths**: Never hardcode directory paths — use config, environment variables, or XDG directories. Avoid "magic" shortcuts like assuming `private/`, `target/`, or specific workspace layouts. Resolve paths dynamically from Cargo.toml, config files, or the filesystem.
 
 ---
 
