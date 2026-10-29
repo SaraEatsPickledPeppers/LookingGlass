@@ -1,41 +1,62 @@
 # Looking Glass — Agent Instructions
 
 ## Project Context
-**Looking Glass** is a Rust reimplementation of American McGee's Alice (2011) using the Macroquad game framework, **now pivoting to a functional-first game & mod launcher as a console application first before making a GUI launcher**.
+**Looking Glass** is a Rust reimplementation of American McGee's Alice (2011) using the Macroquad game framework. The engine is complete and playable (39 visits).
 
-The existing engine (`looking-glass` binary) serves as the primary test game for the launcher. The launcher will manage this and other games (Steam, Heroic, Flatpak, Wine/Proton, native).
+**Current focus:** A functional, Alice-only console launcher (`lg-launch`) with proof-of-concept mod support. No game registry, no multi-platform abstraction, no TUI — just a solid CLI that launches Alice with mods.
 
-**Key files to understand:**
-- `README.md` — Project overview, status, install instructions
-- `Cargo.toml` — Dependencies, Rust version (1.86), profile config (will become workspace root)
-- `src/main.rs` — Current game entry point (1000+ lines, will remain as game binary)
-- `WHERE_WE_ARE.md` — Project status tracker and roadmap (read this first)
-- `tools/package_linux.py` — Packaging script for Linux releases
-
-## Architecture Vision
-
-### Launcher Crate Structure (Future Workspace)
-```
-looking-glass-launcher/
-├── looking-glass-core/        # Game registry, launch abstraction, config
-├── looking-glass-mod/         # Mod management, sources, installation
-├── looking-glass-platform/    # Steam, Heroic, Flatpak, Wine/Proton integrations
-├── looking-glass-tui/         # ratatui-based console interface
-├── looking-glass-save/        # Save backup/restore/sync
-├── looking-glass-cli/         # CLI binary (lg-launch)
-└── looking-glass/             # Existing game engine binary (unchanged)
-```
-
-### Key Principles
-- **Library-first**: Core logic in reusable crates, thin CLI/TUI wrappers
-- **No game data**: Never bundle game files; only manage launch configuration
-- **Cross-platform**: Linux primary, Windows/macOS via `#[cfg]`
-- **Unix-native**: Leverages system tools (flatpak, steam, wine) rather than reimplementing
-- **Console-first**: TUI/CLI before GUI; GUI shares core library later
+The engine (`looking-glass` binary) is the test bed. Mods load into the running engine via the mod system.
 
 ---
 
-## Current Engine Architecture (Reference)
+## Architecture (Simplified)
+
+```
+LookingGlass/
+├── crates/
+│   ├── looking-glass-engine/   # Game binary — MOD HOOKS GO HERE
+│   ├── looking-glass-mod/      # Mod manifest, registry, discovery, installation
+│   ├── looking-glass-config/   # Config layering (XDG + project-local TOML)
+│   ├── looking-glass-cli/      # lg-launch binary (Alice-only)
+│   └── button-glyphs/          # Controller glyph assets
+├── mods/
+│   └── Alice/                  # Per-game mod directory
+│       ├── vanilla/            # Built-in: no mods
+│       ├── cheats/             # Built-in: cheat mod
+│       ├── button-glyphs/      # Built-in: glyph mod
+│       └── <user-mods>/        # User-installed mods
+├── private/
+│   ├── data-path.txt           # Resolved game data path
+│   ├── config.toml             # Project-local config override
+│   └── saves/                  # Save files
+├── tools/                      # Packaging, validation scripts
+└── tests/                      # Integration tests (engine + launcher + mods)
+```
+
+**Key principles:**
+- **Single entry point**: `lg-launch` (or `cargo run --bin lg-launch`)
+- **Config-driven**: TOML at XDG + project-local, layered
+- **Mod system lives in engine**: Launcher only resolves paths + builds env vars
+- **No game registry**: Alice path from config or `private/data-path.txt`
+- **No platform abstraction**: Engine runs natively; launcher just execs it
+
+---
+
+## Key Files for Launcher/Mod Work
+
+| File | Purpose |
+|------|---------|
+| `crates/looking-glass-cli/src/main.rs` | `lg-launch` entry point |
+| `crates/looking-glass-cli/src/launcher.rs` | Launch options, mod discovery, command building |
+| `crates/looking-glass-cli/src/profiles.rs` | Mod profiles, launcher config |
+| `crates/looking-glass-mod/src/` | Mod manifest, registry, discovery, installation |
+| `crates/looking-glass-engine/src/mod_integration.rs` | Engine-side mod loading, env var injection |
+| `crates/looking-glass-config/src/` | Config layering, XDG paths |
+| `private/data-path.txt` | Resolved Alice data path (written by Setup.sh) |
+
+---
+
+## Engine Architecture (Reference for Mod Hooks)
 
 ### Core Modules (src/)
 | Area | Modules | Purpose |
@@ -55,112 +76,47 @@ looking-glass-launcher/
 
 ---
 
-## Launcher Development Tasks
+## Mod Hook Points (Engine Side)
 
-### Phase 1: Core Launcher Infrastructure (Console/TUI)
+These are the integration points mods can use. Defined in `mod_integration.rs` and engine modules:
 
-#### 1.1 Game Registry (`looking-glass-core`)
-- [ ] **GameEntry struct**: id, name, executable, args, env, prefix, platform, metadata
-- [ ] **Registry scanner**: Steam (libraryfolders.vdf), Heroic (config), Flatpak (flatpak list), Lutris, AppImage, native binaries
-- [ ] **Platform detection**: Enum `Platform { Steam, Heroic, Flatpak, Lutris, Wine, Proton, Native, AppImage }`
-- [ ] **Persistence**: Serialize registry to TOML (`~/.config/looking-glass/registry.toml`)
+| Hook Point | Location | Purpose |
+|------------|----------|---------|
+| **Menu injection** | `menu.rs` | Add tabs to main/pause/options menus |
+| **HUD overlay** | `hud.rs`, `render.rs` | Render custom HUD elements, debug overlay |
+| **Console commands** | `console.rs` | Register `warp`, `give`, `noclip`, etc. |
+| **Input handling** | `input.rs` | Custom keybinds, mouse handling in edit mode |
+| **Config persistence** | `preferences.rs` | Mod-specific config read/write |
+| **Map/level transitions** | `level.rs`, `campaign.rs` | Warp hooks, save state manipulation |
+| **Player state** | `character.rs`, `inventory.rs` | God mode, noclip, item spawning |
+| **Render hooks** | `render.rs`, `render_fx.rs` | Custom post-process, debug visualization |
 
-#### 1.2 Launch Abstraction (`looking-glass-core`)
-- [ ] **LaunchCommand trait**: `build_cmd(&self) -> Command` per platform
-- [ ] **Steam**: `steam://rungameid/<id>` or `steam -applaunch <id>`
-- [ ] **Flatpak**: `flatpak run <app-id> --args`
-- [ ] **Wine/Proton**: `WINEPREFIX=... wine /path/to/game.exe` or `proton run`
-- [ ] **Native**: Direct binary execution with LD_LIBRARY_PATH handling
-- [ ] **AppImage**: Execute with proper sandboxing
-- [ ] **Environment management**: Per-game env vars, LD_PRELOAD (e.g., gamemode, mangohud)
-
-#### 1.3 Config System (`looking-glass-core`)
-- [ ] **Config struct**: TOML with `game`, `launcher`, `platform`, `mods`, `save` sections
-- [ ] **Config paths**: XDG (`~/.config/looking-glass/config.toml`), project-local (`private/config.toml`)
-- [ ] **Layered config**: Defaults → global → project → CLI overrides
-- [ ] **Validation**: Serde with `#[serde(deny_unknown_fields)]`, custom validators
-
-#### 1.4 TUI Interface (`looking-glass-tui`)
-- [ ] **ratatui + crossterm** setup with alternate screen, raw mode
-- [ ] **Game list view**: Scrollable, searchable, filterable (platform, tags, installed)
-- [ ] **Game detail view**: Launch args, mods, saves, metadata
-- [ ] **Launch action**: Spawn detached, show output in overlay or log view
-- [ ] **Keybindings**: vim-style (j/k, /, Enter, q, r refresh, p profile switch)
-
-#### 1.5 Mod Profile System (`looking-glass-mod`)
-- [ ] **Mod struct**: id, name, version, source, files, dependencies, load_order
-- [ ] **Profile struct**: name, enabled_mods (ordered list), game_id
-- [ ] **Mod sources**: Local dir, NexusMods API, Mod.io, Git repo
-- [ ] **Installation**: Extract to game mod folder, track manifest for uninstall
-- [ ] **Load order**: LOOT-style sorting, conflict detection, user override
-
-#### 1.6 Save Management (`looking-glass-save`)
-- [ ] **Save discovery**: Platform-specific paths (Steam cloud, Wine prefix, Flatpak data)
-- [ ] **Backup**: Timestamped archives to `~/.local/share/looking-glass/saves/<game>/`
-- [ ] **Restore**: List backups, preview, restore with confirmation
-- [ ] **Sync**: Optional rclone/Git/Syncthing integration for cloud backup
-
----
-
-### Phase 2: Mod Management (Detailed)
-
-| Task | Description |
-|------|-------------|
-| NexusMods API | OAuth, mod search, download, version tracking |
-| Mod.io API | Cross-platform mod distribution |
-| Archive handling | zip, 7z, rar, tar.gz with streaming extraction |
-| Conflict resolution | File-level conflict UI, merge strategies |
-| Profile import/export | Share mod lists as JSON/TOML |
-
----
-
-### Phase 3: Platform Integration
-
-| Task | Description |
-|------|-------------|
-| Steam library parsing | `libraryfolders.vdf` → installed apps, Proton versions |
-| Heroic/Gog | Wine prefix management, GOG Galaxy compatibility |
-| Flatpak permissions | `--filesystem`, `--device` overrides per game |
-| Steam Deck | Deck UI detection, controller navigation hints |
-| Desktop entries | Generate `.desktop` with custom icons, categories |
-
----
-
-### Phase 4: Advanced Features
-
-| Task | Description |
-|------|-------------|
-| Benchmarking | FPS capture, frame time graphs, comparison reports |
-| Cloud sync | Optional save/mod profile sync via Git/rclone |
-| Plugin system | Lua (mlua) or WASM (wasmtime) for custom logic |
-| GUI prototype | Tauri + egui frontend sharing `looking-glass-core` |
+**Adding a hook:** Edit the relevant engine module, expose a callback registry in `mod_integration.rs`, document the signature.
 
 ---
 
 ## Development Workflow
 
-### Building (Current Engine)
+### Building
 ```bash
 # Standard build
 cargo build --release --locked
 
-# Run from source (data path auto-detected from private/data-path.txt)
-./target/release/looking-glass
+# Run launcher (uses private/data-path.txt or config)
+cargo run --bin lg-launch -- --profile vanilla
 
-# Run with explicit data path
+# Run engine directly (for debugging)
 ./target/release/looking-glass --data /path/to/alice_202106/Alice1/bin/base --map skool1
-
-# List available maps
-./target/release/looking-glass --list
 
 # Run validation suite
 ./target/release/looking-glass --validate-all
 ```
 
-### Testing Commands
+### Testing
 ```bash
-cargo test --locked
-cargo build --release --locked
+cargo test --locked                    # All 689+ tests
+cargo test --locked --bin lg-launch    # Launcher unit tests
+cargo test --locked --test integration # Integration tests (launcher + engine)
 python tools/check_source.py --worktree
 python -m unittest discover -s tools -p "test_source_package.py"
 ```
@@ -183,10 +139,10 @@ python -m unittest discover -s tools -p "test_source_package.py"
 ### Rust Style
 - Edition 2021, Rust 1.86 minimum
 - `anyhow::Result` for errors, `bail!` for early returns
-- Modules declared in `main.rs` (100+ `mod` statements) — **launcher will use proper workspace crates**
-- Heavy use of `macroquad::prelude::*` for math/graphics (engine only)
+- Engine: modules declared in `main.rs` (100+ `mod` statements)
+- Launcher crates: proper workspace crates with `lib.rs`
 - `glam` for Vec2/Vec3/Mat4 with serde support
-- **New crate conventions**: `clap` for CLI, `ratatui`/`crossterm` for TUI, `serde` + `toml` for config, `tracing` for logging
+- `clap` for CLI, `serde` + `toml` for config, `tracing` for logging
 
 ### Testing Pattern (Engine)
 ```rust
@@ -202,7 +158,7 @@ if mode == "my-check" {
 }
 ```
 
-### Launcher Testing Pattern (New)
+### Launcher/Mod Testing Pattern
 ```rust
 // Unit tests for core logic
 #[cfg(test)]
@@ -210,18 +166,21 @@ mod tests {
     use super::*;
     
     #[test]
-    fn test_registry_scan_steam() { ... }
-    
-    #[test]
-    fn test_launch_command_steam() { ... }
-    
-    #[test]
     fn test_config_layering() { ... }
+    
+    #[test]
+    fn test_mod_discovery() { ... }
+    
+    #[test]
+    fn test_launch_command_build() { ... }
 }
 
 // Integration tests in tests/
-// #[test]
-// fn test_full_launch_flow() { ... }
+#[test]
+fn test_full_launch_flow() { ... }
+
+#[test]
+fn test_mod_load_in_engine() { ... }
 ```
 
 ---
@@ -261,20 +220,18 @@ pub fn platform_specific() { ... } // macOS, etc.
 | `glam` | =0.27.0 | Math (Vec/Mat/Quat) |
 | `serde` | latest | Serialization |
 | `anyhow` | latest | Errors |
+| `jsonschema` | =0.60 | Manifest/config validation |
+| `libloading` | latest | Native mod cdylib loading (new) |
 
-### Launcher (New Dependencies - To Be Added)
+### Launcher (Workspace Dependencies)
 | Crate | Purpose |
 |-------|---------|
 | `clap` | CLI argument parsing |
-| `ratatui` | TUI framework |
-| `crossterm` | Terminal manipulation |
-| `toml` | Config parsing |
 | `directories` | XDG path resolution |
+| `toml` | Config parsing |
 | `walkdir` | Filesystem scanning |
 | `notify` | Filesystem watching |
-| `mlua` / `wasmtime` | Plugin system (Phase 4) |
-| `reqwest` | HTTP for mod APIs |
-| `rmp-serde` / `bincode` | Save serialization |
+| `tracing` | Logging |
 
 ---
 
@@ -305,7 +262,14 @@ pub fn platform_specific() { ... } // macOS, etc.
 - Commits: Conventional (feat/fix/docs/refactor/test/chore)
 - PRs: Required for all changes
 - CI: Must pass on Windows + Linux before merge
-- **Launcher**: Separate feature branches per crate/module
+- **Launcher/mod work**: Feature branches per mod or crate
+
+## Pushing Changes to GitHub
+- Use `gh` CLI for all GitHub operations (push, PR creation, issue management)
+- Push to your fork: `git push myfork <branch>` (not `origin`)
+- Create PRs via: `gh pr create --base main --head <branch> --repo looking-glass-project/LookingGlass`
+- Check CI status: `gh run list --repo looking-glass-project/LookingGlass`
+- **Never push directly to `origin` (upstream)** — you only have write access to your fork (`myfork`)
 
 ---
 
@@ -316,34 +280,35 @@ pub fn platform_specific() { ... } // macOS, etc.
 - **Game data**: https://archive.org/details/alice_202106
 - **Macroquad**: https://github.com/not-fl3/macroquad
 - **Rodio**: https://github.com/RustAudio/rodio
-- **ratatui**: https://github.com/ratatui/ratatui
 - **clap**: https://github.com/clap-rs/clap
 
 ---
 
-## Agent Notes (Updated for Launcher Development)
+## Agent Notes
 
 - **Read `WHERE_WE_ARE.md` first** for full roadmap and current status
+- **Read `PHASE2_PLAN.md`** for detailed task breakdown
 - **Preserve engine**: The `looking-glass` game binary must keep working; launcher wraps it
-- **Library-first**: Build `looking-glass-core` as a reusable crate, not a binary
-- **Small agents**: One agent per crate or well-defined feature (registry, launch, mod, platform, tui, save, cli)
+- **Library-first**: Build `looking-glass-config` and `looking-glass-mod` as reusable crates
+- **Small agents**: One agent per crate or well-defined feature
 - **Test on Linux** — primary target; Windows/macOS via CI
 - **No game data in repo** — never commit PK3/BSP/FTX files
 - **Check `tools/check_source.py`** before committing media files
 - **XDG compliance**: Use `directories` crate for config/data/cache paths
-- **Error handling**: `anyhow::Result` with context; user-friendly messages in TUI/CLI
+- **Error handling**: `anyhow::Result` with context; user-friendly messages in CLI
 - **Logging**: `tracing` with structured JSON to `~/.local/share/looking-glass/logs/`
 
 ---
 
-## Agent Deployment Strategy (Launcher)
+## Agent Deployment Strategy
 
-**Deploy many small agents:**
-1. **Core crate agents** (one per crate): `core`, `mod`, `platform`, `tui`, `save`, `cli`
-2. **Feature agents** within crates: e.g., "Steam scanner", "Flatpak launcher", "Mod installer"
-3. **Integration agents**: Config layering, CLI↔TUI shared state, error handling
-4. **Test agents**: Unit tests per module, integration tests for launch flows
+**Deploy small, focused agents:**
 
-**Avoid:** Large agents that try to build entire subsystems — they stall (~10 min watchdog).
+1. **Crate agents** (one per crate): `config`, `mod`, `cli`, `engine` (for mod hooks)
+2. **Mod agents** (one per proof-of-concept mod): Options Menu Extender, Debug Menu, HUD Customizer
+3. **Integration agents**: Config layering, mod discovery→load pipeline, CLI↔engine env var passing
+4. **Test agents**: Unit tests per module, integration tests for launch + mod load flows
 
-**Results target:** Each agent completes in <5 minutes. Phase 1 = ~7 agents.
+**Avoid:** Large agents that try to build entire subsystems — they stall.
+
+**Results target:** Each agent completes in <5 minutes. Phase 2A = ~3 agents, Phase 2B = ~3 agents (one per mod).
