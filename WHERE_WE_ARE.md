@@ -107,6 +107,52 @@
 | `test_wildlife.ps1` | Wildlife tests | Linux/Rust equivalent |
 | `windows_setup.ps1` | Windows GUI setup | Already has Linux equivalent in `Setup.sh`/`linux_setup.sh` |
 
+### Phase 3: Advanced Mod Ecosystem
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Native mod support (Rust dynamic libraries via `libloading`) | 🔄 Next | From Phase 2C; enables `.so`/`.dll` mods |
+| Lua scripting support for mods (mlua) | 🔄 Planned | From Phase 2C; enables script mods without recompilation |
+| Mod dependency resolution & version constraints | 🔄 Planned | Semantic versioning, conflict detection |
+| Mod profiling/debugging tools (timing, memory, hooks) | 🔄 Planned | Built into engine mod API |
+| Mod marketplace/browser integration (NexusMods, Mod.io) | 🔄 Planned | Search, install, update from launcher |
+| Mod sandboxing & permissions model | 🔄 Planned | Restrict filesystem/network access per mod |
+| Mod hot-reload support (development workflow) | 🔄 Planned | Reload mods without engine restart |
+
+### Phase 4: Launcher Polish & User Experience
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Save management in launcher (backup, restore, sync) | 🔄 Planned | Per-profile save slots, cloud sync prep |
+| Configuration UI (TUI or interactive CLI wizard) | 🔄 Planned | `ratatui`/`crossterm` for guided setup |
+| Desktop integration improvements (shortcuts, MIME, AppStream) | 🔄 Planned | Better AppImage/metadata, `.desktop` polish |
+| Auto-update checker (GitHub Releases API) | 🔄 Planned | Optional, configurable, respects offline |
+| Launch profiling (`--profile-launch`) | 🔄 Planned | Time each launch phase, identify bottlenecks |
+| Internationalization (i18n) for launcher messages | 🔄 Planned | Support launcher UI in game languages |
+
+### Phase 5: Engine Fidelity & Remaining Gaps
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Visual fidelity: cutscene staging, effects, materials | 🔄 Planned | Per [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) |
+| Audio fidelity: positional sound, reverb zones | 🔄 Planned | Match original engine behavior |
+| Enemy behavior parity (pathing, combat AI) | 🔄 Planned | Verified via campaign audit |
+| Waterside rope-grab fix | 🔄 Planned | Documented known issue |
+| Performance optimization (Vulkan, multithreading) | 🔄 Planned | Target Steam Deck 60fps sustained |
+| macOS support (MoltenVK, CI) | 🔄 Planned | Conditional compilation, separate CI |
+| Steam Deck verified badge preparation | 🔄 Planned | Deck UI, controller hints, suspend/resume |
+
+### Phase 6: Community, Documentation & Modding Ecosystem
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Modding documentation (API reference, tutorials) | 🔄 Planned | `docs/modding/` with examples |
+| Example mods repository (official showcase) | 🔄 Planned | Separate repo or `mods/examples/` |
+| Contributor guide updates (engine, launcher, mods) | 🔄 Planned | Onboarding for new contributors |
+| Automated mod compatibility testing (CI) | 🔄 Planned | Test official mods on each release |
+| Mod API stability guarantee (semver) | 🔄 Planned | Versioned mod API, deprecation policy |
+| Upstream PR preparation (engine fixes) | 🔄 Planned | Contribute fixes to looking-glass-project |
+
 ---
 
 ## 🏗️ Architecture (Simplified)
