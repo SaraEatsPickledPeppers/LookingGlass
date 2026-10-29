@@ -1,0 +1,115 @@
+id = "hud-customizer"
+name = "HUD Customizer"
+version = "1.0.0"
+manifest_version = 2
+author = "Looking Glass Team"
+description = "Customize HUD elements: toggle/move health, mana, weapon, ammo, show FPS, coordinates, and more"
+game_target = "Alice"
+dependencies = []
+load_order = { before = [], after = [] }
+entry_points = {
+    ui_patch = "patches/hud_patches.json",
+    config_inject = "config_inject.rs"
+}
+config_schema = {
+    "type": "object",
+    "properties": {
+        "show_health": {
+            "type": "boolean",
+            "default": true,
+            "description": "Show health bar"
+        },
+        "show_mana": {
+            "type": "boolean",
+            "default": true,
+            "description": "Show mana/essence bar"
+        },
+        "show_weapon": {
+            "type": "boolean",
+            "default": true,
+            "description": "Show current weapon icon"
+        },
+        "show_ammo": {
+            "type": "boolean",
+            "default": true,
+            "description": "Show ammo count"
+        },
+        "show_fps": {
+            "type": "boolean",
+            "default": true,
+            "description": "Show FPS counter"
+        },
+        "show_coordinates": {
+            "type": "boolean",
+            "default": false,
+            "description": "Show player coordinates"
+        },
+        "show_level_name": {
+            "type": "boolean",
+            "default": true,
+            "description": "Show current level name"
+        },
+        "hud_scale": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 2.0,
+            "default": 1.0,
+            "description": "HUD scale multiplier"
+        },
+        "hud_opacity": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 1.0,
+            "default": 1.0,
+            "description": "HUD opacity"
+        },
+        "health_position": {
+            "type": "string",
+            "enum": ["top-left", "top-right", "bottom-left", "bottom-right", "center-left", "center-right"],
+            "default": "top-left",
+            "description": "Health bar position"
+        },
+        "mana_position": {
+            "type": "string",
+            "enum": ["top-left", "top-right", "bottom-left", "bottom-right", "center-left", "center-right"],
+            "default": "top-right",
+            "description": "Mana bar position"
+        },
+        "fps_position": {
+            "type": "string",
+            "enum": ["top-left", "top-right", "bottom-left", "bottom-right"],
+            "default": "top-right",
+            "description": "FPS counter position"
+        },
+        "coordinates_position": {
+            "type": "string",
+            "enum": ["top-left", "top-right", "bottom-left", "bottom-right"],
+            "default": "bottom-left",
+            "description": "Coordinates display position"
+        }
+    },
+    "additionalProperties": false
+}
+default_config = {
+    "show_health": true,
+    "show_mana": true,
+    "show_weapon": true,
+    "show_ammo": true,
+    "show_fps": true,
+    "show_coordinates": false,
+    "show_level_name": true,
+    "hud_scale": 1.0,
+    "hud_opacity": 1.0,
+    "health_position": "top-left",
+    "mana_position": "top-right",
+    "fps_position": "top-right",
+    "coordinates_position": "bottom-left"
+}
+assets = [
+    { source = "assets/hud_health.png", target = "ui/hud_health.png", type = "Texture" },
+    { source = "assets/hud_mana.png", target = "ui/hud_mana.png", type = "Texture" },
+    { source = "assets/hud_weapon.png", target = "ui/hud_weapon.png", type = "Texture" },
+    { source = "assets/hud_ammo.png", target = "ui/hud_ammo.png", type = "Texture" },
+    { source = "assets/hud_bg.png", target = "ui/hud_bg.png", type = "Texture" }
+]
+tags = ["hud", "ui", "customization", "interface", "visual"]

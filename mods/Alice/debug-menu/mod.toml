@@ -1,0 +1,57 @@
+id = "debug-menu"
+name = "Debug Menu / Level Select"
+version = "1.0.0"
+manifest_version = 2
+author = "Looking Glass Team"
+description = "Adds a debug menu with level select, noclip, god mode, item spawning, and developer tools"
+game_target = "Alice"
+dependencies = []
+load_order = { before = [], after = [] }
+entry_points = {
+    ui_patch = "patches/debug_menu.json",
+    runtime_hook = "hooks/runtime.rs",
+    input_hook = "hooks/input.rs"
+}
+config_schema = {
+    "type": "object",
+    "properties": {
+        "enable_noclip": {
+            "type": "boolean",
+            "default": false,
+            "description": "Enable noclip mode"
+        },
+        "enable_god_mode": {
+            "type": "boolean",
+            "default": false,
+            "description": "Enable god mode (invincibility)"
+        },
+        "enable_fly": {
+            "type": "boolean",
+            "default": false,
+            "description": "Enable fly mode"
+        },
+        "show_level_select": {
+            "type": "boolean",
+            "default": true,
+            "description": "Show level select in debug menu"
+        },
+        "debug_menu_key": {
+            "type": "string",
+            "default": "F1",
+            "description": "Key to open debug menu"
+        }
+    },
+    "additionalProperties": false
+}
+default_config = {
+    "enable_noclip": false,
+    "enable_god_mode": false,
+    "enable_fly": false,
+    "show_level_select": true,
+    "debug_menu_key": "F1"
+}
+assets = [
+    { source = "assets/debug_bg.png", target = "ui/debug_bg.png", type = "Texture" },
+    { source = "assets/debug_icon.png", target = "ui/debug_icon.png", type = "Texture" }
+]
+tags = ["debug", "developer", "level-select", "cheats", "tools"]

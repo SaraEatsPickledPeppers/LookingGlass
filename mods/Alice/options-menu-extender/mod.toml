@@ -1,0 +1,67 @@
+id = "options-menu-extender"
+name = "Options Menu Extender"
+version = "1.0.0"
+manifest_version = 2
+author = "Looking Glass Team"
+description = "Extends the options menu with additional settings: FOV slider, render scale, debug toggles, and more"
+game_target = "Alice"
+dependencies = []
+load_order = { before = [], after = [] }
+entry_points = {
+    ui_patch = "patches/options_menu.json",
+    config_inject = "config_inject.rs"
+}
+config_schema = {
+    "type": "object",
+    "properties": {
+        "fov": {
+            "type": "number",
+            "minimum": 60,
+            "maximum": 120,
+            "default": 90,
+            "description": "Field of view in degrees"
+        },
+        "render_scale": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 2.0,
+            "default": 1.0,
+            "description": "Render scale multiplier"
+        },
+        "show_fps": {
+            "type": "boolean",
+            "default": true,
+            "description": "Show FPS counter"
+        },
+        "show_debug_info": {
+            "type": "boolean",
+            "default": false,
+            "description": "Show debug information"
+        },
+        "vsync": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable vertical sync"
+        },
+        "max_fps": {
+            "type": "integer",
+            "minimum": 30,
+            "maximum": 300,
+            "default": 144,
+            "description": "Maximum FPS limit (0 = unlimited)"
+        }
+    },
+    "additionalProperties": false
+}
+default_config = {
+    "fov": 90,
+    "render_scale": 1.0,
+    "show_fps": true,
+    "show_debug_info": false,
+    "vsync": true,
+    "max_fps": 144
+}
+assets = [
+    { source = "assets/options_bg.png", target = "ui/options_bg.png", type = "Texture" }
+]
+tags = ["ui", "options", "settings", "customization"]

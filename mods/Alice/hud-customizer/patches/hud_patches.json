@@ -1,0 +1,96 @@
+{
+  "target": "hud_overlay",
+  "operations": [
+    {
+      "op": "ModifyWidget",
+      "id": "health_bar",
+      "changes": {
+        "visible": "{{config:hud-customizer.show_health}}",
+        "position": "{{config:hud-customizer.health_position}}",
+        "scale": "{{config:hud-customizer.hud_scale}}",
+        "opacity": "{{config:hud-customizer.hud_opacity}}"
+      }
+    },
+    {
+      "op": "ModifyWidget",
+      "id": "mana_bar",
+      "changes": {
+        "visible": "{{config:hud-customizer.show_mana}}",
+        "position": "{{config:hud-customizer.mana_position}}",
+        "scale": "{{config:hud-customizer.hud_scale}}",
+        "opacity": "{{config:hud-customizer.hud_opacity}}"
+      }
+    },
+    {
+      "op": "ModifyWidget",
+      "id": "weapon_icon",
+      "changes": {
+        "visible": "{{config:hud-customizer.show_weapon}}",
+        "scale": "{{config:hud-customizer.hud_scale}}",
+        "opacity": "{{config:hud-customizer.hud_opacity}}"
+      }
+    },
+    {
+      "op": "ModifyWidget",
+      "id": "ammo_counter",
+      "changes": {
+        "visible": "{{config:hud-customizer.show_ammo}}",
+        "scale": "{{config:hud-customizer.hud_scale}}",
+        "opacity": "{{config:hud-customizer.hud_opacity}}"
+      }
+    },
+    {
+      "op": "AddWidget",
+      "parent": "root",
+      "widget": {
+        "id": "fps_counter",
+        "widget_type": "FPSCounter",
+        "properties": {
+          "visible": "{{config:hud-customizer.show_fps}}",
+          "position": "{{config:hud-customizer.fps_position}}",
+          "scale": "{{config:hud-customizer.hud_scale}}",
+          "opacity": "{{config:hud-customizer.hud_opacity}}",
+          "color": "#00FF00"
+        },
+        "children": []
+      }
+    },
+    {
+      "op": "AddWidget",
+      "parent": "root",
+      "widget": {
+        "id": "coordinates_display",
+        "widget_type": "Text",
+        "properties": {
+          "visible": "{{config:hud-customizer.show_coordinates}}",
+          "position": "{{config:hud-customizer.coordinates_position}}",
+          "scale": "{{config:hud-customizer.hud_scale}}",
+          "opacity": "{{config:hud-customizer.hud_opacity}}",
+          "text": "{{player.position}}",
+          "font_size": 14,
+          "color": "#FFFFFF"
+        },
+        "children": []
+      }
+    },
+    {
+      "op": "AddWidget",
+      "parent": "root",
+      "widget": {
+        "id": "level_name_display",
+        "widget_type": "Text",
+        "properties": {
+          "visible": "{{config:hud-customizer.show_level_name}}",
+          "position": "top-center",
+          "scale": "{{config:hud-customizer.hud_scale}}",
+          "opacity": "{{config:hud-customizer.hud_opacity}}",
+          "text": "{{level.name}}",
+          "font_size": 18,
+          "color": "#FFFFFF",
+          "shadow": true
+        },
+        "children": []
+      }
+    }
+  ]
+}

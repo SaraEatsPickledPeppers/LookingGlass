@@ -1,0 +1,20 @@
+{
+  "target": "main_menu",
+  "operations": [
+    {
+      "op": "AddWidget",
+      "parent": "main_container",
+      "widget": {
+        "id": "debug_menu_button",
+        "widget_type": "Button",
+        "properties": {
+          "label": "Debug Menu",
+          "icon": "ui/debug_icon.png",
+          "action": "open_debug_menu",
+          "tooltip": "Open developer debug menu"
+        },
+        "children": []
+      }
+    }
+  ]
+}

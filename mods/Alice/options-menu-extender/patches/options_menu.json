@@ -1,0 +1,98 @@
+{
+  "target": "options_menu",
+  "operations": [
+    {
+      "op": "AddWidget",
+      "parent": "graphics_section",
+      "widget": {
+        "id": "fov_slider",
+        "widget_type": "Slider",
+        "properties": {
+          "label": "Field of View",
+          "min": 60,
+          "max": 120,
+          "step": 1,
+          "config_key": "options-menu-extender.fov",
+          "tooltip": "Adjust the field of view (60-120 degrees)"
+        },
+        "children": []
+      }
+    },
+    {
+      "op": "AddWidget",
+      "parent": "graphics_section",
+      "widget": {
+        "id": "render_scale_slider",
+        "widget_type": "Slider",
+        "properties": {
+          "label": "Render Scale",
+          "min": 0.5,
+          "max": 2.0,
+          "step": 0.1,
+          "config_key": "options-menu-extender.render_scale",
+          "tooltip": "Adjust render scale (0.5x - 2.0x)"
+        },
+        "children": []
+      }
+    },
+    {
+      "op": "AddWidget",
+      "parent": "graphics_section",
+      "widget": {
+        "id": "vsync_toggle",
+        "widget_type": "Checkbox",
+        "properties": {
+          "label": "Vertical Sync",
+          "config_key": "options-menu-extender.vsync",
+          "tooltip": "Enable vertical synchronization"
+        },
+        "children": []
+      }
+    },
+    {
+      "op": "AddWidget",
+      "parent": "graphics_section",
+      "widget": {
+        "id": "max_fps_slider",
+        "widget_type": "Slider",
+        "properties": {
+          "label": "Max FPS (0 = unlimited)",
+          "min": 30,
+          "max": 300,
+          "step": 1,
+          "config_key": "options-menu-extender.max_fps",
+          "tooltip": "Maximum frames per second limit"
+        },
+        "children": []
+      }
+    },
+    {
+      "op": "AddWidget",
+      "parent": "advanced_section",
+      "widget": {
+        "id": "show_fps_toggle",
+        "widget_type": "Checkbox",
+        "properties": {
+          "label": "Show FPS Counter",
+          "config_key": "options-menu-extender.show_fps",
+          "tooltip": "Display FPS counter in corner"
+        },
+        "children": []
+      }
+    },
+    {
+      "op": "AddWidget",
+      "parent": "advanced_section",
+      "widget": {
+        "id": "show_debug_info_toggle",
+        "widget_type": "Checkbox",
+        "properties": {
+          "label": "Show Debug Info",
+          "config_key": "options-menu-extender.show_debug_info",
+          "tooltip": "Display debug information overlay"
+        },
+        "children": []
+      }
+    }
+  ]
+}

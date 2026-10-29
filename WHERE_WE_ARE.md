@@ -53,7 +53,7 @@
 | Simplify `lg-launch` to Alice-only (remove `game_id` arg) | ✅ Done | Hardcoded "Alice" everywhere |
 | Config file support (layered: defaults → XDG → local → CLI) | ✅ Done | `ConfigManager` with layered config |
 | `--dry-run` flag to print resolved launch command | ✅ Done | Added in CLI |
-| Mod validation on install (schema, dependencies) | 🔄 Next | Planned |
+| Mod validation on install (schema, dependencies) | ✅ Done | Asset files, entry points, config schema, load_order validated |
 | Integration test: `cargo test --locked` covers launcher + mod load | ✅ Done | All 689 tests passing |
 | Fix mod enable/disable test (clear shared registries on reload) | ✅ Done | Fixed in commit 2029040 |
 
