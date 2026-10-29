@@ -1,6 +1,8 @@
 use crate::manifest::{GameTarget, InstalledMod, ModManifest};
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
+use jsonschema::validator_for;
+use semver::VersionReq;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
@@ -82,6 +84,18 @@ impl ModDiscovery {
         // Validate dependencies
         self.validate_dependencies(&manifest)?;
 
+        // Validate asset files exist
+        self.validate_assets(&manifest, extract_dir)?;
+
+        // Validate entry point files exist
+        self.validate_entry_points(&manifest, extract_dir)?;
+
+        // Validate config schema and default_config
+        self.validate_config(&manifest)?;
+
+        // Validate load_order references
+        self.validate_load_order(&manifest)?;
+
         // Compute checksum
         let checksum = manifest.compute_checksum(extract_dir)?;
 
@@ -117,6 +131,148 @@ impl ModDiscovery {
         };
 
         Ok(installed_mod)
+    }
+
+    fn validate_assets(&self, manifest: &ModManifest, extract_dir: &Path) -> Result<()> {
+        for asset in &manifest.assets {
+            let source_path = extract_dir.join(&asset.source);
+            if !source_path.exists() {
+                return Err(anyhow::anyhow!(
+                    "Asset file not found: {} (referenced in manifest)",
+                    asset.source
+                ));
+            }
+            if !source_path.is_file() {
+                return Err(anyhow::anyhow!(
+                    "Asset path is not a file: {}",
+                    asset.source
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_entry_points(&self, manifest: &ModManifest, extract_dir: &Path) -> Result<()> {
+        let entry_points = &manifest.entry_points;
+
+        if let Some(asset_override) = &entry_points.asset_override {
+            let path = extract_dir.join(asset_override);
+            if !path.exists() {
+                return Err(anyhow::anyhow!(
+                    "Asset override entry point not found: {}",
+                    asset_override
+                ));
+            }
+        }
+
+        if let Some(config_inject) = &entry_points.config_inject {
+            let path = extract_dir.join(config_inject);
+            if !path.exists() {
+                return Err(anyhow::anyhow!(
+                    "Config inject entry point not found: {}",
+                    config_inject
+                ));
+            }
+        }
+
+        if let Some(runtime_hook) = &entry_points.runtime_hook {
+            let path = extract_dir.join(runtime_hook);
+            if !path.exists() {
+                return Err(anyhow::anyhow!(
+                    "Runtime hook entry point not found: {}",
+                    runtime_hook
+                ));
+            }
+        }
+
+        if let Some(ui_patch) = &entry_points.ui_patch {
+            let path = extract_dir.join(ui_patch);
+            if !path.exists() {
+                return Err(anyhow::anyhow!(
+                    "UI patch entry point not found: {}",
+                    ui_patch
+                ));
+            }
+        }
+
+        if let Some(input_hook) = &entry_points.input_hook {
+            let path = extract_dir.join(input_hook);
+            if !path.exists() {
+                return Err(anyhow::anyhow!(
+                    "Input hook entry point not found: {}",
+                    input_hook
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn validate_config(&self, manifest: &ModManifest) -> Result<()> {
+        // If config_schema is provided, validate it's a valid JSON schema
+        if let Some(config_schema) = &manifest.config_schema {
+            validator_for(config_schema)
+                .map_err(|e| anyhow::anyhow!("Invalid config_schema: {}", e))?;
+
+            // If default_config is also provided, validate it against the schema
+            if let Some(default_config) = &manifest.default_config {
+                let validator = validator_for(config_schema)
+                    .map_err(|e| anyhow::anyhow!("Failed to compile config schema: {}", e))?;
+
+                if let Err(_) = validator.validate(default_config) {
+                    let error_msgs: Vec<String> = validator.iter_errors(default_config)
+                        .map(|e| e.to_string())
+                        .collect();
+                    return Err(anyhow::anyhow!(
+                        "default_config does not match config_schema:\n{}",
+                        error_msgs.join("\n")
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_load_order(&self, manifest: &ModManifest) -> Result<()> {
+        let installed_mods = self.discover()?;
+        let installed_ids: std::collections::HashSet<_> = installed_mods
+            .iter()
+            .map(|m| m.manifest.id.clone())
+            .collect();
+
+        // Validate 'before' references
+        for before_id in &manifest.load_order.before {
+            if before_id == &manifest.id {
+                return Err(anyhow::anyhow!("Mod cannot specify itself in load_order.before"));
+            }
+            // Only warn if the referenced mod is not installed (not an error since it might be installed later)
+            if !installed_ids.contains(before_id) {
+                log::info!("load_order.before references mod '{}' which is not currently installed", before_id);
+            }
+        }
+
+        // Validate 'after' references
+        for after_id in &manifest.load_order.after {
+            if after_id == &manifest.id {
+                return Err(anyhow::anyhow!("Mod cannot specify itself in load_order.after"));
+            }
+            if !installed_ids.contains(after_id) {
+                log::info!("load_order.after references mod '{}' which is not currently installed", after_id);
+            }
+        }
+
+        // Check for circular dependencies in load_order (simplified check)
+        // This is a basic check - full cycle detection would require graph analysis
+        for before_id in &manifest.load_order.before {
+            if manifest.load_order.after.contains(before_id) {
+                return Err(anyhow::anyhow!(
+                    "Circular load_order reference: mod '{}' specified in both before and after",
+                    before_id
+                ));
+            }
+        }
+
+        Ok(())
     }
 
     pub fn uninstall(&self, mod_id: &str) -> Result<()> {
