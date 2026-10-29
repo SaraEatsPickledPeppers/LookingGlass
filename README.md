@@ -246,6 +246,21 @@ and bug-report requirements. Development shortcuts are under
 
 ### Creating a Distributable Package
 
+#### Using the Release Wrapper Script (Recommended)
+
+```bash
+# Create a tarball package (builds release binary automatically)
+./tools/release.sh tarball 0.32.0-preview.2
+
+# Create an AppImage package (requires FUSE)
+./tools/release.sh appimage 0.32.0-preview.2
+
+# Skip build if you already have a release binary
+./tools/release.sh tarball 0.32.0-preview.2 --skip-build
+```
+
+#### Manual Steps
+
 ```bash
 # After building release
 cargo build --release --locked
@@ -281,9 +296,18 @@ python3 tools/package_linux.py \
   --verbose
 ```
 
+**build_info.json fields:**
+- `version` — Release version string (e.g., `0.32.0-preview.2`)
+- `build_date` — UTC build date in YYYY-MM-DD format
+- `rust_version` — Rust compiler version used (e.g., `1.86` or `1.99.1`)
+- `target_triple` — Target triple (e.g., `x86_64-unknown-linux-gnu`)
+- `executable_sha256` — SHA256 hash of the `looking-glass` binary (required for integrity verification)
+- `engine_source_zip_sha256` — SHA256 of engine source zip (placeholder; not yet used)
+- `extractor_sha256` — SHA256 of extractor binary (placeholder; not yet used)
+
 The `tools/package_linux.py` script creates a complete package with:
 - The `looking-glass` binary
-- `Launch.sh` and `Setup.sh` entry points
+- `Launch.sh` and `Setup.sh` entry points (packaged versions with correct paths)
 - `tools/linux_setup.sh` core setup logic
 - Documentation and legal files
 - Desktop integration (for AppImage)

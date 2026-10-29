@@ -358,8 +358,17 @@ exec "${SETUP_CORE}" "$@"
 """)
         setup_wrapper.chmod(0o755)
 
-        # Copy player files
-        copy_player_files(staging)
+        # Copy player files (excluding Launch.sh and Setup.sh since we created wrappers)
+        player_files_except_wrappers = [f for f in PLAYER_FILES if f not in ('Launch.sh', 'Setup.sh')]
+        for name in player_files_except_wrappers:
+            src = ROOT / name
+            if not src.exists():
+                print(f"Warning: {name} not found, skipping", file=sys.stderr)
+                continue
+            data = src.read_bytes()
+            dst = staging / name
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(data)
 
         # Ensure shell scripts are executable
         for sh_file in staging.rglob('*.sh'):
