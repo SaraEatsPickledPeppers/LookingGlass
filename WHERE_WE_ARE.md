@@ -50,7 +50,12 @@
 | Environment variable mod injection (`LOOKING_GLASS_MODS`) | ✅ Added | For launcher→engine mod passing |
 | Mod load order via `LOOKING_GLASS_MOD_ORDER` | ✅ Added | |
 | Remove `looking-glass-core`, `looking-glass-launcher`, `looking-glass-tui` from workspace | ✅ Done | Cargo.toml cleaned |
-| Simplify `lg-launch` to Alice-only (remove `game_id` arg) | 🔄 Next | Hardcode "Alice" everywhere |
+| Simplify `lg-launch` to Alice-only (remove `game_id` arg) | ✅ Done | Hardcoded "Alice" everywhere |
+| Config file support (layered: defaults → XDG → local → CLI) | ✅ Done | `ConfigManager` with layered config |
+| `--dry-run` flag to print resolved launch command | ✅ Done | Added in CLI |
+| Mod validation on install (schema, dependencies) | 🔄 Next | Planned |
+| Integration test: `cargo test --locked` covers launcher + mod load | ✅ Done | All 689 tests passing |
+| Fix mod enable/disable test (clear shared registries on reload) | ✅ Done | Fixed in commit 2029040 |
 
 ### Phase 2B: First Proof-of-Concept Mods
 
@@ -66,10 +71,10 @@
 
 | Task | Status |
 |------|--------|
-| Config file (`~/.config/looking-glass/config.toml`) for data path, mod dir, default profile | 🔄 Planned |
-| `--dry-run` flag to print resolved launch command | 🔄 Planned |
+| Config file (`~/.config/looking-glass/config.toml`) for data path, mod dir, default profile | ✅ Done |
+| `--dry-run` flag to print resolved launch command | ✅ Done |
 | Mod validation on install (schema, dependencies) | 🔄 Planned |
-| Integration test: `cargo test --locked` covers launcher + mod load | 🔄 Planned |
+| Integration test: `cargo test --locked` covers launcher + mod load | ✅ Done |
 
 ---
 
@@ -112,7 +117,7 @@ LookingGlass/
 - **Clean**: No game files, no build artifacts committed
 - **CI**: GitHub Actions for Linux + Windows builds
 - **Packaging**: `tools/package_linux.py` for tarball/AppImage
-- **Latest commit**: jsonschema 0.60 migration, mod injection env vars, scope reduction
+- **Latest commit**: Fixed mod enable/disable test by clearing shared registries on reload; added ConfigManager per-mod config methods; --dry-run flag; Alice-only scope
 
 ---
 
