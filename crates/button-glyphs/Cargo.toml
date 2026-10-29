@@ -1,0 +1,20 @@
+[package]
+name = "button-glyphs"
+version = "1.0.0"
+edition = "2021"
+description = "Replace text button prompts with controller glyphs"
+license = "MIT"
+repository = "https://github.com/looking-glass/looking-glass"
+
+[dependencies]
+looking-glass-mod = { path = "../looking-glass-mod" }
+serde = { version = "1.0", features = ["derive"] }
+toml = { version = "0.8", features = ["serde", "parse", "display"] }
+anyhow = "1.0"
+macroquad = "0.4"
+async-trait = "0.1"
+thiserror = "1.0"
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+tokio = { version = "1.0", features = ["full"] }

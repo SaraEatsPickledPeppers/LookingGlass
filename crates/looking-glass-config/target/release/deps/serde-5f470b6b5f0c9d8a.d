@@ -1,0 +1,14 @@
+/home/sara/Documents/LookingGlass/crates/looking-glass-config/target/release/deps/serde-5f470b6b5f0c9d8a.d: /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /home/sara/Documents/LookingGlass/crates/looking-glass-config/target/release/build/serde-fb811f44da2e6fa8/out/private.rs
+
+/home/sara/Documents/LookingGlass/crates/looking-glass-config/target/release/deps/libserde-5f470b6b5f0c9d8a.rlib: /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /home/sara/Documents/LookingGlass/crates/looking-glass-config/target/release/build/serde-fb811f44da2e6fa8/out/private.rs
+
+/home/sara/Documents/LookingGlass/crates/looking-glass-config/target/release/deps/libserde-5f470b6b5f0c9d8a.rmeta: /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /home/sara/Documents/LookingGlass/crates/looking-glass-config/target/release/build/serde-fb811f44da2e6fa8/out/private.rs
+
+/home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs:
+/home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs:
+/home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs:
+/home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs:
+/home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs:
+/home/sara/Documents/LookingGlass/crates/looking-glass-config/target/release/build/serde-fb811f44da2e6fa8/out/private.rs:
+
+# env-dep:OUT_DIR=/home/sara/Documents/LookingGlass/crates/looking-glass-config/target/release/build/serde-fb811f44da2e6fa8/out

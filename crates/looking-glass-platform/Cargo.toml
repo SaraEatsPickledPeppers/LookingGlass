@@ -1,0 +1,20 @@
+[package]
+name = "looking-glass-platform"
+version = "0.1.0"
+edition = "2021"
+description = "Platform integrations for Looking Glass launcher"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+walkdir = { workspace = true }
+reqwest = { workspace = true, default-features = false, features = ["json", "rustls-tls", "blocking"] }
+looking-glass-core = { path = "../looking-glass-core" }
+looking-glass-config = { path = "../looking-glass-config" }
+
+[dev-dependencies]
+tempfile = { workspace = true }

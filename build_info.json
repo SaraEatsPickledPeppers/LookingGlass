@@ -1,0 +1,9 @@
+{
+  "version": "0.1.0",
+  "build_date": "2026-10-28",
+  "rust_version": "1.86",
+  "target_triple": "x86_64-unknown-linux-gnu",
+  "executable_sha256": "38ce07e4bbbcb106b6e43ed18df92122a25655ce161a182aeb1c7f1de1a95854",
+  "engine_source_zip_sha256": "placeholder",
+  "extractor_sha256": "placeholder"
+}

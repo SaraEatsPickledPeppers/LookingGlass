@@ -1,0 +1,1 @@
+/home/sara/Documents/LookingGlass/crates/looking-glass-config/target/release/liblooking_glass_config.rlib: /home/sara/Documents/LookingGlass/crates/looking-glass-config/src/lib.rs /home/sara/Documents/LookingGlass/crates/looking-glass-config/src/migration.rs /home/sara/Documents/LookingGlass/crates/looking-glass-config/src/paths.rs

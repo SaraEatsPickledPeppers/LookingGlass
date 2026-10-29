@@ -1,0 +1,24 @@
+[package]
+name = "looking-glass-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI binary for Looking Glass launcher (lg-launch)"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "lg-launch"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
+clap = { workspace = true }
+dirs = { workspace = true }
+toml = { workspace = true }
+looking-glass-core = { path = "../looking-glass-core" }
+looking-glass-config = { path = "../looking-glass-config" }
+looking-glass-mod = { path = "../looking-glass-mod" }

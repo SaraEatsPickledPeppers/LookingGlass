@@ -1,0 +1,20 @@
+[package]
+name = "looking-glass-tui"
+version = "0.1.0"
+edition = "2021"
+description = "TUI interface for Looking Glass launcher"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+crossterm = { workspace = true }
+ratatui = { workspace = true }
+looking-glass-core = { path = "../looking-glass-core" }
+looking-glass-config = { path = "../looking-glass-config" }
+looking-glass-mod = { path = "../looking-glass-mod" }
+
+[dev-dependencies]
+tempfile = { workspace = true }

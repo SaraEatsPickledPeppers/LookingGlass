@@ -1,0 +1,11 @@
+/home/sara/Documents/LookingGlass/crates/looking-glass-config/target/debug/deps/serial_test-e3c483af2f34aa6d.d: /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/lib.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/code_lock.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/parallel_code_lock.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/rwlock.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/serial_code_lock.rs
+
+/home/sara/Documents/LookingGlass/crates/looking-glass-config/target/debug/deps/libserial_test-e3c483af2f34aa6d.rlib: /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/lib.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/code_lock.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/parallel_code_lock.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/rwlock.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/serial_code_lock.rs
+
+/home/sara/Documents/LookingGlass/crates/looking-glass-config/target/debug/deps/libserial_test-e3c483af2f34aa6d.rmeta: /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/lib.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/code_lock.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/parallel_code_lock.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/rwlock.rs /home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/serial_code_lock.rs
+
+/home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/lib.rs:
+/home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/code_lock.rs:
+/home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/parallel_code_lock.rs:
+/home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/rwlock.rs:
+/home/sara/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serial_test-2.0.0/src/serial_code_lock.rs:

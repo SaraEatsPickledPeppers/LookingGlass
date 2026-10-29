@@ -1,0 +1,10 @@
+id = "hello-world"
+name = "Hello World Mod"
+version = "1.0.0"
+manifest_version = 2
+author = "Test"
+description = "Changes main menu text to HELLO WORLD"
+game_target = "Alice"
+assets = [
+    {source = "assets/ui/main.urc", target = "ui/main.urc", type = "Ui"}
+]

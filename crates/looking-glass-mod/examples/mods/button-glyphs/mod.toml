@@ -1,0 +1,59 @@
+id = "button-glyphs"
+name = "Button Glyphs"
+version = "1.0.0"
+manifest_version = 2
+author = "Looking Glass Team"
+description = "Replace controller button prompts with proper glyphs (PS4/Xbox/Switch icons)"
+homepage = "https://github.com/looking-glass/looking-glass-mod"
+repository = "https://github.com/looking-glass/looking-glass-mod"
+license = "MIT"
+game_target = "Alice"
+min_game_version = "1.0.0"
+max_game_version = "2.0.0"
+dependencies = []
+load_order = { before = [], after = [] }
+entry_points = { asset_override = "assets.rs" }
+config_schema = null
+default_config = null
+assets = [
+    { source = "assets/textures/ui/button_south_ps.png", target = "textures/ui/button_south.png", type = "Texture", condition = "platform == \"ps4\"" },
+    { source = "assets/textures/ui/button_east_ps.png", target = "textures/ui/button_east.png", type = "Texture", condition = "platform == \"ps4\"" },
+    { source = "assets/textures/ui/button_west_ps.png", target = "textures/ui/button_west.png", type = "Texture", condition = "platform == \"ps4\"" },
+    { source = "assets/textures/ui/button_north_ps.png", target = "textures/ui/button_north.png", type = "Texture", condition = "platform == \"ps4\"" },
+    { source = "assets/textures/ui/button_l1_ps.png", target = "textures/ui/button_l1.png", type = "Texture", condition = "platform == \"ps4\"" },
+    { source = "assets/textures/ui/button_r1_ps.png", target = "textures/ui/button_r1.png", type = "Texture", condition = "platform == \"ps4\"" },
+    { source = "assets/textures/ui/button_l2_ps.png", target = "textures/ui/button_l2.png", type = "Texture", condition = "platform == \"ps4\"" },
+    { source = "assets/textures/ui/button_r2_ps.png", target = "textures/ui/button_r2.png", type = "Texture", condition = "platform == \"ps4\"" },
+    { source = "assets/textures/ui/button_select_ps.png", target = "textures/ui/button_select.png", type = "Texture", condition = "platform == \"ps4\"" },
+    { source = "assets/textures/ui/button_start_ps.png", target = "textures/ui/button_start.png", type = "Texture", condition = "platform == \"ps4\"" },
+    { source = "assets/textures/ui/button_l3_ps.png", target = "textures/ui/button_l3.png", type = "Texture", condition = "platform == \"ps4\"" },
+    { source = "assets/textures/ui/button_r3_ps.png", target = "textures/ui/button_r3.png", type = "Texture", condition = "platform == \"ps4\"" },
+    { source = "assets/textures/ui/button_dpad_ps.png", target = "textures/ui/button_dpad.png", type = "Texture", condition = "platform == \"ps4\"" },
+    { source = "assets/textures/ui/button_south_xbox.png", target = "textures/ui/button_south.png", type = "Texture", condition = "platform == \"xbox\"" },
+    { source = "assets/textures/ui/button_east_xbox.png", target = "textures/ui/button_east.png", type = "Texture", condition = "platform == \"xbox\"" },
+    { source = "assets/textures/ui/button_west_xbox.png", target = "textures/ui/button_west.png", type = "Texture", condition = "platform == \"xbox\"" },
+    { source = "assets/textures/ui/button_north_xbox.png", target = "textures/ui/button_north.png", type = "Texture", condition = "platform == \"xbox\"" },
+    { source = "assets/textures/ui/button_lb_xbox.png", target = "textures/ui/button_l1.png", type = "Texture", condition = "platform == \"xbox\"" },
+    { source = "assets/textures/ui/button_rb_xbox.png", target = "textures/ui/button_r1.png", type = "Texture", condition = "platform == \"xbox\"" },
+    { source = "assets/textures/ui/button_lt_xbox.png", target = "textures/ui/button_l2.png", type = "Texture", condition = "platform == \"xbox\"" },
+    { source = "assets/textures/ui/button_rt_xbox.png", target = "textures/ui/button_r2.png", type = "Texture", condition = "platform == \"xbox\"" },
+    { source = "assets/textures/ui/button_back_xbox.png", target = "textures/ui/button_select.png", type = "Texture", condition = "platform == \"xbox\"" },
+    { source = "assets/textures/ui/button_start_xbox.png", target = "textures/ui/button_start.png", type = "Texture", condition = "platform == \"xbox\"" },
+    { source = "assets/textures/ui/button_l3_xbox.png", target = "textures/ui/button_l3.png", type = "Texture", condition = "platform == \"xbox\"" },
+    { source = "assets/textures/ui/button_r3_xbox.png", target = "textures/ui/button_r3.png", type = "Texture", condition = "platform == \"xbox\"" },
+    { source = "assets/textures/ui/button_dpad_xbox.png", target = "textures/ui/button_dpad.png", type = "Texture", condition = "platform == \"xbox\"" },
+    { source = "assets/textures/ui/button_south_switch.png", target = "textures/ui/button_south.png", type = "Texture", condition = "platform == \"switch\"" },
+    { source = "assets/textures/ui/button_east_switch.png", target = "textures/ui/button_east.png", type = "Texture", condition = "platform == \"switch\"" },
+    { source = "assets/textures/ui/button_west_switch.png", target = "textures/ui/button_west.png", type = "Texture", condition = "platform == \"switch\"" },
+    { source = "assets/textures/ui/button_north_switch.png", target = "textures/ui/button_north.png", type = "Texture", condition = "platform == \"switch\"" },
+    { source = "assets/textures/ui/button_l_switch.png", target = "textures/ui/button_l1.png", type = "Texture", condition = "platform == \"switch\"" },
+    { source = "assets/textures/ui/button_r_switch.png", target = "textures/ui/button_r1.png", type = "Texture", condition = "platform == \"switch\"" },
+    { source = "assets/textures/ui/button_zl_switch.png", target = "textures/ui/button_l2.png", type = "Texture", condition = "platform == \"switch\"" },
+    { source = "assets/textures/ui/button_zr_switch.png", target = "textures/ui/button_r2.png", type = "Texture", condition = "platform == \"switch\"" },
+    { source = "assets/textures/ui/button_minus_switch.png", target = "textures/ui/button_select.png", type = "Texture", condition = "platform == \"switch\"" },
+    { source = "assets/textures/ui/button_plus_switch.png", target = "textures/ui/button_start.png", type = "Texture", condition = "platform == \"switch\"" },
+    { source = "assets/textures/ui/button_l3_switch.png", target = "textures/ui/button_l3.png", type = "Texture", condition = "platform == \"switch\"" },
+    { source = "assets/textures/ui/button_r3_switch.png", target = "textures/ui/button_r3.png", type = "Texture", condition = "platform == \"switch\"" },
+    { source = "assets/textures/ui/button_dpad_switch.png", target = "textures/ui/button_dpad.png", type = "Texture", condition = "platform == \"switch\"" },
+]
+tags = ["ui", "visual", "controller", "accessibility"]

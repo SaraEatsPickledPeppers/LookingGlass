@@ -1,0 +1,19 @@
+id = "simple_asset_override"
+name = "Simple Asset Override"
+version = "1.0.0"
+manifest_version = 2
+author = "Looking Glass Team"
+description = "Example mod that replaces a single texture"
+game_target = "Alice"
+
+# No dependencies required
+
+entry_points = {
+  asset_override = "scripts/assets.rs"
+}
+
+assets = [
+  { source = "assets/textures/wall_replacement.png", target = "textures/wall.png", type = "Texture" }
+]
+
+tags = ["example", "texture", "asset-override"]

@@ -1,0 +1,23 @@
+[package]
+name = "looking-glass-config"
+version = "0.1.0"
+edition = "2021"
+description = "Configuration system for Looking Glass mod launcher"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+directories = "5.0"
+dirs = "5.0"
+anyhow = "1.0"
+notify = { version = "6.0", features = ["crossbeam-channel"] }
+once_cell = "1.19"
+thiserror = "1.0"
+parking_lot = "0.12"
+serde_json = "1.0"
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3.0"
+serial_test = "2.0"

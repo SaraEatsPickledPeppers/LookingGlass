@@ -1,0 +1,169 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Looking Glass Mod Manifest",
+  "type": "object",
+  "required": ["id", "name", "version", "manifest_version", "game_target"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Unique mod identifier (alphanumeric, underscore, hyphen)"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "Human-readable mod name"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[a-zA-Z0-9.-]+)?(?:\\+[a-zA-Z0-9.-]+)?$",
+      "description": "Semantic version (SemVer 2.0.0)"
+    },
+    "manifest_version": {
+      "type": "integer",
+      "enum": [2],
+      "description": "Manifest schema version"
+    },
+    "author": {
+      "type": "string",
+      "maxLength": 100,
+      "description": "Mod author name"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 5000,
+      "description": "Mod description"
+    },
+    "homepage": {
+      "type": "string",
+      "format": "uri",
+      "description": "Mod homepage URL"
+    },
+    "repository": {
+      "type": "string",
+      "format": "uri",
+      "description": "Mod repository URL"
+    },
+    "license": {
+      "type": "string",
+      "description": "SPDX license identifier"
+    },
+    "game_target": {
+      "type": "string",
+      "enum": ["Alice", "AliceDemo"],
+      "description": "Target game"
+    },
+    "min_game_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Minimum compatible game version"
+    },
+    "max_game_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Maximum compatible game version"
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "version"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "version": {
+            "type": "string",
+            "description": "SemVer version requirement"
+          },
+          "optional": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether this dependency is optional"
+          }
+        }
+      }
+    },
+    "load_order": {
+      "type": "object",
+      "properties": {
+        "before": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Mods this mod should load before"
+        },
+        "after": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Mods this mod should load after"
+        }
+      }
+    },
+    "entry_points": {
+      "type": "object",
+      "properties": {
+        "asset_override": {
+          "type": "string",
+          "description": "Path to asset override module"
+        },
+        "config_inject": {
+          "type": "string",
+          "description": "Path to config injection module"
+        },
+        "runtime_hook": {
+          "type": "string",
+          "description": "Path to runtime hook module"
+        },
+        "ui_patch": {
+          "type": "string",
+          "description": "Path to UI patch module"
+        },
+        "input_hook": {
+          "type": "string",
+          "description": "Path to input hook module"
+        }
+      }
+    },
+    "config_schema": {
+      "type": "object",
+      "description": "JSON Schema for mod configuration"
+    },
+    "default_config": {
+      "type": "object",
+      "description": "Default configuration values"
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "target", "type"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Source path relative to mod directory"
+          },
+          "target": {
+            "type": "string",
+            "description": "Target path in game assets"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["Texture", "Model", "Sound", "Font", "Ui", "Other"],
+            "description": "Asset type"
+          },
+          "condition": {
+            "type": "string",
+            "description": "Optional condition for when this override applies"
+          }
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Mod tags for categorization"
+    }
+  }
+}

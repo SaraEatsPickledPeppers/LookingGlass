@@ -1,0 +1,24 @@
+[package]
+name = "looking-glass-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core launcher functionality: game registry, launch abstraction, config"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+directories = { workspace = true }
+walkdir = { workspace = true }
+semver = { workspace = true }
+clap = { workspace = true }
+looking-glass-config = { path = "../looking-glass-config" }
+looking-glass-mod = { path = "../looking-glass-mod" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+serial_test = "2.0"

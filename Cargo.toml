@@ -1,52 +1,67 @@
-[package]
-name = "looking-glass"
-version = "0.32.0-preview.2"
+[workspace]
+resolver = "2"
+members = [
+    "crates/looking-glass-engine",
+    "crates/looking-glass-mod",
+    "crates/looking-glass-config",
+    "crates/looking-glass-core",
+    "crates/looking-glass-tui",
+    "crates/looking-glass-save",
+    "crates/looking-glass-platform",
+    "crates/looking-glass-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
 edition = "2021"
 rust-version = "1.86"
-publish = false
-description = "Local Rust compatibility research for user-supplied Alice game data"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/looking-glass/looking-glass"
 
-[dependencies]
+[workspace.dependencies]
 anyhow = "1.0"
-macroquad = "=0.4.14"
-zip = { version = "=0.6.6", default-features = false, features = ["deflate"] }
-image = { version = "=0.24.9", default-features = false, features = ["tga", "jpeg", "png"] }
-# Macroquad's newer fontdue patch needs a newer compiler than the user's Rust 1.86.
-fontdue = "=0.9.3"
-# Independent WAV/MP3 playback; does not load the game's Miles DLLs.
-rodio = { version = "=0.20.1", default-features = false, features = ["symphonia-wav", "symphonia-mp3"] }
-hound = "=3.5.1"
-# Symphonia metadata's latest encoding_rs patch requires Rust 1.88.
-encoding_rs = "=0.8.35"
-deunicode = "=1.6.2"
-serde = { version = "=1.0.228", features = ["derive"] }
-serde_json = { version = "=1.0.145", features = ["float_roundtrip"] }
-# Enable serialization on the same math types used by Macroquad.
-glam = { version = "=0.27.0", features = ["serde"] }
-sha2 = "=0.10.9"
-chrono = "=0.4.40"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "json", "env-filter"] }
+tracing-appender = "0.2"
+directories = "5.0"
+walkdir = "2.5"
+notify = { version = "6.0", features = ["crossbeam-channel"] }
+parking_lot = "0.12"
+once_cell = "1.19"
+semver = "1.0"
+sha2 = "0.10"
+chrono = { version = "0.4", features = ["serde"] }
+async-trait = "0.1"
+futures = "0.3"
+jsonschema = "0.16"
+tempfile = "3.8"
+zip = "0.6"
+flate2 = "1.0"
+tar = "0.4"
+dirs = "5.0"
+clap = { version = "4.5", features = ["derive", "env"] }
+ratatui = "0.28"
+crossterm = "0.28"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+mlua = { version = "0.10", features = ["vendored"] }
+wasmtime = "25.0"
+rmp-serde = "1.1"
+bincode = "1.3"
+x11rb = { version = "0.14" }
+wayland-client = { version = "0.31" }
+wayland-protocols = { version = "0.32", features = ["staging", "unstable", "client"] }
+gilrs = { version = "0.10" }
+log = "0.4"
 
-# Structured logging
-tracing = "=0.1.41"
-tracing-subscriber = { version = "=0.3.18", features = ["fmt", "json", "env-filter"] }
-tracing-appender = "=0.2.5"
-
-# Optional X11 support for window focus detection
-x11rb = { version = "=0.14.0", optional = true }
-# Optional Wayland support for window focus detection
-wayland-client = { version = "=0.31.15", optional = true }
-wayland-protocols = { version = "=0.32.13", optional = true, features = ["staging", "unstable", "client"] }
-# Optional gamepad support via gilrs
-gilrs = { version = "=0.10.0", optional = true }
+# Engine dependencies (for the looking-glass binary - defined in its own Cargo.toml)
+# macroquad, rodio, image, fontdue, hound, encoding_rs, deunicode, glam, log
 
 [profile.dev]
 opt-level = 1
 
 [profile.release]
 lto = "thin"
-
-[features]
-default = []
-x11 = ["x11rb"]
-wayland = ["wayland-client", "wayland-protocols"]
-gamepad = ["gilrs"]

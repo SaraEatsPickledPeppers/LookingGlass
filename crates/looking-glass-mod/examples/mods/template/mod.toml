@@ -1,0 +1,43 @@
+id = "my-mod"
+name = "My Mod"
+version = "1.0.0"
+manifest_version = 2
+author = "Your Name"
+description = "A simple mod template - replace this with your mod description"
+homepage = ""
+repository = ""
+license = "MIT"
+game_target = "Alice"
+min_game_version = "1.0.0"
+max_game_version = "2.0.0"
+dependencies = []
+load_order = { before = [], after = [] }
+entry_points = {
+    # asset_override = "scripts/assets.rs",
+    # runtime_hook = "scripts/runtime.rs",
+    # config_inject = "scripts/config.rs",
+    # ui_patch = "scripts/ui.rs",
+    # input_hook = "scripts/input.rs"
+}
+config_schema = {
+  "type": "object",
+  "properties": {
+    "enabled": { "type": "boolean", "default": true, "description": "Enable this mod" },
+    "setting1": { "type": "string", "default": "value1", "description": "Example string setting" },
+    "setting2": { "type": "number", "default": 42, "description": "Example number setting" },
+    "setting3": { "type": "boolean", "default": false, "description": "Example boolean setting" }
+  },
+  "required": []
+}
+default_config = {
+  "enabled": true,
+  "setting1": "value1",
+  "setting2": 42,
+  "setting3": false
+}
+assets = [
+    # { source = "assets/textures/my_texture.png", target = "textures/original_texture.png", type = "Texture" },
+    # { source = "assets/models/my_model.gltf", target = "models/original_model.gltf", type = "Model" },
+    # { source = "assets/sounds/my_sound.ogg", target = "sounds/original_sound.ogg", type = "Sound" }
+]
+tags = ["template", "example"]

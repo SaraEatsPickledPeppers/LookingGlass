@@ -1,0 +1,44 @@
+id = "config_injection_example"
+name = "Config Injection Example"
+version = "1.0.0"
+manifest_version = 2
+author = "Looking Glass Team"
+description = "Example mod that adds a new configuration option"
+game_target = "Alice"
+
+entry_points = {
+  config_inject = "scripts/config.rs"
+}
+
+config_schema = {
+  type = "object",
+  properties = {
+    custom_difficulty = {
+      type = "string",
+      enum = ["easy", "normal", "hard", "custom"],
+      default = "normal",
+      description = "Custom difficulty setting added by this mod"
+    },
+    custom_damage_multiplier = {
+      type = "number",
+      minimum = 0.1,
+      maximum = 5.0,
+      default = 1.0,
+      description = "Damage multiplier for custom difficulty"
+    },
+    enable_custom_feature = {
+      type = "boolean",
+      default = false,
+      description = "Enable the custom feature"
+    }
+  },
+  additionalProperties = false
+}
+
+default_config = {
+  custom_difficulty = "normal",
+  custom_damage_multiplier = 1.0,
+  enable_custom_feature = false
+}
+
+tags = ["example", "config", "configuration"]

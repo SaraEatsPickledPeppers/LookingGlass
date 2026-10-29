@@ -1,0 +1,48 @@
+[package]
+name = "looking-glass-engine"
+version = "0.32.0-preview.2"
+edition = "2021"
+rust-version = "1.86"
+publish = false
+description = "Looking Glass - Alice (2011) Rust reimplementation"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/looking-glass/looking-glass"
+
+[dependencies]
+anyhow = { workspace = true }
+macroquad = { version = "=0.4.14", default-features = false, features = [] }
+zip = { version = "=0.6.6", default-features = false, features = ["deflate"] }
+image = { version = "=0.24.9", default-features = false, features = ["tga", "jpeg", "png"] }
+fontdue = "=0.9.3"
+rodio = { version = "=0.20.1", default-features = false, features = ["symphonia-wav", "symphonia-mp3"] }
+hound = "=3.5.1"
+encoding_rs = "=0.8.35"
+deunicode = "=1.6.2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+glam = { version = "=0.27.0", features = ["serde"] }
+sha2 = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+log = { workspace = true }
+jsonschema = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
+x11rb = { workspace = true }
+wayland-client = { workspace = true }
+wayland-protocols = { workspace = true }
+gilrs = { workspace = true }
+
+# Local crates
+looking-glass-mod = { path = "../looking-glass-mod" }
+looking-glass-config = { path = "../looking-glass-config" }
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+lto = "thin"
+
+[dev-dependencies]
+tempfile = { workspace = true }

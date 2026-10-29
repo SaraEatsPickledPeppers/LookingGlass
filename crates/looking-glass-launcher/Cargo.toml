@@ -1,0 +1,46 @@
+[package]
+name = "looking-glass-launcher"
+version = "0.1.0"
+edition = "2021"
+description = "CLI launcher for Looking Glass mod manager"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/looking-glass/looking-glass"
+
+[[bin]]
+name = "lg"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive", "env"] }
+looking-glass-mod = { path = "../looking-glass-mod" }
+looking-glass-core = { path = "../looking-glass-core", optional = true }
+anyhow = "1.0"
+directories = "5.0"
+toml = { version = "0.8", features = ["serde", "parse", "display"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+colored = "2.0"
+tabled = "0.16"
+which = "5.0"
+home = "0.5"
+url = "2.5"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
+indicatif = "0.17"
+sha2 = { version = "0.10", features = ["digest"] }
+chrono = { version = "0.4", features = ["serde"] }
+walkdir = "2.5"
+tempfile = "3.8"
+zip = "0.6"
+flate2 = "1.0"
+tar = "0.4"
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+tempfile = "3.8"
+serial_test = "2.0"
+
+[features]
+default = []
+core = ["looking-glass-core"]

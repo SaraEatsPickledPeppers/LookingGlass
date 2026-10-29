@@ -1,0 +1,87 @@
+resource
+Button
+{
+    name newgame
+    title HELLO WORLD
+    rect 100 200 300 50
+    staticshader ui/main/newgame_glow
+    hovershader ui/main/newgame_glow
+    font ui/fonts/main
+    fontscale 1.5
+    fontpos 0 0
+    fontjustify center center
+    fgcolor 1 1 1 1
+}
+
+resource
+Button
+{
+    name loadgame
+    title HELLO WORLD
+    rect 100 270 300 50
+    staticshader ui/main/loadgame_glow
+    hovershader ui/main/loadgame_glow
+    font ui/fonts/main
+    fontscale 1.5
+    fontpos 0 0
+    fontjustify center center
+    fgcolor 1 1 1 1
+}
+
+resource
+Button
+{
+    name settings
+    title HELLO WORLD
+    rect 100 340 300 50
+    staticshader ui/main/settings_glow
+    hovershader ui/main/settings_glow
+    font ui/fonts/main
+    fontscale 1.5
+    fontpos 0 0
+    fontjustify center center
+    fgcolor 1 1 1 1
+}
+
+resource
+Button
+{
+    name quit
+    title HELLO WORLD
+    rect 100 410 300 50
+    staticshader ui/main/quit_glow
+    hovershader ui/main/quit_glow
+    font ui/fonts/main
+    fontscale 1.5
+    fontpos 0 0
+    fontjustify center center
+    fgcolor 1 1 1 1
+}
+
+resource
+Button
+{
+    name backtogame
+    title HELLO WORLD
+    rect 100 480 300 50
+    staticshader ui/main/backtogame_glow
+    hovershader ui/main/backtogame_glow
+    font ui/fonts/main
+    fontscale 1.5
+    fontpos 0 0
+    fontjustify center center
+    fgcolor 1 1 1 1
+}
+
+resource
+Label
+{
+    name title
+    title HELLO WORLD MOD
+    rect 100 50 400 100
+    font ui/fonts/main
+    fontscale 2.0
+    fontpos 0 0
+    fontjustify center center
+    fgcolor 1 1 1 1
+}
