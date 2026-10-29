@@ -2,11 +2,12 @@
 
 use anyhow::{Context, Result};
 use looking_glass_mod::{ModDiscovery, InstalledMod};
+use looking_glass_config::{Config, paths};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::collections::HashMap;
 
-use crate::profiles::{ModProfile, LauncherConfig};
+use crate::profiles::{ModProfile, ProfileManager};
 
 /// Launch options
 #[derive(Debug, Clone)]
@@ -25,12 +26,16 @@ pub struct LaunchOptions {
 
 /// Game launcher with mod injection support
 pub struct GameLauncher {
-    config: LauncherConfig,
+    config: Config,
+    config_path_override: Option<PathBuf>,
+    profile_manager: ProfileManager,
 }
 
 impl GameLauncher {
-    pub fn new(config: LauncherConfig) -> Self {
-        Self { config }
+    pub fn new(config: Config, config_path_override: Option<PathBuf>) -> Self {
+        let config_dir = config_path_override.as_ref().map(|p| p.clone()).unwrap_or_else(|| paths::config_dir());
+        let profile_manager = ProfileManager::new(config_dir).unwrap_or_else(|_| ProfileManager::new(paths::config_dir()).unwrap());
+        Self { config, config_path_override, profile_manager }
     }
 
     /// Build launch options from profile and CLI args
@@ -44,7 +49,7 @@ impl GameLauncher {
         reshade_path_override: Option<PathBuf>,
     ) -> Result<LaunchOptions> {
         // Determine game path
-        let game_path = self.config.game_path.clone()
+        let game_path = self.config.game.data_path.clone()
             .or_else(|| {
                 // Try to find the looking-glass binary in target/release
                 let candidates = [
@@ -66,20 +71,16 @@ impl GameLauncher {
                     })
                     .find(|p| p.exists())
             })
-            .context("Game binary not found. Build with 'cargo build --release' or set game_path in config")?;
+            .context("Game binary not found. Build with 'cargo build --release' or set game.data_path in config")?;
 
-        // Determine mod directory
-        let mod_directory = self.config.mod_directory.clone()
+        // Determine mod directory (use first mod dir from config, or default)
+        let mod_directory = self.config.mods.mod_dirs.first().cloned()
             .unwrap_or_else(|| {
-                dirs::data_dir()
-                    .unwrap_or_else(|| PathBuf::from("."))
-                    .join("looking-glass")
-                    .join("mods")
+                paths::data_dir().join("mods")
             });
 
         // Determine ReShade path
         let reshade_path = reshade_path_override
-            .or(self.config.reshade_path.clone())
             .or_else(|| {
                 // Check common ReShade locations
                 let candidates = [
@@ -91,7 +92,7 @@ impl GameLauncher {
             });
 
         // Determine data directory
-        let data_directory = self.config.data_directory.clone();
+        let data_directory = self.config.game.data_path.clone();
 
         // Discover mods
         // ModDiscovery expects the base directory (parent of "mods"), not the game-specific mods dir
@@ -103,16 +104,17 @@ impl GameLauncher {
             discovery.discover().context("Failed to discover mods")?
         };
 
-        // Get profile
+        // Get profile from profile manager
         let profile = if profile_name == "vanilla" || no_mods {
             ModProfile::vanilla()
-        } else if let Some(p) = self.config.profiles.get(profile_name) {
+        } else if let Some(p) = self.profile_manager.get_profile(profile_name) {
             p.clone()
         } else {
             // Try to find by case-insensitive match
-            self.config.profiles.iter()
-                .find(|(k, _)| k.eq_ignore_ascii_case(profile_name))
-                .map(|(_, v)| v.clone())
+            self.profile_manager.list_profiles()
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(profile_name))
+                .map(|p| (*p).clone())
                 .unwrap_or_else(|| ModProfile::new(profile_name.to_string(), vec![]))
         };
 
@@ -242,18 +244,15 @@ impl GameLauncher {
     }
 
     /// Install a mod from an archive file
-    pub fn install_mod(&self, archive_path: &Path, game_id: &str) -> Result<InstalledMod> {
-        let mod_directory = self.config.mod_directory.clone()
+    pub fn install_mod(&self, archive_path: &Path) -> Result<InstalledMod> {
+        let mod_directory = self.config.mods.mod_dirs.first().cloned()
             .unwrap_or_else(|| {
-                dirs::data_dir()
-                    .unwrap_or_else(|| PathBuf::from("."))
-                    .join("looking-glass")
-                    .join("mods")
+                paths::data_dir().join("mods")
             });
 
         // ModDiscovery expects the base directory (parent of "mods"), not the game-specific mods dir
         let base_dir = mod_directory.parent().unwrap_or(&mod_directory).to_path_buf();
-        let discovery = ModDiscovery::new(base_dir, game_id.to_string());
+        let discovery = ModDiscovery::new(base_dir, "Alice".to_string());
         let installed_mod = discovery.install_from_archive(archive_path)
             .context("Failed to install mod")?;
 
@@ -263,7 +262,7 @@ impl GameLauncher {
 
     /// List available profiles
     pub fn list_profiles(&self) -> Vec<&ModProfile> {
-        self.config.profiles.values().collect()
+        self.profile_manager.list_profiles()
     }
 }
 

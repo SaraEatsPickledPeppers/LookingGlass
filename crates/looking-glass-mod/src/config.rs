@@ -36,7 +36,7 @@ pub struct GameConfig {
     pub disabled_mods: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default = "default_auto_update")]
     pub auto_update: bool,
@@ -46,6 +46,17 @@ pub struct Settings {
     pub log_level: String,
     #[serde(default)]
     pub experimental_features: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            auto_update: default_auto_update(),
+            check_updates_on_startup: default_check_updates(),
+            log_level: default_log_level(),
+            experimental_features: false,
+        }
+    }
 }
 
 fn default_auto_update() -> bool {

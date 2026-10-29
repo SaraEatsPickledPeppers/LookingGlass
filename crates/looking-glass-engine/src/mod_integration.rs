@@ -2,11 +2,12 @@
 //! Provides mod loading, asset overrides, input hooks, and runtime hooks
 
 use crate::preferences::Preferences;
+use looking_glass_config::{ConfigManager, ConfigLayer};
 use looking_glass_mod::{
-    config::{ConfigManager, GlobalConfig, GameConfig},
     discovery::ModDiscovery,
     loader::{AssetOverrideResult, ModApi, ModContext, ModLoader, ModRegistry, InputHook, RuntimeHook, ButtonOption, KeyCode, KeyModifiers, GamepadButton, ButtonState, UiPatch, WidgetDef},
     manifest::{GameTarget, AssetType, InstalledMod, ModManifest, ModEntryPoints, LoadOrder},
+    config::resolve_xdg_paths,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -27,19 +28,10 @@ impl ModIntegration {
     /// Create a new ModIntegration with default settings
     pub fn new(game_version: String) -> Result<Self> {
         let config_manager = ConfigManager::new()?;
-        let merged_config = config_manager.get_merged();
+        let config = config_manager.get_config();
 
         // Get mods directory from config or use default
-        let game_config = merged_config.game_configs.get("Alice").cloned().unwrap_or_else(|| {
-            GameConfig {
-                game_target: GameTarget::Alice,
-                mods_dir: None,
-                enabled_mods: Vec::new(),
-                disabled_mods: Vec::new(),
-            }
-        });
-
-        let mods_dir = game_config.mods_dir.clone();
+        let mods_dir = config.mods.mod_dirs.first().cloned();
 
         // Use XDG data directory as fallback
         let xdg = looking_glass_mod::config::resolve_xdg_paths();
@@ -143,6 +135,14 @@ impl ModIntegration {
             self.registry.unregister(&mod_id)?;
         }
 
+        // Clear shared registries (asset overrides, UI patches, config validators, hooks)
+        // since they persist across unregistration
+        self.registry.get_asset_registry().lock().unwrap().clear();
+        self.registry.get_ui_registry().lock().unwrap().clear();
+        self.registry.get_config_registry().lock().unwrap().clear();
+        self.registry.get_input_hooks().lock().unwrap().clear();
+        self.registry.get_runtime_hooks().lock().unwrap().clear();
+
         // Check for mod injection via environment variables (from launcher)
         let env_mods = self.get_env_mods();
 
@@ -160,30 +160,26 @@ impl ModIntegration {
             self.filter_mods_by_env(installed_mods, &env_mods)?
         } else {
             // Use config-based mod selection
-            let merged_config = self.config_manager.get_merged();
-            let game_config = merged_config.game_configs.get("Alice");
-            let enabled_mods: Vec<String> = game_config
-                .map(|gc| gc.enabled_mods.clone())
-                .unwrap_or_default();
-            let disabled_mods: Vec<String> = game_config
-                .map(|gc| gc.disabled_mods.clone())
-                .unwrap_or_default();
+            let config = self.config_manager.get_config();
 
-            tracing::info!("Config enabled_mods: {:?}", enabled_mods);
-            tracing::info!("Config disabled_mods: {:?}", disabled_mods);
+            tracing::info!("Config per-mod settings: {:?}", config.mods.mods);
 
             installed_mods
                 .into_iter()
                 .filter(|m| {
-                    if !enabled_mods.is_empty() && !enabled_mods.contains(&m.manifest.id) {
-                        tracing::info!("  Skipping mod {} (not in enabled_mods)", m.manifest.id);
+                    // Check per-mod config for enabled state
+                    if let Some(mod_config) = config.mods.mods.get(&m.manifest.id) {
+                        if !mod_config.enabled {
+                            tracing::info!("  Skipping mod {} (disabled in config)", m.manifest.id);
+                            return false;
+                        }
+                    }
+                    // Also check the mod's own enabled flag
+                    if !m.enabled {
+                        tracing::info!("  Skipping mod {} (mod not enabled)", m.manifest.id);
                         return false;
                     }
-                    if disabled_mods.contains(&m.manifest.id) {
-                        tracing::info!("  Skipping mod {} (in disabled_mods)", m.manifest.id);
-                        return false;
-                    }
-                    m.enabled
+                    true
                 })
                 .collect()
         };
@@ -334,23 +330,23 @@ impl ModIntegration {
 
     /// Get mod config value for a specific mod
     pub fn get_mod_config(&self, mod_id: &str) -> Option<serde_json::Value> {
-        self.config_manager.get_mod_config_value(mod_id).cloned()
+        self.config_manager.get_mod_config_value(mod_id)
     }
 
     /// Set mod config value
     pub fn set_mod_config(&mut self, mod_id: &str, config: serde_json::Value) -> Result<()> {
-        self.config_manager.set_mod_config(mod_id, config)
+        self.config_manager.set_mod_config(mod_id, config, ConfigLayer::Local)
     }
 
     /// Enable a mod
     pub fn enable_mod(&mut self, mod_id: &str) -> Result<()> {
-        self.config_manager.set_mod_enabled(mod_id, true)?;
+        self.config_manager.set_mod_enabled(mod_id, true, ConfigLayer::Local)?;
         self.reload_mods()
     }
 
     /// Disable a mod
     pub fn disable_mod(&mut self, mod_id: &str) -> Result<()> {
-        self.config_manager.set_mod_enabled(mod_id, false)?;
+        self.config_manager.set_mod_enabled(mod_id, false, ConfigLayer::Local)?;
         self.reload_mods()
     }
 
@@ -376,7 +372,7 @@ impl ModIntegration {
     pub fn set_mods_dir(&mut self, path: PathBuf) -> Result<()> {
         self.mods_dir = Some(path.clone());
         self.discovery = ModDiscovery::new(path.clone(), "Alice".to_string());
-        self.config_manager.set_game_mods_dir("Alice", path)?;
+        self.config_manager.set_game_mods_dir("Alice", path, ConfigLayer::Local)?;
         self.reload_mods()
     }
 

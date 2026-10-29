@@ -40,6 +40,10 @@ impl AssetRegistry {
     pub fn get_overrides(&self, target: &str) -> Option<&Vec<AssetOverrideEntry>> {
         self.overrides.get(target)
     }
+
+    pub fn clear(&mut self) {
+        self.overrides.clear();
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -119,6 +123,10 @@ impl UiRegistry {
     pub fn get_patches(&self) -> &[UiPatch] {
         &self.patches
     }
+
+    pub fn clear(&mut self) {
+        self.patches.clear();
+    }
 }
 
 #[derive(Default)]
@@ -154,6 +162,11 @@ impl ConfigRegistry {
 
     pub fn get_value(&self, key: &str) -> Option<&serde_json::Value> {
         self.values.get(key)
+    }
+
+    pub fn clear(&mut self) {
+        self.validators.clear();
+        self.values.clear();
     }
 
     pub async fn validate_all(&self) -> Result<()> {

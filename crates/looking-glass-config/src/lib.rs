@@ -1,5 +1,5 @@
 mod migration;
-mod paths;
+pub mod paths;
 
 pub use migration::{migrate_config, ConfigVersion, CONFIG_VERSION};
 pub use paths::{
@@ -96,6 +96,20 @@ pub struct PlatformConfig {
     pub proton_version: String,
 }
 
+/// Per-mod configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct ModEntryConfig {
+    /// Whether this mod is enabled
+    pub enabled: bool,
+    /// Mod-specific configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config: Option<serde_json::Value>,
+    /// Load priority (higher = loaded first)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load_priority: Option<i32>,
+}
+
 /// Mod configuration section
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -108,6 +122,9 @@ pub struct ModConfig {
     pub check_updates: bool,
     /// Default mod profile name
     pub default_profile: String,
+    /// Per-mod configuration (enabled state, custom config, priority)
+    #[serde(default)]
+    pub mods: std::collections::HashMap<String, ModEntryConfig>,
 }
 
 /// Save configuration section
@@ -173,6 +190,7 @@ impl Config {
                 auto_enable_new: false,
                 check_updates: true,
                 default_profile: "default".to_string(),
+                mods: std::collections::HashMap::new(),
             },
             saves: SaveConfig {
                 backup_dir: Some(paths::save_dir().join("backups")),
@@ -232,6 +250,8 @@ impl Config {
         if !other.mods.default_profile.is_empty() {
             self.mods.default_profile = other.mods.default_profile;
         }
+        // Merge per-mod config (other layer takes precedence)
+        self.mods.mods.extend(other.mods.mods.into_iter());
 
         // Merge save config
         if other.saves.backup_dir.is_some() {
@@ -502,7 +522,36 @@ impl ConfigManager {
 
     /// Get the current resolved configuration
     pub fn get_config(&self) -> Config {
-        self.layered.read().resolve()
+        let mut config = self.layered.read().resolve();
+
+        // Extract per-mod config from layered config dotted paths
+        // and populate the ModConfig.mods HashMap
+        let layered = self.layered.read();
+        let mut mods_map = std::collections::HashMap::new();
+
+        // Get all keys that match "mods.mods.*.enabled" or "mods.mods.*.config" or "mods.mods.*.load_priority"
+        if let Some(value) = layered.get("mods.mods") {
+            if let Some(obj) = value.as_object() {
+                for (mod_id, mod_value) in obj {
+                    if let Some(mod_obj) = mod_value.as_object() {
+                        let mut entry = ModEntryConfig::default();
+                        if let Some(enabled) = mod_obj.get("enabled").and_then(|v| v.as_bool()) {
+                            entry.enabled = enabled;
+                        }
+                        if let Some(config_val) = mod_obj.get("config") {
+                            entry.config = Some(config_val.clone());
+                        }
+                        if let Some(priority) = mod_obj.get("load_priority").and_then(|v| v.as_i64()) {
+                            entry.load_priority = Some(priority as i32);
+                        }
+                        mods_map.insert(mod_id.clone(), entry);
+                    }
+                }
+            }
+        }
+
+        config.mods.mods = mods_map;
+        config
     }
 
     /// Get a value by key
@@ -531,6 +580,27 @@ impl ConfigManager {
         *self.layered.write() = new_layered;
         info!("Configuration reloaded");
         Ok(())
+    }
+
+    // Mod-specific config methods (for Alice-only scope)
+    /// Get a mod-specific config value
+    pub fn get_mod_config_value(&self, mod_id: &str) -> Option<Value> {
+        self.get(&format!("mods.mods.{}.config", mod_id))
+    }
+
+    /// Set a mod-specific config value
+    pub fn set_mod_config(&self, mod_id: &str, config: Value, layer: ConfigLayer) -> Result<()> {
+        self.set(&format!("mods.mods.{}.config", mod_id), config, layer)
+    }
+
+    /// Enable or disable a mod
+    pub fn set_mod_enabled(&self, mod_id: &str, enabled: bool, layer: ConfigLayer) -> Result<()> {
+        self.set(&format!("mods.mods.{}.enabled", mod_id), Value::Bool(enabled), layer)
+    }
+
+    /// Set the mods directory for a game (simplified for Alice-only)
+    pub fn set_game_mods_dir(&self, _game_id: &str, path: PathBuf, layer: ConfigLayer) -> Result<()> {
+        self.set("mods.mod_dirs", Value::Array(vec![Value::String(path.to_string_lossy().to_string())]), layer)
     }
 }
 
