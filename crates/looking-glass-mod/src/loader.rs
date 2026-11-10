@@ -1,10 +1,12 @@
-use crate::manifest::{AssetMapping, AssetType, GameTarget, InstalledMod, ModManifest};
+use crate::manifest::{AssetMapping, AssetType, GameTarget, InstalledMod, ModManifest, PermissionSet};
+use crate::{profile_asset_override, profile_input_hook, profile_runtime_hook, profile_frame, profiling::{is_profiling_enabled, record_ui_patch}};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 
 // ModContext doesn't derive Serialize/Deserialize because it contains
 // registry types with Arc<Mutex<...>> which can't be serialized.
@@ -224,19 +226,38 @@ impl ModApi {
         condition: Option<String>,
         priority: i32,
     ) {
-        let entry = AssetOverrideEntry {
-            source,
-            asset_type,
-            condition,
-            priority,
-        };
-        self.asset_registry
-            .lock()
-            .unwrap()
-            .register_override(target, entry);
+        if is_profiling_enabled() {
+            // We don't know the mod_id here, but we can track the total time
+            let _guard = crate::profiling::ProfilingGuard::new("unknown", crate::profiling::ProfilingKind::AssetOverride);
+            let entry = AssetOverrideEntry {
+                source,
+                asset_type,
+                condition,
+                priority,
+            };
+            self.asset_registry
+                .lock()
+                .unwrap()
+                .register_override(target, entry);
+        } else {
+            let entry = AssetOverrideEntry {
+                source,
+                asset_type,
+                condition,
+                priority,
+            };
+            self.asset_registry
+                .lock()
+                .unwrap()
+                .register_override(target, entry);
+        }
     }
 
     pub fn register_ui_patch(&self, patch: UiPatch) {
+        if is_profiling_enabled() {
+            // We don't know the mod_id here, but we can track the total count
+            record_ui_patch("unknown");
+        }
         self.ui_registry.lock().unwrap().register_patch(patch);
     }
 
@@ -411,11 +432,46 @@ pub trait Mod: Send + Sync {
 
 #[async_trait]
 pub trait ModLoader: Send + Sync {
-    async fn load_mod(&self, mod_dir: &PathBuf) -> Result<Box<dyn Mod>>;
+    /// Load a mod with the given permissions (preferred method)
+    async fn load_mod_with_permissions(
+        &self,
+        mod_dir: &PathBuf,
+        permissions: &PermissionSet,
+    ) -> Result<Box<dyn Mod + Send + Sync + 'static>>;
+
+    /// Load a mod - will read permissions from manifest (legacy method)
+    async fn load_mod(&self, mod_dir: &PathBuf) -> Result<Box<dyn Mod + Send + Sync + 'static>> {
+        // Default implementation: load manifest and extract permissions
+        let manifest = crate::manifest::ModManifest::load_from_file(&mod_dir.join("mod.toml")).or_else(|_| {
+            crate::manifest::ModManifest::load_from_file(&mod_dir.join("mod.json"))
+        })?;
+
+        let mut permission_set = PermissionSet::default();
+        for perm in &manifest.permissions.required {
+            permission_set.grant(perm.clone());
+        }
+        for perm in &manifest.permissions.optional {
+            permission_set.grant(perm.clone());
+        }
+        for perm in &manifest.permissions.not_needed {
+            permission_set.deny(perm.clone());
+        }
+
+        self.load_mod_with_permissions(mod_dir, &permission_set).await
+    }
 
     async fn unload_mod(&self, mod_id: &str) -> Result<()>;
 
     fn supported_game_targets(&self) -> Vec<GameTarget>;
+}
+
+/// State that can be preserved across mod reloads
+#[derive(Debug, Default, Clone)]
+pub struct ModState {
+    /// Config values registered by the mod
+    pub config_values: HashMap<String, serde_json::Value>,
+    /// Last reload timestamp
+    pub last_reload: Option<Instant>,
 }
 
 pub struct ModRegistry {
@@ -426,6 +482,10 @@ pub struct ModRegistry {
     config_registry: Arc<std::sync::Mutex<ConfigRegistry>>,
     input_hooks: Arc<std::sync::Mutex<Vec<Box<dyn InputHook + Send + Sync>>>>,
     runtime_hooks: Arc<std::sync::Mutex<Vec<Box<dyn RuntimeHook + Send + Sync>>>>,
+    /// Track mod directories for hot-reload
+    mod_dirs: HashMap<String, PathBuf>,
+    /// Preserved mod state across reloads
+    mod_states: HashMap<String, ModState>,
 }
 
 impl ModRegistry {
@@ -444,15 +504,28 @@ impl ModRegistry {
             config_registry,
             input_hooks,
             runtime_hooks,
+            mod_dirs: HashMap::new(),
+            mod_states: HashMap::new(),
         }
     }
 
-    pub fn register(&mut self, mut mod_instance: Box<dyn Mod>) -> Result<()> {
+    pub fn register(&mut self, mut mod_instance: Box<dyn Mod>, mod_dir: Option<PathBuf>) -> Result<()> {
         let mod_id = mod_instance.manifest().id.clone();
 
-        // Initialize the mod
+        // Track mod directory for hot-reload
+        if let Some(dir) = mod_dir {
+            self.mod_dirs.insert(mod_id.clone(), dir);
+        }
+
+        // Initialize the mod with profiling
         let context = self.create_context(&mod_id)?;
-        futures::executor::block_on(mod_instance.initialize(&context))?;
+        let init_result = if is_profiling_enabled() {
+            let _guard = crate::profiling::ProfilingGuard::new(&mod_id, crate::profiling::ProfilingKind::Init);
+            futures::executor::block_on(mod_instance.initialize(&context))
+        } else {
+            futures::executor::block_on(mod_instance.initialize(&context))
+        };
+        init_result?;
 
         // Register entry points
         self.register_entry_points(&mut *mod_instance)?;
@@ -460,6 +533,72 @@ impl ModRegistry {
         self.mods.insert(mod_id.clone(), mod_instance);
         self.load_order.push(mod_id);
 
+        Ok(())
+    }
+
+    /// Reload a specific mod by unloading and reloading it
+    /// Preserves config state across the reload
+    pub async fn reload_mod(
+        &mut self,
+        mod_id: &str,
+        loader: &dyn ModLoader,
+    ) -> Result<()> {
+        // Get the mod directory
+        let mod_dir = self.mod_dirs.get(mod_id).cloned()
+            .context("Mod directory not found for hot-reload")?;
+
+        // Preserve config state before unloading
+        let mut preserved_state = ModState::default();
+        if let Some(mod_instance) = self.mods.get(mod_id) {
+            // Get config values from config registry that belong to this mod
+            let config_registry = self.config_registry.lock().unwrap();
+            for (key, value) in &config_registry.values {
+                if key.starts_with(&format!("{}_", mod_id)) || key == mod_id {
+                    preserved_state.config_values.insert(key.clone(), value.clone());
+                }
+            }
+        }
+
+        // Unload the old mod (calls shutdown)
+        self.unregister(mod_id)?;
+
+        // Clear any asset overrides, UI patches, etc. registered by this mod
+        // Note: This is a simplified approach - in practice we'd track per-mod registrations
+        self.asset_registry.lock().unwrap().clear();
+        self.ui_registry.lock().unwrap().clear();
+        // Don't clear config registry - we'll restore values
+        self.input_hooks.lock().unwrap().clear();
+        self.runtime_hooks.lock().unwrap().clear();
+
+        // Reload the mod using the loader
+        let mod_instance = loader.load_mod(&mod_dir).await?;
+
+        // Re-register the mod (this will re-initialize it)
+        self.register(mod_instance, Some(mod_dir))?;
+
+        // Restore preserved config state
+        {
+            let mut config_registry = self.config_registry.lock().unwrap();
+            for (key, value) in &preserved_state.config_values {
+                config_registry.set_value(key.clone(), value.clone());
+            }
+        }
+
+        // Update mod state
+        if let Some(state) = self.mod_states.get_mut(mod_id) {
+            state.last_reload = Some(Instant::now());
+            state.config_values = preserved_state.config_values;
+        } else {
+            self.mod_states.insert(mod_id.to_string(), ModState {
+                config_values: preserved_state.config_values,
+                last_reload: Some(Instant::now()),
+            });
+        }
+
+        // Re-sort load order
+        self.sort_load_order()?;
+
+        tracing::info!("Hot-reloaded mod: {}", mod_id);
         Ok(())
     }
 
@@ -516,11 +655,20 @@ impl ModRegistry {
         self.mods.get(mod_id).map(|m| m.as_ref())
     }
 
+    /// Get the mod directory for a given mod ID (for hot-reload)
+    pub fn get_mod_dir(&self, mod_id: &str) -> Option<&PathBuf> {
+        self.mod_dirs.get(mod_id)
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &dyn Mod> {
         self.load_order.iter().filter_map(|id| self.mods.get(id).map(|m| m.as_ref()))
     }
 
     pub fn try_override_asset(&self, target: &str) -> Option<AssetOverrideResult> {
+        if is_profiling_enabled() {
+            let _guard = crate::profiling::ProfilingGuard::new("unknown", crate::profiling::ProfilingKind::AssetOverride);
+        }
+
         let registry = self.asset_registry.lock().unwrap();
         let overrides = registry.get_overrides(target)?;
 
@@ -551,6 +699,10 @@ impl ModRegistry {
         prompt_id: &str,
         options: &[ButtonOption],
     ) -> Option<usize> {
+        if is_profiling_enabled() {
+            let _guard = crate::profiling::ProfilingGuard::new("unknown", crate::profiling::ProfilingKind::InputHook);
+        }
+
         let hooks = self.input_hooks.lock().unwrap();
 
         for hook in hooks.iter() {
@@ -563,6 +715,10 @@ impl ModRegistry {
     }
 
     pub async fn update(&self, delta_time: f32) {
+        if is_profiling_enabled() {
+            let _guard = crate::profiling::ProfilingGuard::new("unknown", crate::profiling::ProfilingKind::RuntimeHook);
+        }
+
         let hooks = self.runtime_hooks.lock().unwrap();
 
         for hook in hooks.iter() {

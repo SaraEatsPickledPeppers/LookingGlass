@@ -4,7 +4,7 @@ version = "1.0.0"
 manifest_version = 2
 author = "Looking Glass Team"
 description = "Adds a debug menu with level select, noclip, god mode, item spawning, and developer tools"
-game_target = "Alice"
+game_target = "alice"
 dependencies = []
 load_order = { before = [], after = [] }
 entry_points = {

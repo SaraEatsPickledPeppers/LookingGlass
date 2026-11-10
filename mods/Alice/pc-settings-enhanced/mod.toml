@@ -1,0 +1,854 @@
+id = "pc-settings-enhanced"
+name = "PC Settings Enhanced"
+version = "1.0.0"
+manifest_version = 2
+author = "Looking Glass Team"
+description = "Comprehensive PC port settings: graphics, input, audio, gameplay, and accessibility options"
+game_target = "alice"
+dependencies = ["options-menu-extender"]
+load_order = { before = [], after = ["options-menu-extender"] }
+entry_points = {
+    ui_patch = "patches/pc_settings.json",
+    config_inject = "config_inject.rs"
+}
+config_schema = {
+    "type": "object",
+    "properties": {
+        "graphics": {
+            "type": "object",
+            "properties": {
+                "resolution": {
+                    "type": "string",
+                    "enum": ["auto", "1920x1080", "2560x1440", "3840x2160", "1280x720", "1600x900", "2048x1152", "3440x1440", "2560x1080"],
+                    "default": "auto",
+                    "description": "Display resolution"
+                },
+                "display_mode": {
+                    "type": "string",
+                    "enum": ["fullscreen", "borderless", "windowed"],
+                    "default": "borderless",
+                    "description": "Display mode"
+                },
+                "vsync": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Vertical synchronization"
+                },
+                "max_fps": {
+                    "type": "integer",
+                    "minimum": 30,
+                    "maximum": 500,
+                    "default": 144,
+                    "description": "Maximum FPS limit (0 = unlimited)"
+                },
+                "fov": {
+                    "type": "number",
+                    "minimum": 60,
+                    "maximum": 130,
+                    "default": 90,
+                    "description": "Field of view"
+                },
+                "render_scale": {
+                    "type": "number",
+                    "minimum": 0.25,
+                    "maximum": 2.0,
+                    "default": 1.0,
+                    "description": "Render resolution scale"
+                },
+                "texture_quality": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high", "ultra"],
+                    "default": "high",
+                    "description": "Texture quality"
+                },
+                "shadow_quality": {
+                    "type": "string",
+                    "enum": ["off", "low", "medium", "high", "ultra"],
+                    "default": "medium",
+                    "description": "Shadow quality"
+                },
+                "anti_aliasing": {
+                    "type": "string",
+                    "enum": ["off", "fxaa", "taa", "msaa2x", "msaa4x", "msaa8x"],
+                    "default": "taa",
+                    "description": "Anti-aliasing mode"
+                },
+                "anisotropic_filtering": {
+                    "type": "string",
+                    "enum": ["off", "2x", "4x", "8x", "16x"],
+                    "default": "16x",
+                    "description": "Anisotropic filtering level"
+                },
+                "particle_quality": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high", "ultra"],
+                    "default": "high",
+                    "description": "Particle effect quality"
+                },
+                "water_quality": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high", "ultra"],
+                    "default": "high",
+                    "description": "Water rendering quality"
+                },
+                "lighting_quality": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high", "ultra"],
+                    "default": "high",
+                    "description": "Lighting quality"
+                },
+                "post_processing": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable post-processing effects"
+                },
+                "motion_blur": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable motion blur"
+                },
+                "depth_of_field": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable depth of field"
+                },
+                "bloom": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable bloom effect"
+                },
+                "ambient_occlusion": {
+                    "type": "string",
+                    "enum": ["off", "ssao", "hbao", "hdao"],
+                    "default": "ssao",
+                    "description": "Ambient occlusion mode"
+                },
+                "reflection_quality": {
+                    "type": "string",
+                    "enum": ["off", "low", "medium", "high"],
+                    "default": "medium",
+                    "description": "Reflection quality"
+                },
+                "gamma": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 2.0,
+                    "default": 1.0,
+                    "description": "Gamma correction"
+                },
+                "brightness": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 1.5,
+                    "default": 1.0,
+                    "description": "Brightness adjustment"
+                },
+                "contrast": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 1.5,
+                    "default": 1.0,
+                    "description": "Contrast adjustment"
+                }
+            }
+        },
+        "input": {
+            "type": "object",
+            "properties": {
+                "mouse_sensitivity": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 10.0,
+                    "default": 1.0,
+                    "description": "Mouse sensitivity multiplier"
+                },
+                "mouse_acceleration": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable mouse acceleration"
+                },
+                "raw_input": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Use raw mouse input (bypasses OS acceleration)"
+                },
+                "invert_mouse_y": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Invert mouse Y axis"
+                },
+                "controller_enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable controller support"
+                },
+                "controller_sensitivity": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 5.0,
+                    "default": 1.0,
+                    "description": "Controller stick sensitivity"
+                },
+                "controller_deadzone": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 0.5,
+                    "default": 0.15,
+                    "description": "Controller stick deadzone"
+                },
+                "controller_invert_y": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Invert controller Y axis"
+                },
+                "controller_vibration": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable controller vibration"
+                },
+                "controller_vibration_strength": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 0.7,
+                    "description": "Controller vibration strength"
+                },
+                "keyboard_layout": {
+                    "type": "string",
+                    "enum": ["qwerty", "azerty", "qwertz", "dvorak", "colemak"],
+                    "default": "qwerty",
+                    "description": "Keyboard layout for key hints"
+                },
+                "enable_steam_input": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable Steam Input API support"
+                },
+                "input_buffering": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable input buffering for responsive controls"
+                },
+                "key_repeat_delay": {
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 1000,
+                    "default": 250,
+                    "description": "Key repeat delay in ms"
+                },
+                "key_repeat_rate": {
+                    "type": "integer",
+                    "minimum": 10,
+                    "maximum": 100,
+                    "default": 30,
+                    "description": "Key repeat rate per second"
+                }
+            }
+        },
+        "audio": {
+            "type": "object",
+            "properties": {
+                "master_volume": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 1.0,
+                    "description": "Master volume"
+                },
+                "music_volume": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 0.8,
+                    "description": "Music volume"
+                },
+                "sfx_volume": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 1.0,
+                    "description": "Sound effects volume"
+                },
+                "voice_volume": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 1.0,
+                    "description": "Voice/dialogue volume"
+                },
+                "ambient_volume": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 0.7,
+                    "description": "Ambient/environment volume"
+                },
+                "audio_device": {
+                    "type": "string",
+                    "default": "default",
+                    "description": "Audio output device (empty = system default)"
+                },
+                "audio_backend": {
+                    "type": "string",
+                    "enum": ["auto", "pipewire", "pulseaudio", "alsa", "jack"],
+                    "default": "auto",
+                    "description": "Audio backend"
+                },
+                "sample_rate": {
+                    "type": "integer",
+                    "enum": [44100, 48000, 88200, 96000, 192000],
+                    "default": 48000,
+                    "description": "Audio sample rate"
+                },
+                "buffer_size": {
+                    "type": "integer",
+                    "enum": [256, 512, 1024, 2048, 4096],
+                    "default": 1024,
+                    "description": "Audio buffer size"
+                },
+                "enable_hrtf": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable HRTF 3D audio"
+                },
+                "enable_reverb": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable environmental reverb"
+                },
+                "dynamic_range": {
+                    "type": "string",
+                    "enum": ["full", "reduced", "compressed"],
+                    "default": "full",
+                    "description": "Dynamic range compression"
+                },
+                "mute_on_focus_loss": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Mute audio when window loses focus"
+                }
+            }
+        },
+        "gameplay": {
+            "type": "object",
+            "properties": {
+                "difficulty": {
+                    "type": "string",
+                    "enum": ["easy", "normal", "hard", "nightmare"],
+                    "default": "normal",
+                    "description": "Game difficulty"
+                },
+                "auto_save": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable auto-save on level transitions"
+                },
+                "auto_save_interval": {
+                    "type": "integer",
+                    "minimum": 30,
+                    "maximum": 600,
+                    "default": 300,
+                    "description": "Auto-save interval in seconds"
+                },
+                "quick_save_enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable quick save (F5)"
+                },
+                "quick_load_enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable quick load (F9)"
+                },
+                "show_hints": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show gameplay hints"
+                },
+                "show_objectives": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show current objectives"
+                },
+                "skip_cinematic": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Allow skipping cinematics"
+                },
+                "skip_dialogue": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Allow skipping dialogue"
+                },
+                "camera_distance": {
+                    "type": "number",
+                    "minimum": 1.0,
+                    "maximum": 10.0,
+                    "default": 3.5,
+                    "description": "Third-person camera distance"
+                },
+                "camera_sensitivity": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 5.0,
+                    "default": 1.0,
+                    "description": "Camera rotation sensitivity"
+                },
+                "camera_invert_x": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Invert camera X axis"
+                },
+                "camera_invert_y": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Invert camera Y axis"
+                },
+                "camera_collision": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable camera collision with walls"
+                },
+                "camera_shake": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable camera shake effects"
+                },
+                "weapon_sway": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable weapon sway animation"
+                },
+                "crosshair_enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show crosshair"
+                },
+                "crosshair_style": {
+                    "type": "string",
+                    "enum": ["default", "dot", "circle", "cross", "dynamic"],
+                    "default": "default",
+                    "description": "Crosshair style"
+                },
+                "crosshair_color": {
+                    "type": "string",
+                    "default": "#FFFFFF",
+                    "description": "Crosshair color (hex)"
+                }
+            }
+        },
+        "hud": {
+            "type": "object",
+            "properties": {
+                "hud_scale": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 2.0,
+                    "default": 1.0,
+                    "description": "HUD scale multiplier"
+                },
+                "hud_opacity": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 1.0,
+                    "description": "HUD opacity"
+                },
+                "show_health": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show health bar"
+                },
+                "show_will": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show will meter"
+                },
+                "show_ammo": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show ammo/weapon count"
+                },
+                "show_weapon_wheel": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show weapon wheel on weapon switch"
+                },
+                "show_minimap": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Show minimap (if available)"
+                },
+                "show_compass": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Show compass"
+                },
+                "show_fps": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Show FPS counter"
+                },
+                "show_frame_time": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Show frame time graph"
+                },
+                "show_coordinates": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Show player coordinates"
+                },
+                "show_speed": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Show movement speed"
+                },
+                "hud_color_scheme": {
+                    "type": "string",
+                    "enum": ["original", "high_contrast", "colorblind_protanopia", "colorblind_deuteranopia", "colorblind_tritanopia", "custom"],
+                    "default": "original",
+                    "description": "HUD color scheme for accessibility"
+                },
+                "damage_numbers": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show damage numbers"
+                },
+                "combo_counter": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Show combo counter"
+                }
+            }
+        },
+        "accessibility": {
+            "type": "object",
+            "properties": {
+                "subtitles_enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable subtitles"
+                },
+                "subtitle_size": {
+                    "type": "string",
+                    "enum": ["small", "medium", "large", "extra_large"],
+                    "default": "medium",
+                    "description": "Subtitle text size"
+                },
+                "subtitle_background": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Subtitle background opacity"
+                },
+                "subtitle_speaker_names": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show speaker names in subtitles"
+                },
+                "closed_captions": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable closed captions (sound effects)"
+                },
+                "high_contrast_mode": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable high contrast mode"
+                },
+                "reduce_motion": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Reduce camera shake and motion effects"
+                },
+                "reduce_flashing": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Reduce flashing/strobe effects"
+                },
+                "hold_to_continue": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Require hold instead of tap for continue prompts"
+                },
+                "auto_climb": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Auto-climb ledges without holding button"
+                },
+                "auto_swim": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Auto-swim forward without holding button"
+                },
+                "simplified_combat": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Simplified combat inputs"
+                },
+                "invincibility_mode": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Invincibility (accessibility)"
+                },
+                "infinite_will": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Infinite will meter (accessibility)"
+                },
+                "no_fail_quick_time": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Cannot fail quick-time events"
+                },
+                "text_to_speech": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable text-to-speech for menus"
+                },
+                "menu_navigation_sound": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Play sound on menu navigation"
+                }
+            }
+        },
+        "advanced": {
+            "type": "object",
+            "properties": {
+                "developer_console": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable developer console (~ key)"
+                },
+                "debug_overlay": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Show debug overlay"
+                },
+                "log_level": {
+                    "type": "string",
+                    "enum": ["trace", "debug", "info", "warn", "error"],
+                    "default": "info",
+                    "description": "Log verbosity level"
+                },
+                "enable_profiling": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable performance profiling"
+                },
+                "shader_cache": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable shader compilation cache"
+                },
+                "thread_priority": {
+                    "type": "string",
+                    "enum": ["normal", "high", "realtime"],
+                    "default": "high",
+                    "description": "Game thread priority"
+                },
+                "memory_limit": {
+                    "type": "integer",
+                    "minimum": 1024,
+                    "maximum": 32768,
+                    "default": 4096,
+                    "description": "Memory limit in MB"
+                },
+                "asset_streaming": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable asset streaming"
+                },
+                "preload_assets": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Preload all level assets at startup"
+                },
+                "skip_intro_logos": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Skip intro logos on startup"
+                },
+                "auto_pause_on_focus_loss": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Auto-pause when window loses focus"
+                },
+                "borderless_focus_behavior": {
+                    "type": "string",
+                    "enum": ["pause", "continue", "mute_only"],
+                    "default": "pause",
+                    "description": "Behavior when borderless window loses focus"
+                },
+                "steam_overlay": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable Steam Overlay support"
+                },
+                "discord_rpc": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable Discord Rich Presence"
+                },
+                "telemetry": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable anonymous usage telemetry"
+                },
+                "backup_saves": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Create backup copies of saves"
+                },
+                "max_save_backups": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 10,
+                    "description": "Maximum save backups to keep"
+                }
+            }
+        }
+    },
+    "additionalProperties": false
+}
+default_config = {
+    "graphics": {
+        "resolution": "auto",
+        "display_mode": "borderless",
+        "vsync": true,
+        "max_fps": 144,
+        "fov": 90,
+        "render_scale": 1.0,
+        "texture_quality": "high",
+        "shadow_quality": "medium",
+        "anti_aliasing": "taa",
+        "anisotropic_filtering": "16x",
+        "particle_quality": "high",
+        "water_quality": "high",
+        "lighting_quality": "high",
+        "post_processing": true,
+        "motion_blur": false,
+        "depth_of_field": true,
+        "bloom": true,
+        "ambient_occlusion": "ssao",
+        "reflection_quality": "medium",
+        "gamma": 1.0,
+        "brightness": 1.0,
+        "contrast": 1.0
+    },
+    "input": {
+        "mouse_sensitivity": 1.0,
+        "mouse_acceleration": false,
+        "raw_input": true,
+        "invert_mouse_y": false,
+        "controller_enabled": true,
+        "controller_sensitivity": 1.0,
+        "controller_deadzone": 0.15,
+        "controller_invert_y": false,
+        "controller_vibration": true,
+        "controller_vibration_strength": 0.7,
+        "keyboard_layout": "qwerty",
+        "enable_steam_input": true,
+        "input_buffering": true,
+        "key_repeat_delay": 250,
+        "key_repeat_rate": 30
+    },
+    "audio": {
+        "master_volume": 1.0,
+        "music_volume": 0.8,
+        "sfx_volume": 1.0,
+        "voice_volume": 1.0,
+        "ambient_volume": 0.7,
+        "audio_device": "default",
+        "audio_backend": "auto",
+        "sample_rate": 48000,
+        "buffer_size": 1024,
+        "enable_hrtf": false,
+        "enable_reverb": true,
+        "dynamic_range": "full",
+        "mute_on_focus_loss": true
+    },
+    "gameplay": {
+        "difficulty": "normal",
+        "auto_save": true,
+        "auto_save_interval": 300,
+        "quick_save_enabled": true,
+        "quick_load_enabled": true,
+        "show_hints": true,
+        "show_objectives": true,
+        "skip_cinematic": false,
+        "skip_dialogue": false,
+        "camera_distance": 3.5,
+        "camera_sensitivity": 1.0,
+        "camera_invert_x": false,
+        "camera_invert_y": false,
+        "camera_collision": true,
+        "camera_shake": true,
+        "weapon_sway": true,
+        "crosshair_enabled": true,
+        "crosshair_style": "default",
+        "crosshair_color": "#FFFFFF"
+    },
+    "hud": {
+        "hud_scale": 1.0,
+        "hud_opacity": 1.0,
+        "show_health": true,
+        "show_will": true,
+        "show_ammo": true,
+        "show_weapon_wheel": true,
+        "show_minimap": false,
+        "show_compass": false,
+        "show_fps": false,
+        "show_frame_time": false,
+        "show_coordinates": false,
+        "show_speed": false,
+        "hud_color_scheme": "original",
+        "damage_numbers": true,
+        "combo_counter": false
+    },
+    "accessibility": {
+        "subtitles_enabled": true,
+        "subtitle_size": "medium",
+        "subtitle_background": true,
+        "subtitle_speaker_names": true,
+        "closed_captions": false,
+        "high_contrast_mode": false,
+        "reduce_motion": false,
+        "reduce_flashing": false,
+        "hold_to_continue": false,
+        "auto_climb": false,
+        "auto_swim": false,
+        "simplified_combat": false,
+        "invincibility_mode": false,
+        "infinite_will": false,
+        "no_fail_quick_time": false,
+        "text_to_speech": false,
+        "menu_navigation_sound": true
+    },
+    "advanced": {
+        "developer_console": true,
+        "debug_overlay": false,
+        "log_level": "info",
+        "enable_profiling": false,
+        "shader_cache": true,
+        "thread_priority": "high",
+        "memory_limit": 4096,
+        "asset_streaming": true,
+        "preload_assets": false,
+        "skip_intro_logos": true,
+        "auto_pause_on_focus_loss": true,
+        "borderless_focus_behavior": "pause",
+        "steam_overlay": true,
+        "discord_rpc": false,
+        "telemetry": false,
+        "backup_saves": true,
+        "max_save_backups": 10
+    }
+}
+assets = [
+    { source = "assets/pc_settings_bg.png", target = "ui/pc_settings_bg.png", type = "Texture" },
+    { source = "assets/settings_icon.png", target = "ui/settings_icon.png", type = "Texture" }
+]
+tags = ["settings", "pc-port", "graphics", "input", "audio", "accessibility", "advanced"]

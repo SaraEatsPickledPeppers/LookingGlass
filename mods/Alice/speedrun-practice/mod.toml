@@ -1,0 +1,149 @@
+id = "speedrun-practice"
+name = "Speedrun Practice Tools"
+version = "1.0.0"
+manifest_version = 2
+author = "Looking Glass Team"
+description = "Speedrun practice features: timer, splits, save states, route visualization, input display"
+game_target = "alice"
+dependencies = []
+load_order = { before = [], after = [] }
+entry_points = {
+    ui_patch = "patches/speedrun_ui.json",
+    runtime_hook = "hooks/speedrun.rs",
+    input_hook = "hooks/input.rs"
+}
+config_schema = {
+    "type": "object",
+    "properties": {
+        "enable_timer": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable on-screen timer"
+        },
+        "timer_position": {
+            "type": "string",
+            "enum": ["top-left", "top-right", "bottom-left", "bottom-right", "top-center", "bottom-center"],
+            "default": "top-right",
+            "description": "Timer position on screen"
+        },
+        "show_splits": {
+            "type": "boolean",
+            "default": true,
+            "description": "Show split times"
+        },
+        "split_comparison": {
+            "type": "string",
+            "enum": ["none", "pb", "average", "best-segment"],
+            "default": "pb",
+            "description": "What to compare splits against"
+        },
+        "enable_save_states": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable save state slots for practice"
+        },
+        "save_state_slots": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 5,
+            "description": "Number of save state slots"
+        },
+        "enable_input_display": {
+            "type": "boolean",
+            "default": false,
+            "description": "Show current inputs on screen"
+        },
+        "input_display_position": {
+            "type": "string",
+            "enum": ["top-left", "top-right", "bottom-left", "bottom-right"],
+            "default": "bottom-left",
+            "description": "Input display position"
+        },
+        "enable_route_visualization": {
+            "type": "boolean",
+            "default": false,
+            "description": "Show optimal route path"
+        },
+        "auto_split_on_level": {
+            "type": "boolean",
+            "default": true,
+            "description": "Auto-split on level transitions"
+        },
+        "auto_split_on_save": {
+            "type": "boolean",
+            "default": false,
+            "description": "Auto-split on manual save"
+        },
+        "timer_format": {
+            "type": "string",
+            "enum": ["hms", "hmsc", "seconds"],
+            "default": "hmsc",
+            "description": "Timer display format"
+        },
+        "show_segment_pace": {
+            "type": "boolean",
+            "default": true,
+            "description": "Show current segment pace vs comparison"
+        },
+        "enable_pause_buffering": {
+            "type": "boolean",
+            "default": true,
+            "description": "Allow frame-perfect pause buffering"
+        },
+        "hotkey_timer_start": {
+            "type": "string",
+            "default": "F6",
+            "description": "Hotkey to start/reset timer"
+        },
+        "hotkey_timer_split": {
+            "type": "string",
+            "default": "F7",
+            "description": "Hotkey to manually split"
+        },
+        "hotkey_save_state": {
+            "type": "string",
+            "default": "F8",
+            "description": "Hotkey to save state (hold + number)"
+        },
+        "hotkey_load_state": {
+            "type": "string",
+            "default": "F9",
+            "description": "Hotkey to load state (hold + number)"
+        },
+        "hotkey_undo_load": {
+            "type": "string",
+            "default": "F10",
+            "description": "Hotkey to undo last load state"
+        }
+    },
+    "additionalProperties": false
+}
+default_config = {
+    "enable_timer": true,
+    "timer_position": "top-right",
+    "show_splits": true,
+    "split_comparison": "pb",
+    "enable_save_states": true,
+    "save_state_slots": 5,
+    "enable_input_display": false,
+    "input_display_position": "bottom-left",
+    "enable_route_visualization": false,
+    "auto_split_on_level": true,
+    "auto_split_on_save": false,
+    "timer_format": "hmsc",
+    "show_segment_pace": true,
+    "enable_pause_buffering": true,
+    "hotkey_timer_start": "F6",
+    "hotkey_timer_split": "F7",
+    "hotkey_save_state": "F8",
+    "hotkey_load_state": "F9",
+    "hotkey_undo_load": "F10"
+}
+assets = [
+    { source = "assets/speedrun_bg.png", target = "ui/speedrun_bg.png", type = "Texture" },
+    { source = "assets/timer_font.png", target = "ui/timer_font.png", type = "Texture" },
+    { source = "assets/split_marker.png", target = "ui/split_marker.png", type = "Texture" },
+    { source = "assets/route_arrow.png", target = "ui/route_arrow.png", type = "Texture" }
+]
+tags = ["speedrun", "practice", "timer", "splits", "save-states", "tools"]

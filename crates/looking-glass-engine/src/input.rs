@@ -269,7 +269,8 @@ impl Input {
                 // Get or create the pad state
                 let pad_state = pad_states[our_index].get_or_insert_with(RawPad::default);
                 // ButtonChanged value is f32 (0.0 = released, >0.0 = pressed)
-                Self::handle_button_change(pad_state, button, value > 0.0);
+                // For triggers, value is analog (0.0 to 1.0)
+                Self::handle_button_change(pad_state, button, value);
             }
             EventType::AxisChanged(axis, value, _) => {
                 // Get or create the pad state
@@ -298,34 +299,62 @@ impl Input {
     }
 
     #[cfg(all(feature = "gamepad", not(windows)))]
-    fn handle_button_change(pad: &mut RawPad, button: Button, pressed: bool) {
+    fn handle_button_change(pad: &mut RawPad, button: Button, value: f32) {
         use gilrs::Button;
 
-        let mask = match button {
-            Button::South => 0x1000,      // A
-            Button::East => 0x2000,       // B
-            Button::West => 0x4000,       // X
-            Button::North => 0x8000,      // Y
-            Button::LeftTrigger => 0x100,  // LB
-            Button::RightTrigger => 0x200, // RB
-            Button::Select => 0x20,       // Back
-            Button::LeftThumb => 0x40,    // L Stick
-            Button::RightThumb => 0x80,   // R Stick
-            Button::DPadUp => 1,          // D Up
-            Button::DPadDown => 2,        // D Down
-            Button::DPadLeft => 4,        // D Left
-            Button::DPadRight => 8,       // D Right
-            Button::Start => 0x10,        // Start
-            Button::LeftTrigger2 => 0x10000, // LT
-            Button::RightTrigger2 => 0x20000, // RT
+        match button {
+            Button::South => {
+                if value > 0.0 { pad.buttons |= 0x1000; } else { pad.buttons &= !0x1000; } // A
+            }
+            Button::East => {
+                if value > 0.0 { pad.buttons |= 0x2000; } else { pad.buttons &= !0x2000; } // B
+            }
+            Button::West => {
+                if value > 0.0 { pad.buttons |= 0x4000; } else { pad.buttons &= !0x4000; } // X
+            }
+            Button::North => {
+                if value > 0.0 { pad.buttons |= 0x8000; } else { pad.buttons &= !0x8000; } // Y
+            }
+            Button::LeftTrigger => {
+                if value > 0.0 { pad.buttons |= 0x100; } else { pad.buttons &= !0x100; } // LB
+            }
+            Button::RightTrigger => {
+                if value > 0.0 { pad.buttons |= 0x200; } else { pad.buttons &= !0x200; } // RB
+            }
+            Button::Select => {
+                if value > 0.0 { pad.buttons |= 0x20; } else { pad.buttons &= !0x20; } // Back
+            }
+            Button::LeftThumb => {
+                if value > 0.0 { pad.buttons |= 0x40; } else { pad.buttons &= !0x40; } // L Stick
+            }
+            Button::RightThumb => {
+                if value > 0.0 { pad.buttons |= 0x80; } else { pad.buttons &= !0x80; } // R Stick
+            }
+            Button::DPadUp => {
+                if value > 0.0 { pad.buttons |= 1; } else { pad.buttons &= !1; } // D Up
+            }
+            Button::DPadDown => {
+                if value > 0.0 { pad.buttons |= 2; } else { pad.buttons &= !2; } // D Down
+            }
+            Button::DPadLeft => {
+                if value > 0.0 { pad.buttons |= 4; } else { pad.buttons &= !4; } // D Left
+            }
+            Button::DPadRight => {
+                if value > 0.0 { pad.buttons |= 8; } else { pad.buttons &= !8; } // D Right
+            }
+            Button::Start => {
+                if value > 0.0 { pad.buttons |= 0x10; } else { pad.buttons &= !0x10; } // Start
+            }
+            Button::LeftTrigger2 => {
+                // LT analog trigger: value is 0.0 to 1.0, store as 0-255 in pad.lt
+                pad.lt = (value * 255.0) as u8;
+            }
+            Button::RightTrigger2 => {
+                // RT analog trigger: value is 0.0 to 1.0, store as 0-255 in pad.rt
+                pad.rt = (value * 255.0) as u8;
+            }
             _ => return,
         };
-
-        if pressed {
-            pad.buttons |= mask as u16;
-        } else {
-            pad.buttons &= !(mask as u16);
-        }
     }
 
     #[cfg(all(feature = "gamepad", not(windows)))]

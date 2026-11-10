@@ -9,6 +9,204 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
+/// Permission categories that a mod can request
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum Permission {
+    /// Read access to filesystem (within mod directory and game assets)
+    FilesystemRead,
+    /// Write access to filesystem (within mod directory only)
+    FilesystemWrite,
+    /// Network access (HTTP requests, WebSocket connections)
+    NetworkAccess,
+    /// Spawn processes (execute commands)
+    ProcessSpawn,
+    /// Execute native code (load shared libraries, FFI)
+    NativeCodeExecution,
+    /// Modify UI (register UI patches, widgets)
+    UiModification,
+    /// Modify configuration (register config validators, change config)
+    ConfigModification,
+    /// Read input events (keyboard, mouse, gamepad)
+    InputRead,
+    /// Inject input events (simulate key presses, gamepad input)
+    InputInject,
+    /// Access game runtime (runtime hooks, frame callbacks)
+    RuntimeAccess,
+    /// Override game assets (textures, models, sounds)
+    AssetOverride,
+}
+
+impl Permission {
+    /// Get all available permissions
+    pub fn all() -> Vec<Permission> {
+        vec![
+            Permission::FilesystemRead,
+            Permission::FilesystemWrite,
+            Permission::NetworkAccess,
+            Permission::ProcessSpawn,
+            Permission::NativeCodeExecution,
+            Permission::UiModification,
+            Permission::ConfigModification,
+            Permission::InputRead,
+            Permission::InputInject,
+            Permission::RuntimeAccess,
+            Permission::AssetOverride,
+        ]
+    }
+
+    /// Get a human-readable description of the permission
+    pub fn description(&self) -> &'static str {
+        match self {
+            Permission::FilesystemRead => "Read files from the filesystem (mod directory and game assets)",
+            Permission::FilesystemWrite => "Write files to the filesystem (mod directory only)",
+            Permission::NetworkAccess => "Make network requests (HTTP, WebSocket)",
+            Permission::ProcessSpawn => "Spawn child processes and execute commands",
+            Permission::NativeCodeExecution => "Load and execute native code (shared libraries, FFI)",
+            Permission::UiModification => "Modify the game UI (add/remove/modify widgets)",
+            Permission::ConfigModification => "Read and modify game configuration",
+            Permission::InputRead => "Read input events (keyboard, mouse, gamepad)",
+            Permission::InputInject => "Inject input events (simulate key presses, gamepad input)",
+            Permission::RuntimeAccess => "Access game runtime (frame callbacks, level load events)",
+            Permission::AssetOverride => "Override game assets (textures, models, sounds, fonts)",
+        }
+    }
+
+    /// Get the permission as a string identifier
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Permission::FilesystemRead => "filesystem_read",
+            Permission::FilesystemWrite => "filesystem_write",
+            Permission::NetworkAccess => "network_access",
+            Permission::ProcessSpawn => "process_spawn",
+            Permission::NativeCodeExecution => "native_code_execution",
+            Permission::UiModification => "ui_modification",
+            Permission::ConfigModification => "config_modification",
+            Permission::InputRead => "input_read",
+            Permission::InputInject => "input_inject",
+            Permission::RuntimeAccess => "runtime_access",
+            Permission::AssetOverride => "asset_override",
+        }
+    }
+
+    /// Parse a permission from a string
+    pub fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "filesystem_read" => Ok(Permission::FilesystemRead),
+            "filesystem_write" => Ok(Permission::FilesystemWrite),
+            "network_access" => Ok(Permission::NetworkAccess),
+            "process_spawn" => Ok(Permission::ProcessSpawn),
+            "native_code_execution" => Ok(Permission::NativeCodeExecution),
+            "ui_modification" => Ok(Permission::UiModification),
+            "config_modification" => Ok(Permission::ConfigModification),
+            "input_read" => Ok(Permission::InputRead),
+            "input_inject" => Ok(Permission::InputInject),
+            "runtime_access" => Ok(Permission::RuntimeAccess),
+            "asset_override" => Ok(Permission::AssetOverride),
+            _ => Err(anyhow::anyhow!("Unknown permission: {}", s)),
+        }
+    }
+}
+
+impl std::fmt::Display for Permission {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl std::str::FromStr for Permission {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Permission::from_str(s)
+    }
+}
+
+/// Permission set with granted/denied status
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PermissionSet {
+    /// Permissions granted to the mod
+    #[serde(default)]
+    pub granted: Vec<Permission>,
+    /// Permissions explicitly denied (even if requested)
+    #[serde(default)]
+    pub denied: Vec<Permission>,
+}
+
+impl PermissionSet {
+    /// Check if a permission is granted
+    pub fn is_granted(&self, permission: &Permission) -> bool {
+        self.granted.contains(permission) && !self.denied.contains(permission)
+    }
+
+    /// Check if a permission is denied
+    pub fn is_denied(&self, permission: &Permission) -> bool {
+        self.denied.contains(permission)
+    }
+
+    /// Grant a permission
+    pub fn grant(&mut self, permission: Permission) {
+        if !self.granted.contains(&permission) {
+            self.granted.push(permission.clone());
+        }
+        self.denied.retain(|p| p != &permission);
+    }
+
+    /// Deny a permission
+    pub fn deny(&mut self, permission: Permission) {
+        if !self.denied.contains(&permission) {
+            self.denied.push(permission.clone());
+        }
+        self.granted.retain(|p| p != &permission);
+    }
+}
+
+/// Permissions manifest section in mod.toml
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Permissions {
+    /// Required permissions (mod will not function without these)
+    #[serde(default)]
+    pub required: Vec<Permission>,
+    /// Optional permissions (mod can function without these, but may have reduced functionality)
+    #[serde(default)]
+    pub optional: Vec<Permission>,
+    /// Permissions this mod explicitly does not need (helps with transparency)
+    #[serde(default)]
+    pub not_needed: Vec<Permission>,
+}
+
+impl Permissions {
+    /// Get all requested permissions (required + optional)
+    pub fn all_requested(&self) -> Vec<Permission> {
+        let mut all = self.required.clone();
+        all.extend(self.optional.clone());
+        all
+    }
+
+    /// Validate that there are no conflicts between required/optional/not_needed
+    pub fn validate(&self) -> Result<()> {
+        let mut all_perms = HashMap::new();
+
+        for p in &self.required {
+            all_perms.insert(p.clone(), "required");
+        }
+        for p in &self.optional {
+            if all_perms.contains_key(p) {
+                return Err(anyhow::anyhow!("Permission {:?} listed in both required and optional", p));
+            }
+            all_perms.insert(p.clone(), "optional");
+        }
+        for p in &self.not_needed {
+            if all_perms.contains_key(p) {
+                return Err(anyhow::anyhow!("Permission {:?} listed in both not_needed and required/optional", p));
+            }
+            all_perms.insert(p.clone(), "not_needed");
+        }
+
+        Ok(())
+    }
+}
+
 // Helper for serializing/deserializing VersionReq
 mod version_req_serde {
     use semver::VersionReq;
@@ -98,6 +296,22 @@ pub enum AssetType {
     Other,
 }
 
+impl std::str::FromStr for AssetType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "texture" => Ok(AssetType::Texture),
+            "model" => Ok(AssetType::Model),
+            "sound" => Ok(AssetType::Sound),
+            "font" => Ok(AssetType::Font),
+            "ui" => Ok(AssetType::Ui),
+            "other" => Ok(AssetType::Other),
+            _ => Err(anyhow::anyhow!("Unknown asset type: {}", s)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssetMapping {
     pub source: String,
@@ -151,6 +365,8 @@ pub struct ModManifest {
     pub assets: Vec<AssetMapping>,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub permissions: Permissions,
 }
 
 impl Default for ModManifest {
@@ -175,6 +391,7 @@ impl Default for ModManifest {
             default_config: None,
             assets: Vec::new(),
             tags: Vec::new(),
+            permissions: Permissions::default(),
         }
     }
 }
@@ -188,6 +405,9 @@ pub struct InstalledMod {
     pub config: Option<serde_json::Value>,
     pub installed_at: chrono::DateTime<chrono::Utc>,
     pub checksum: String,
+    /// Granted/denied permissions for this mod
+    #[serde(default)]
+    pub permissions: PermissionSet,
 }
 
 impl Default for InstalledMod {
@@ -199,6 +419,7 @@ impl Default for InstalledMod {
             config: None,
             installed_at: chrono::Utc::now(),
             checksum: String::new(),
+            permissions: PermissionSet::default(),
         }
     }
 }
@@ -253,7 +474,13 @@ impl ModManifest {
         self.validate_version()?;
         self.validate_dependencies()?;
         self.validate_game_version_constraints()?;
+        self.validate_permissions()?;
 
+        Ok(())
+    }
+
+    fn validate_permissions(&self) -> Result<()> {
+        self.permissions.validate()?;
         Ok(())
     }
 
@@ -357,6 +584,7 @@ impl InstalledMod {
             config: None,
             installed_at: chrono::Utc::now(),
             checksum,
+            permissions: PermissionSet::default(),
         })
     }
 

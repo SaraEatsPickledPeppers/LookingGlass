@@ -1,0 +1,264 @@
+{
+  "target": "speedrun_practice_menu",
+  "operations": [
+    {
+      "op": "AddSection",
+      "id": "speedrun_section",
+      "parent": "main_menu",
+      "widget": {
+        "id": "speedrun_section",
+        "widget_type": "Section",
+        "properties": {
+          "label": "Speedrun Practice",
+          "tooltip": "Speedrun practice tools and settings"
+        },
+        "children": [
+          {
+            "id": "timer_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Timer Settings"
+            },
+            "children": [
+              {
+                "id": "enable_timer",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Enable Timer",
+                  "config_key": "speedrun-practice.enable_timer",
+                  "tooltip": "Show on-screen timer during gameplay"
+                }
+              },
+              {
+                "id": "timer_position",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Timer Position",
+                  "config_key": "speedrun-practice.timer_position",
+                  "options": [
+                    {"value": "top-left", "label": "Top Left"},
+                    {"value": "top-right", "label": "Top Right"},
+                    {"value": "bottom-left", "label": "Bottom Left"},
+                    {"value": "bottom-right", "label": "Bottom Right"},
+                    {"value": "top-center", "label": "Top Center"},
+                    {"value": "bottom-center", "label": "Bottom Center"}
+                  ],
+                  "tooltip": "Where to display the timer on screen"
+                }
+              },
+              {
+                "id": "timer_format",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Timer Format",
+                  "config_key": "speedrun-practice.timer_format",
+                  "options": [
+                    {"value": "hms", "label": "Hours:Minutes:Seconds"},
+                    {"value": "hmsc", "label": "Hours:Minutes:Seconds.Centiseconds"},
+                    {"value": "seconds", "label": "Total Seconds"}
+                  ],
+                  "tooltip": "How to format the timer display"
+                }
+              }
+            ]
+          },
+          {
+            "id": "splits_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Split Settings"
+            },
+            "children": [
+              {
+                "id": "show_splits",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Show Splits",
+                  "config_key": "speedrun-practice.show_splits",
+                  "tooltip": "Display split times on screen"
+                }
+              },
+              {
+                "id": "split_comparison",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Compare Against",
+                  "config_key": "speedrun-practice.split_comparison",
+                  "options": [
+                    {"value": "none", "label": "No Comparison"},
+                    {"value": "pb", "label": "Personal Best"},
+                    {"value": "average", "label": "Average Run"},
+                    {"value": "best-segment", "label": "Best Segment"}
+                  ],
+                  "tooltip": "What to compare your current splits against"
+                }
+              },
+              {
+                "id": "auto_split_on_level",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Auto-Split on Level Change",
+                  "config_key": "speedrun-practice.auto_split_on_level",
+                  "tooltip": "Automatically create a split when transitioning between levels"
+                }
+              },
+              {
+                "id": "auto_split_on_save",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Auto-Split on Manual Save",
+                  "config_key": "speedrun-practice.auto_split_on_save",
+                  "tooltip": "Create a split when manually saving (F5)"
+                }
+              },
+              {
+                "id": "show_segment_pace",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Show Segment Pace",
+                  "config_key": "speedrun-practice.show_segment_pace",
+                  "tooltip": "Show current segment pace compared to comparison run"
+                }
+              }
+            ]
+          },
+          {
+            "id": "save_states_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Save States"
+            },
+            "children": [
+              {
+                "id": "enable_save_states",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Enable Save States",
+                  "config_key": "speedrun-practice.enable_save_states",
+                  "tooltip": "Allow saving/loading practice states with hotkeys"
+                }
+              },
+              {
+                "id": "save_state_slots",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Save State Slots",
+                  "min": 1,
+                  "max": 10,
+                  "step": 1,
+                  "config_key": "speedrun-practice.save_state_slots",
+                  "tooltip": "Number of save state slots available"
+                }
+              },
+              {
+                "id": "enable_pause_buffering",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Enable Pause Buffering",
+                  "config_key": "speedrun-practice.enable_pause_buffering",
+                  "tooltip": "Allow frame-perfect inputs during pause"
+                }
+              }
+            ]
+          },
+          {
+            "id": "visualization_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Visualization"
+            },
+            "children": [
+              {
+                "id": "enable_input_display",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Show Input Display",
+                  "config_key": "speedrun-practice.enable_input_display",
+                  "tooltip": "Display current keyboard/controller inputs on screen"
+                }
+              },
+              {
+                "id": "input_display_position",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Input Display Position",
+                  "config_key": "speedrun-practice.input_display_position",
+                  "options": [
+                    {"value": "top-left", "label": "Top Left"},
+                    {"value": "top-right", "label": "Top Right"},
+                    {"value": "bottom-left", "label": "Bottom Left"},
+                    {"value": "bottom-right", "label": "Bottom Right"}
+                  ],
+                  "tooltip": "Where to show the input display"
+                }
+              },
+              {
+                "id": "enable_route_visualization",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Show Optimal Route",
+                  "config_key": "speedrun-practice.enable_route_visualization",
+                  "tooltip": "Display the optimal speedrun route path in the level"
+                }
+              }
+            ]
+          },
+          {
+            "id": "hotkeys_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Hotkeys"
+            },
+            "children": [
+              {
+                "id": "hotkey_timer_start",
+                "widget_type": "Keybind",
+                "properties": {
+                  "label": "Start/Reset Timer",
+                  "config_key": "speedrun-practice.hotkey_timer_start",
+                  "tooltip": "Hotkey to start or reset the timer"
+                }
+              },
+              {
+                "id": "hotkey_timer_split",
+                "widget_type": "Keybind",
+                "properties": {
+                  "label": "Manual Split",
+                  "config_key": "speedrun-practice.hotkey_timer_split",
+                  "tooltip": "Hotkey to manually create a split"
+                }
+              },
+              {
+                "id": "hotkey_save_state",
+                "widget_type": "Keybind",
+                "properties": {
+                  "label": "Save State (hold + number)",
+                  "config_key": "speedrun-practice.hotkey_save_state",
+                  "tooltip": "Hold this key and press a number to save state"
+                }
+              },
+              {
+                "id": "hotkey_load_state",
+                "widget_type": "Keybind",
+                "properties": {
+                  "label": "Load State (hold + number)",
+                  "config_key": "speedrun-practice.hotkey_load_state",
+                  "tooltip": "Hold this key and press a number to load state"
+                }
+              },
+              {
+                "id": "hotkey_undo_load",
+                "widget_type": "Keybind",
+                "properties": {
+                  "label": "Undo Last Load",
+                  "config_key": "speedrun-practice.hotkey_undo_load",
+                  "tooltip": "Hotkey to undo the last load state"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

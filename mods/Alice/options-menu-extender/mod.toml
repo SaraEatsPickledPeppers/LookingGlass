@@ -4,7 +4,7 @@ version = "1.0.0"
 manifest_version = 2
 author = "Looking Glass Team"
 description = "Extends the options menu with additional settings: FOV slider, render scale, debug toggles, and more"
-game_target = "Alice"
+game_target = "alice"
 dependencies = []
 load_order = { before = [], after = [] }
 entry_points = {

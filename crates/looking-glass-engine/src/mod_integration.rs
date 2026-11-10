@@ -5,14 +5,20 @@ use crate::preferences::Preferences;
 use looking_glass_config::{ConfigManager, ConfigLayer};
 use looking_glass_mod::{
     discovery::ModDiscovery,
-    loader::{AssetOverrideResult, ModApi, ModContext, ModLoader, ModRegistry, InputHook, RuntimeHook, ButtonOption, KeyCode, KeyModifiers, GamepadButton, ButtonState, UiPatch, WidgetDef},
+    loader::{AssetOverrideResult, ModApi, ModContext, ModLoader, ModRegistry, InputHook, RuntimeHook, ButtonOption, KeyCode, KeyModifiers, GamepadButton, ButtonState, UiPatch, WidgetDef, ModState},
     manifest::{GameTarget, AssetType, InstalledMod, ModManifest, ModEntryPoints, LoadOrder},
+    mod_loaders::{create_lua_loader, create_native_loader, get_loader_for_mod},
     config::resolve_xdg_paths,
+    profiling::{is_profiling_enabled, start_profiling_session, reset_profiling, get_mod_profiles, get_global_summary, GlobalProfileSummary},
 };
-use std::collections::HashMap;
+use notify::{RecommendedWatcher, Watcher, Event, EventKind, RecursiveMode};
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
+use tokio::sync::mpsc;
+use futures::executor::block_on;
 
 /// Mod integration state for the game engine
 pub struct ModIntegration {
@@ -22,6 +28,16 @@ pub struct ModIntegration {
     game_version: String,
     enabled: bool,
     mods_dir: Option<PathBuf>,
+    /// File watcher for hot-reload (only active in dev mode)
+    file_watcher: Option<RecommendedWatcher>,
+    /// Set of mod IDs that have changed and need reloading
+    dirty_mods: Arc<Mutex<HashSet<String>>>,
+    /// Channel for receiving file watcher events
+    watcher_rx: Option<mpsc::Receiver<notify::Result<Event>>>,
+    /// Whether hot-reload is enabled (dev mode)
+    hot_reload_enabled: bool,
+    /// Mod loaders for each mod type (for hot-reload)
+    mod_loaders: HashMap<String, Box<dyn ModLoader>>,
 }
 
 impl ModIntegration {
@@ -52,10 +68,20 @@ impl ModIntegration {
             game_version,
             enabled: true,
             mods_dir,
+            file_watcher: None,
+            dirty_mods: Arc::new(Mutex::new(HashSet::new())),
+            watcher_rx: None,
+            hot_reload_enabled: Self::is_dev_mode(),
+            mod_loaders: HashMap::new(),
         };
 
         // Load mods on creation
         integration.reload_mods()?;
+
+        // Set up file watcher in dev mode
+        if integration.hot_reload_enabled {
+            integration.setup_file_watcher()?;
+        }
 
         Ok(integration)
     }
@@ -74,10 +100,21 @@ impl ModIntegration {
             discovery,
             game_version,
             enabled: true,
-            mods_dir: Some(mods_dir),
+            mods_dir: Some(mods_dir.clone()),
+            file_watcher: None,
+            dirty_mods: Arc::new(Mutex::new(HashSet::new())),
+            watcher_rx: None,
+            hot_reload_enabled: Self::is_dev_mode(),
+            mod_loaders: HashMap::new(),
         };
 
         integration.reload_mods()?;
+
+        // Set up file watcher in dev mode
+        if integration.hot_reload_enabled {
+            integration.setup_file_watcher()?;
+        }
+
         Ok(integration)
     }
 
@@ -97,7 +134,170 @@ impl ModIntegration {
             game_version,
             enabled: false,
             mods_dir: None,
+            file_watcher: None,
+            dirty_mods: Arc::new(Mutex::new(HashSet::new())),
+            watcher_rx: None,
+            hot_reload_enabled: Self::is_dev_mode(),
+            mod_loaders: HashMap::new(),
         })
+    }
+
+    /// Check if we're running in development mode (enables hot-reload)
+    fn is_dev_mode() -> bool {
+        std::env::var("LOOKING_GLASS_DEV").is_ok() || std::env::var("LOOKING_GLASS_HOT_RELOAD").is_ok()
+    }
+
+    /// Set up file watcher for hot-reload
+    fn setup_file_watcher(&mut self) -> Result<()> {
+        if !self.hot_reload_enabled {
+            return Ok(());
+        }
+
+        let mods_dir = self.mods_dir.clone()
+            .or_else(|| self.discovery.mods_dir().parent().map(|p| p.to_path_buf()))
+            .context("No mods directory to watch")?;
+
+        let (tx, rx) = mpsc::channel(100);
+        let dirty_mods = self.dirty_mods.clone();
+        let mods_dir_for_watcher = mods_dir.clone();
+
+        // Create the watcher
+        let mut watcher = RecommendedWatcher::new(
+            move |res: notify::Result<Event>| {
+                if let Ok(event) = &res {
+                    // Check if this is a relevant file change
+                    for path in &event.paths {
+                        if Self::is_relevant_mod_file(path) {
+                            // Extract mod ID from path
+                            if let Some(mod_id) = Self::extract_mod_id_from_path(path, &mods_dir_for_watcher) {
+                                let mut dirty = dirty_mods.lock().unwrap();
+                                dirty.insert(mod_id.clone());
+                                tracing::debug!("Mod marked dirty: {}", mod_id);
+                            }
+                        }
+                    }
+                }
+                // Send event to channel for async processing
+                let _ = tx.try_send(res);
+            },
+            notify::Config::default().with_poll_interval(Duration::from_millis(500)),
+        )?;
+
+        // Watch the mods directory recursively
+        watcher.watch(&mods_dir, RecursiveMode::Recursive)?;
+
+        self.file_watcher = Some(watcher);
+        self.watcher_rx = Some(rx);
+
+        tracing::info!("File watcher set up for hot-reload on: {}", mods_dir.display());
+        Ok(())
+    }
+
+    /// Check if a file path is relevant for mod hot-reload
+    fn is_relevant_mod_file(path: &Path) -> bool {
+        // Watch for changes to mod source files, manifests, and assets
+        if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+            matches!(ext, "lua" | "toml" | "rs" | "so" | "dll" | "dylib" | "png" | "jpg" | "jpeg" | "ogg" | "wav" | "ttf" | "json" | "glb" | "gltf")
+        } else {
+            false
+        }
+    }
+
+    /// Extract mod ID from a file path
+    fn extract_mod_id_from_path(path: &Path, mods_dir: &Path) -> Option<String> {
+        // Path structure: .../mods/Alice/<mod_id>/...
+        let relative = path.strip_prefix(mods_dir).ok()?;
+        let mod_id = relative.components().next()?.as_os_str().to_str()?;
+        Some(mod_id.to_string())
+    }
+
+    /// Process pending file watcher events
+    pub fn process_watcher_events(&mut self) {
+        if let Some(rx) = &mut self.watcher_rx {
+            while let Ok(_event) = rx.try_recv() {
+                // Events are already processed in the watcher callback
+                // This just drains the channel
+            }
+        }
+    }
+
+    /// Trigger hot-reload for all dirty mods
+    pub async fn hot_reload_dirty_mods(&mut self) -> Result<()> {
+        if !self.hot_reload_enabled {
+            tracing::warn!("Hot-reload not enabled (not in dev mode)");
+            return Ok(());
+        }
+
+        // Process any pending watcher events
+        self.process_watcher_events();
+
+        // Get the list of dirty mods
+        let dirty_mods: Vec<String> = {
+            let dirty = self.dirty_mods.lock().unwrap();
+            dirty.iter().cloned().collect()
+        };
+
+        if dirty_mods.is_empty() {
+            tracing::info!("No dirty mods to reload");
+            return Ok(());
+        }
+
+        tracing::info!("Hot-reloading {} dirty mods: {:?}", dirty_mods.len(), dirty_mods);
+
+        // For each dirty mod, reload it
+        for mod_id in &dirty_mods {
+            // Find the loader for this mod
+            let loader = if let Some(loader) = self.mod_loaders.get(mod_id) {
+                loader
+            } else {
+                // Try to determine the loader type by checking the mod directory
+                let mod_dir = self.registry.get_mod_dir(mod_id).cloned();
+                if let Some(dir) = mod_dir {
+                    if let Some(loader) = get_loader_for_mod(&dir) {
+                        self.mod_loaders.insert(mod_id.clone(), loader);
+                        self.mod_loaders.get(mod_id).unwrap()
+                    } else {
+                        tracing::warn!("No loader found for mod: {}", mod_id);
+                        continue;
+                    }
+                } else {
+                    tracing::warn!("Mod directory not found for: {}", mod_id);
+                    continue;
+                }
+            };
+
+            // Reload the mod
+            if let Err(e) = self.registry.reload_mod(mod_id, loader.as_ref()).await {
+                tracing::error!("Failed to hot-reload mod {}: {}", mod_id, e);
+            } else {
+                tracing::info!("Successfully hot-reloaded mod: {}", mod_id);
+            }
+        }
+
+        // Clear dirty mods
+        self.dirty_mods.lock().unwrap().clear();
+
+        Ok(())
+    }
+
+    /// Register a mod loader for hot-reload
+    pub fn register_mod_loader(&mut self, mod_id: String, loader: Box<dyn ModLoader>) {
+        self.mod_loaders.insert(mod_id, loader);
+    }
+
+    /// Check if hot-reload is enabled
+    pub fn is_hot_reload_enabled(&self) -> bool {
+        self.hot_reload_enabled
+    }
+
+    /// Get the set of dirty mods
+    pub fn get_dirty_mods(&self) -> Vec<String> {
+        self.dirty_mods.lock().unwrap().iter().cloned().collect()
+    }
+
+    /// Manually mark a mod as dirty (for testing or external triggers)
+    pub fn mark_mod_dirty(&self, mod_id: &str) {
+        self.dirty_mods.lock().unwrap().insert(mod_id.to_string());
     }
 
     /// Check if mod integration is enabled
@@ -126,6 +326,11 @@ impl ModIntegration {
         if !self.enabled {
             tracing::info!("Mod integration disabled, skipping mod load");
             return Ok(());
+        }
+
+        // Start profiling session if enabled
+        if is_profiling_enabled() {
+            start_profiling_session();
         }
 
         tracing::info!("Reloading mods...");
@@ -189,11 +394,31 @@ impl ModIntegration {
             tracing::info!("  Will load: {}", m.manifest.id);
         }
 
-        // Load mods
+        // Validate dependencies for the set of mods to be loaded
+        // This checks that all required dependencies are present and version constraints are satisfied
+        let validation_warnings = self.discovery.validate_mod_set(&mods_to_load)?;
+        for warning in validation_warnings {
+            tracing::warn!("{}", warning);
+        }
+
+        // Load mods with appropriate loaders with profiling
         for installed_mod in mods_to_load {
-            // Create a simple mod wrapper that uses entry points
-            let mod_wrapper = SimpleMod::new(installed_mod);
-            self.registry.register(Box::new(mod_wrapper))?;
+            let mod_id = installed_mod.manifest.id.clone();
+            let load_timer = if is_profiling_enabled() {
+                Some(Instant::now())
+            } else {
+                None
+            };
+
+            let mod_path = installed_mod.path.clone();
+            let mod_wrapper = block_on(Self::create_mod_wrapper(installed_mod))?;
+            self.registry.register(mod_wrapper, Some(mod_path))?;
+
+            // Record mod load time
+            if let Some(timer) = load_timer {
+                use looking_glass_mod::profiling::record_mod_load_time;
+                record_mod_load_time(&mod_id, timer.elapsed());
+            }
         }
 
         // Sort load order based on dependencies
@@ -201,6 +426,61 @@ impl ModIntegration {
 
         tracing::info!("Mods loaded successfully");
         Ok(())
+    }
+
+    /// Create the appropriate mod wrapper based on the mod's entry points
+    /// Checks manifest entry_points to determine if native, Lua, or simple loader should be used
+    async fn create_mod_wrapper(installed_mod: InstalledMod) -> Result<Box<dyn looking_glass_mod::loader::Mod + Send + Sync + 'static>> {
+        let entry_points = &installed_mod.manifest.entry_points;
+        let mod_dir = &installed_mod.path;
+
+        // Check if any entry point points to a native library file
+        let has_native_entry = Self::has_native_entry(entry_points);
+        // Check if any entry point points to a Lua file
+        let has_lua_entry = Self::has_lua_entry(entry_points);
+
+        if has_native_entry {
+            tracing::info!("Loading mod {} with NativeModLoader (native entry points detected)", installed_mod.manifest.id);
+            let loader = create_native_loader();
+            let mod_instance = loader.load_mod(mod_dir).await?;
+            Ok(mod_instance)
+        } else if has_lua_entry {
+            tracing::info!("Loading mod {} with LuaModLoader (Lua entry points detected)", installed_mod.manifest.id);
+            let loader = create_lua_loader();
+            let mod_instance = loader.load_mod(mod_dir).await?;
+            Ok(mod_instance)
+        } else {
+            // Fallback to SimpleMod for asset/config-only mods
+            tracing::info!("Loading mod {} with SimpleMod (asset/config only)", installed_mod.manifest.id);
+            Ok(Box::new(SimpleMod::new(installed_mod)))
+        }
+    }
+
+    /// Check if any entry point points to a native library file (.so, .dll, .dylib)
+    fn has_native_entry(entry_points: &ModEntryPoints) -> bool {
+        let native_extensions = [".so", ".dll", ".dylib"];
+        Self::entry_has_extension(&entry_points.runtime_hook, &native_extensions)
+            || Self::entry_has_extension(&entry_points.input_hook, &native_extensions)
+            || Self::entry_has_extension(&entry_points.ui_patch, &native_extensions)
+            || Self::entry_has_extension(&entry_points.asset_override, &native_extensions)
+            || Self::entry_has_extension(&entry_points.config_inject, &native_extensions)
+    }
+
+    /// Check if any entry point points to a Lua file (.lua)
+    fn has_lua_entry(entry_points: &ModEntryPoints) -> bool {
+        let lua_extensions = [".lua"];
+        Self::entry_has_extension(&entry_points.runtime_hook, &lua_extensions)
+            || Self::entry_has_extension(&entry_points.input_hook, &lua_extensions)
+            || Self::entry_has_extension(&entry_points.ui_patch, &lua_extensions)
+            || Self::entry_has_extension(&entry_points.asset_override, &lua_extensions)
+            || Self::entry_has_extension(&entry_points.config_inject, &lua_extensions)
+    }
+
+    /// Check if an optional entry point string ends with any of the given extensions
+    fn entry_has_extension(entry: &Option<String>, extensions: &[&str]) -> bool {
+        entry.as_ref().map_or(false, |path| {
+            extensions.iter().any(|ext| path.ends_with(ext))
+        })
     }
 
     /// Get mod paths from environment variables set by launcher
@@ -285,6 +565,7 @@ impl ModIntegration {
         if !self.enabled {
             return None;
         }
+        // Profiling is handled in the registry's try_override_asset method
         self.registry.try_override_asset(path)
     }
 

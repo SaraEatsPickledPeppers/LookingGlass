@@ -1,0 +1,1616 @@
+{
+  "target": "options_menu",
+  "operations": [
+    {
+      "op": "AddSection",
+      "id": "graphics_advanced_section",
+      "parent": "main_menu",
+      "widget": {
+        "id": "graphics_advanced_section",
+        "widget_type": "Section",
+        "properties": {
+          "label": "Graphics (Advanced)",
+          "tooltip": "Advanced graphics settings for PC port"
+        },
+        "children": [
+          {
+            "id": "display_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Display"
+            },
+            "children": [
+              {
+                "id": "resolution",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Resolution",
+                  "config_key": "pc-settings-enhanced.graphics.resolution",
+                  "options": [
+                    {"value": "auto", "label": "Auto (Desktop)"},
+                    {"value": "1280x720", "label": "1280x720 (720p)"},
+                    {"value": "1600x900", "label": "1600x900 (900p)"},
+                    {"value": "1920x1080", "label": "1920x1080 (1080p)"},
+                    {"value": "2048x1152", "label": "2048x1152"},
+                    {"value": "2560x1080", "label": "2560x1080 (Ultrawide)"},
+                    {"value": "2560x1440", "label": "2560x1440 (1440p)"},
+                    {"value": "3440x1440", "label": "3440x1440 (Ultrawide 1440p)"},
+                    {"value": "3840x2160", "label": "3840x2160 (4K)"}
+                  ],
+                  "tooltip": "Display resolution"
+                }
+              },
+              {
+                "id": "display_mode",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Display Mode",
+                  "config_key": "pc-settings-enhanced.graphics.display_mode",
+                  "options": [
+                    {"value": "fullscreen", "label": "Exclusive Fullscreen"},
+                    {"value": "borderless", "label": "Borderless Fullscreen"},
+                    {"value": "windowed", "label": "Windowed"}
+                  ],
+                  "tooltip": "Window display mode"
+                }
+              },
+              {
+                "id": "vsync",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Vertical Sync (VSync)",
+                  "config_key": "pc-settings-enhanced.graphics.vsync",
+                  "tooltip": "Synchronize frame rate with monitor refresh rate"
+                }
+              },
+              {
+                "id": "max_fps",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Max FPS (0 = Unlimited)",
+                  "min": 30,
+                  "max": 500,
+                  "step": 1,
+                  "config_key": "pc-settings-enhanced.graphics.max_fps",
+                  "tooltip": "Maximum frames per second limit"
+                }
+              }
+            ]
+          },
+          {
+            "id": "quality_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Quality Presets"
+            },
+            "children": [
+              {
+                "id": "quality_preset",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Quality Preset",
+                  "config_key": "pc-settings-enhanced.graphics.quality_preset",
+                  "options": [
+                    {"value": "low", "label": "Low"},
+                    {"value": "medium", "label": "Medium"},
+                    {"value": "high", "label": "High"},
+                    {"value": "ultra", "label": "Ultra"},
+                    {"value": "custom", "label": "Custom"}
+                  ],
+                  "tooltip": "Apply a quality preset (overrides individual settings)"
+                }
+              },
+              {
+                "id": "texture_quality",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Texture Quality",
+                  "config_key": "pc-settings-enhanced.graphics.texture_quality",
+                  "options": [
+                    {"value": "low", "label": "Low"},
+                    {"value": "medium", "label": "Medium"},
+                    {"value": "high", "label": "High"},
+                    {"value": "ultra", "label": "Ultra"}
+                  ],
+                  "tooltip": "Texture resolution and filtering quality"
+                }
+              },
+              {
+                "id": "shadow_quality",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Shadow Quality",
+                  "config_key": "pc-settings-enhanced.graphics.shadow_quality",
+                  "options": [
+                    {"value": "off", "label": "Off"},
+                    {"value": "low", "label": "Low"},
+                    {"value": "medium", "label": "Medium"},
+                    {"value": "high", "label": "High"},
+                    {"value": "ultra", "label": "Ultra"}
+                  ],
+                  "tooltip": "Shadow map resolution and filtering"
+                }
+              }
+            ]
+          },
+          {
+            "id": "rendering_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Rendering"
+            },
+            "children": [
+              {
+                "id": "fov",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Field of View",
+                  "min": 60,
+                  "max": 130,
+                  "step": 1,
+                  "config_key": "pc-settings-enhanced.graphics.fov",
+                  "tooltip": "Camera field of view in degrees"
+                }
+              },
+              {
+                "id": "render_scale",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Render Scale",
+                  "min": 0.25,
+                  "max": 2.0,
+                  "step": 0.05,
+                  "config_key": "pc-settings-enhanced.graphics.render_scale",
+                  "tooltip": "Internal render resolution scale"
+                }
+              },
+              {
+                "id": "anti_aliasing",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Anti-Aliasing",
+                  "config_key": "pc-settings-enhanced.graphics.anti_aliasing",
+                  "options": [
+                    {"value": "off", "label": "Off"},
+                    {"value": "fxaa", "label": "FXAA (Fast)"},
+                    {"value": "taa", "label": "TAA (Temporal)"},
+                    {"value": "msaa2x", "label": "MSAA 2x"},
+                    {"value": "msaa4x", "label": "MSAA 4x"},
+                    {"value": "msaa8x", "label": "MSAA 8x"}
+                  ],
+                  "tooltip": "Anti-aliasing technique"
+                }
+              },
+              {
+                "id": "anisotropic_filtering",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Anisotropic Filtering",
+                  "config_key": "pc-settings-enhanced.graphics.anisotropic_filtering",
+                  "options": [
+                    {"value": "off", "label": "Off"},
+                    {"value": "2x", "label": "2x"},
+                    {"value": "4x", "label": "4x"},
+                    {"value": "8x", "label": "8x"},
+                    {"value": "16x", "label": "16x"}
+                  ],
+                  "tooltip": "Texture filtering quality at oblique angles"
+                }
+              }
+            ]
+          },
+          {
+            "id": "effects_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Effects"
+            },
+            "children": [
+              {
+                "id": "particle_quality",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Particle Quality",
+                  "config_key": "pc-settings-enhanced.graphics.particle_quality",
+                  "options": [
+                    {"value": "low", "label": "Low"},
+                    {"value": "medium", "label": "Medium"},
+                    {"value": "high", "label": "High"},
+                    {"value": "ultra", "label": "Ultra"}
+                  ],
+                  "tooltip": "Particle effect count and complexity"
+                }
+              },
+              {
+                "id": "water_quality",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Water Quality",
+                  "config_key": "pc-settings-enhanced.graphics.water_quality",
+                  "options": [
+                    {"value": "low", "label": "Low"},
+                    {"value": "medium", "label": "Medium"},
+                    {"value": "high", "label": "High"},
+                    {"value": "ultra", "label": "Ultra"}
+                  ],
+                  "tooltip": "Water rendering quality and reflections"
+                }
+              },
+              {
+                "id": "lighting_quality",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Lighting Quality",
+                  "config_key": "pc-settings-enhanced.graphics.lighting_quality",
+                  "options": [
+                    {"value": "low", "label": "Low"},
+                    {"value": "medium", "label": "Medium"},
+                    {"value": "high", "label": "High"},
+                    {"value": "ultra", "label": "Ultra"}
+                  ],
+                  "tooltip": "Lighting and shadow quality"
+                }
+              },
+              {
+                "id": "post_processing",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Post Processing",
+                  "config_key": "pc-settings-enhanced.graphics.post_processing",
+                  "tooltip": "Enable post-processing effects"
+                }
+              },
+              {
+                "id": "motion_blur",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Motion Blur",
+                  "config_key": "pc-settings-enhanced.graphics.motion_blur",
+                  "tooltip": "Enable motion blur effect"
+                }
+              },
+              {
+                "id": "depth_of_field",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Depth of Field",
+                  "config_key": "pc-settings-enhanced.graphics.depth_of_field",
+                  "tooltip": "Enable depth of field effect"
+                }
+              },
+              {
+                "id": "bloom",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Bloom",
+                  "config_key": "pc-settings-enhanced.graphics.bloom",
+                  "tooltip": "Enable bloom/glow effect"
+                }
+              },
+              {
+                "id": "ambient_occlusion",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Ambient Occlusion",
+                  "config_key": "pc-settings-enhanced.graphics.ambient_occlusion",
+                  "options": [
+                    {"value": "off", "label": "Off"},
+                    {"value": "ssao", "label": "SSAO"},
+                    {"value": "hbao", "label": "HBAO+"},
+                    {"value": "hdao", "label": "HDAO"}
+                  ],
+                  "tooltip": "Ambient occlusion technique"
+                }
+              }
+            ]
+          },
+          {
+            "id": "color_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Color & Gamma"
+            },
+            "children": [
+              {
+                "id": "gamma",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Gamma",
+                  "min": 0.5,
+                  "max": 2.0,
+                  "step": 0.05,
+                  "config_key": "pc-settings-enhanced.graphics.gamma",
+                  "tooltip": "Gamma correction"
+                }
+              },
+              {
+                "id": "brightness",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Brightness",
+                  "min": 0.5,
+                  "max": 1.5,
+                  "step": 0.05,
+                  "config_key": "pc-settings-enhanced.graphics.brightness",
+                  "tooltip": "Brightness adjustment"
+                }
+              },
+              {
+                "id": "contrast",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Contrast",
+                  "min": 0.5,
+                  "max": 1.5,
+                  "step": 0.05,
+                  "config_key": "pc-settings-enhanced.graphics.contrast",
+                  "tooltip": "Contrast adjustment"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "AddSection",
+      "id": "input_advanced_section",
+      "parent": "main_menu",
+      "widget": {
+        "id": "input_advanced_section",
+        "widget_type": "Section",
+        "properties": {
+          "label": "Input (Advanced)",
+          "tooltip": "Advanced input settings for keyboard, mouse, and controller"
+        },
+        "children": [
+          {
+            "id": "mouse_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Mouse"
+            },
+            "children": [
+              {
+                "id": "mouse_sensitivity",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Mouse Sensitivity",
+                  "min": 0.1,
+                  "max": 10.0,
+                  "step": 0.05,
+                  "config_key": "pc-settings-enhanced.input.mouse_sensitivity",
+                  "tooltip": "Mouse sensitivity multiplier"
+                }
+              },
+              {
+                "id": "mouse_acceleration",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Mouse Acceleration",
+                  "config_key": "pc-settings-enhanced.input.mouse_acceleration",
+                  "tooltip": "Enable mouse acceleration (not recommended for FPS)"
+                }
+              },
+              {
+                "id": "raw_input",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Raw Input",
+                  "config_key": "pc-settings-enhanced.input.raw_input",
+                  "tooltip": "Use raw mouse input (bypasses OS acceleration)"
+                }
+              },
+              {
+                "id": "invert_mouse_y",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Invert Mouse Y",
+                  "config_key": "pc-settings-enhanced.input.invert_mouse_y",
+                  "tooltip": "Invert vertical mouse axis"
+                }
+              }
+            ]
+          },
+          {
+            "id": "controller_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Controller"
+            },
+            "children": [
+              {
+                "id": "controller_enabled",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Enable Controller",
+                  "config_key": "pc-settings-enhanced.input.controller_enabled",
+                  "tooltip": "Enable gamepad/controller support"
+                }
+              },
+              {
+                "id": "controller_sensitivity",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Stick Sensitivity",
+                  "min": 0.1,
+                  "max": 5.0,
+                  "step": 0.05,
+                  "config_key": "pc-settings-enhanced.input.controller_sensitivity",
+                  "tooltip": "Controller stick sensitivity multiplier"
+                }
+              },
+              {
+                "id": "controller_deadzone",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Deadzone",
+                  "min": 0.0,
+                  "max": 0.5,
+                  "step": 0.01,
+                  "config_key": "pc-settings-enhanced.input.controller_deadzone",
+                  "tooltip": "Controller stick deadzone (0.0 - 0.5)"
+                }
+              },
+              {
+                "id": "controller_invert_y",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Invert Y Axis",
+                  "config_key": "pc-settings-enhanced.input.controller_invert_y",
+                  "tooltip": "Invert controller vertical axis"
+                }
+              },
+              {
+                "id": "controller_vibration",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Vibration",
+                  "config_key": "pc-settings-enhanced.input.controller_vibration",
+                  "tooltip": "Enable controller vibration/rumble"
+                }
+              },
+              {
+                "id": "controller_vibration_strength",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Vibration Strength",
+                  "min": 0.0,
+                  "max": 1.0,
+                  "step": 0.05,
+                  "config_key": "pc-settings-enhanced.input.controller_vibration_strength",
+                  "tooltip": "Controller vibration intensity"
+                }
+              }
+            ]
+          },
+          {
+            "id": "keyboard_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Keyboard"
+            },
+            "children": [
+              {
+                "id": "keyboard_layout",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Keyboard Layout",
+                  "config_key": "pc-settings-enhanced.input.keyboard_layout",
+                  "options": [
+                    {"value": "qwerty", "label": "QWERTY"},
+                    {"value": "azerty", "label": "AZERTY"},
+                    {"value": "qwertz", "label": "QWERTZ"},
+                    {"value": "dvorak", "label": "Dvorak"},
+                    {"value": "colemak", "label": "Colemak"}
+                  ],
+                  "tooltip": "Keyboard layout for key hints"
+                }
+              },
+              {
+                "id": "enable_steam_input",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Steam Input Support",
+                  "config_key": "pc-settings-enhanced.input.enable_steam_input",
+                  "tooltip": "Enable Steam Input API for controller configurations"
+                }
+              },
+              {
+                "id": "input_buffering",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Input Buffering",
+                  "config_key": "pc-settings-enhanced.input.input_buffering",
+                  "tooltip": "Buffer inputs for responsive controls"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "AddSection",
+      "id": "audio_advanced_section",
+      "parent": "main_menu",
+      "widget": {
+        "id": "audio_advanced_section",
+        "widget_type": "Section",
+        "properties": {
+          "label": "Audio (Advanced)",
+          "tooltip": "Advanced audio settings and device selection"
+        },
+        "children": [
+          {
+            "id": "volume_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Volume Levels"
+            },
+            "children": [
+              {
+                "id": "master_volume",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Master Volume",
+                  "min": 0.0,
+                  "max": 1.0,
+                  "step": 0.05,
+                  "config_key": "pc-settings-enhanced.audio.master_volume",
+                  "tooltip": "Overall volume level"
+                }
+              },
+              {
+                "id": "music_volume",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Music Volume",
+                  "min": 0.0,
+                  "max": 1.0,
+                  "step": 0.05,
+                  "config_key": "pc-settings-enhanced.audio.music_volume",
+                  "tooltip": "Background music volume"
+                }
+              },
+              {
+                "id": "sfx_volume",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Sound Effects Volume",
+                  "min": 0.0,
+                  "max": 1.0,
+                  "step": 0.05,
+                  "config_key": "pc-settings-enhanced.audio.sfx_volume",
+                  "tooltip": "Sound effects volume"
+                }
+              },
+              {
+                "id": "voice_volume",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Voice/Dialogue Volume",
+                  "min": 0.0,
+                  "max": 1.0,
+                  "step": 0.05,
+                  "config_key": "pc-settings-enhanced.audio.voice_volume",
+                  "tooltip": "Character dialogue volume"
+                }
+              },
+              {
+                "id": "ambient_volume",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Ambient Volume",
+                  "min": 0.0,
+                  "max": 1.0,
+                  "step": 0.05,
+                  "config_key": "pc-settings-enhanced.audio.ambient_volume",
+                  "tooltip": "Environmental ambient sounds volume"
+                }
+              }
+            ]
+          },
+          {
+            "id": "device_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Audio Device"
+            },
+            "children": [
+              {
+                "id": "audio_device",
+                "widget_type": "TextInput",
+                "properties": {
+                  "label": "Audio Device",
+                  "config_key": "pc-settings-enhanced.audio.audio_device",
+                  "placeholder": "default (leave empty for system default)",
+                  "tooltip": "Audio output device name (empty = system default)"
+                }
+              },
+              {
+                "id": "audio_backend",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Audio Backend",
+                  "config_key": "pc-settings-enhanced.audio.audio_backend",
+                  "options": [
+                    {"value": "auto", "label": "Auto"},
+                    {"value": "pipewire", "label": "PipeWire"},
+                    {"value": "pulseaudio", "label": "PulseAudio"},
+                    {"value": "alsa", "label": "ALSA"},
+                    {"value": "jack", "label": "JACK"}
+                  ],
+                  "tooltip": "Audio backend to use"
+                }
+              },
+              {
+                "id": "sample_rate",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Sample Rate",
+                  "config_key": "pc-settings-enhanced.audio.sample_rate",
+                  "options": [
+                    {"value": "44100", "label": "44.1 kHz (CD Quality)"},
+                    {"value": "48000", "label": "48 kHz (Standard)"},
+                    {"value": "88200", "label": "88.2 kHz"},
+                    {"value": "96000", "label": "96 kHz (Studio)"},
+                    {"value": "192000", "label": "192 kHz (Hi-Res)"}
+                  ],
+                  "tooltip": "Audio sample rate"
+                }
+              },
+              {
+                "id": "buffer_size",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Buffer Size",
+                  "config_key": "pc-settings-enhanced.audio.buffer_size",
+                  "options": [
+                    {"value": "256", "label": "256 (Low Latency)"},
+                    {"value": "512", "label": "512"},
+                    {"value": "1024", "label": "1024 (Balanced)"},
+                    {"value": "2048", "label": "2048"},
+                    {"value": "4096", "label": "4096 (High Stability)"}
+                  ],
+                  "tooltip": "Audio buffer size (lower = less latency, higher = more stable)"
+                }
+              }
+            ]
+          },
+          {
+            "id": "spatial_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Spatial Audio"
+            },
+            "children": [
+              {
+                "id": "enable_hrtf",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "HRTF 3D Audio",
+                  "config_key": "pc-settings-enhanced.audio.enable_hrtf",
+                  "tooltip": "Enable Head-Related Transfer Function for 3D positional audio"
+                }
+              },
+              {
+                "id": "enable_reverb",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Environmental Reverb",
+                  "config_key": "pc-settings-enhanced.audio.enable_reverb",
+                  "tooltip": "Enable room/environment reverb effects"
+                }
+              },
+              {
+                "id": "dynamic_range",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Dynamic Range",
+                  "config_key": "pc-settings-enhanced.audio.dynamic_range",
+                  "options": [
+                    {"value": "full", "label": "Full (Original)"},
+                    {"value": "reduced", "label": "Reduced"},
+                    {"value": "compressed", "label": "Compressed (Late Night)"}
+                  ],
+                  "tooltip": "Dynamic range compression for quiet environments"
+                }
+              },
+              {
+                "id": "mute_on_focus_loss",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Mute on Focus Loss",
+                  "config_key": "pc-settings-enhanced.audio.mute_on_focus_loss",
+                  "tooltip": "Mute audio when window loses focus"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "AddSection",
+      "id": "gameplay_advanced_section",
+      "parent": "main_menu",
+      "widget": {
+        "id": "gameplay_advanced_section",
+        "widget_type": "Section",
+        "properties": {
+          "label": "Gameplay",
+          "tooltip": "Gameplay settings and difficulty options"
+        },
+        "children": [
+          {
+            "id": "difficulty_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Difficulty"
+            },
+            "children": [
+              {
+                "id": "difficulty",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Difficulty",
+                  "config_key": "pc-settings-enhanced.gameplay.difficulty",
+                  "options": [
+                    {"value": "easy", "label": "Easy"},
+                    {"value": "normal", "label": "Normal"},
+                    {"value": "hard", "label": "Hard"},
+                    {"value": "nightmare", "label": "Nightmare"}
+                  ],
+                  "tooltip": "Game difficulty (affects enemy health, damage, resources)"
+                }
+              }
+            ]
+          },
+          {
+            "id": "saves_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Saves"
+            },
+            "children": [
+              {
+                "id": "auto_save",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Auto-Save",
+                  "config_key": "pc-settings-enhanced.gameplay.auto_save",
+                  "tooltip": "Automatically save on level transitions"
+                }
+              },
+              {
+                "id": "auto_save_interval",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Auto-Save Interval (seconds)",
+                  "min": 30,
+                  "max": 600,
+                  "step": 30,
+                  "config_key": "pc-settings-enhanced.gameplay.auto_save_interval",
+                  "tooltip": "Time between automatic saves during gameplay"
+                }
+              },
+              {
+                "id": "quick_save_enabled",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Quick Save (F5)",
+                  "config_key": "pc-settings-enhanced.gameplay.quick_save_enabled",
+                  "tooltip": "Enable quick save hotkey"
+                }
+              },
+              {
+                "id": "quick_load_enabled",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Quick Load (F9)",
+                  "config_key": "pc-settings-enhanced.gameplay.quick_load_enabled",
+                  "tooltip": "Enable quick load hotkey"
+                }
+              },
+              {
+                "id": "backup_saves",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Backup Saves",
+                  "config_key": "pc-settings-enhanced.advanced.backup_saves",
+                  "tooltip": "Create backup copies of save files"
+                }
+              },
+              {
+                "id": "max_save_backups",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Max Save Backups",
+                  "min": 1,
+                  "max": 50,
+                  "step": 1,
+                  "config_key": "pc-settings-enhanced.advanced.max_save_backups",
+                  "tooltip": "Maximum number of save backups to keep"
+                }
+              }
+            ]
+          },
+          {
+            "id": "camera_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Camera"
+            },
+            "children": [
+              {
+                "id": "camera_distance",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Camera Distance",
+                  "min": 1.0,
+                  "max": 10.0,
+                  "step": 0.1,
+                  "config_key": "pc-settings-enhanced.gameplay.camera_distance",
+                  "tooltip": "Third-person camera distance from player"
+                }
+              },
+              {
+                "id": "camera_sensitivity",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Camera Sensitivity",
+                  "min": 0.1,
+                  "max": 5.0,
+                  "step": 0.05,
+                  "config_key": "pc-settings-enhanced.gameplay.camera_sensitivity",
+                  "tooltip": "Camera rotation sensitivity"
+                }
+              },
+              {
+                "id": "camera_invert_x",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Invert Camera X",
+                  "config_key": "pc-settings-enhanced.gameplay.camera_invert_x",
+                  "tooltip": "Invert horizontal camera axis"
+                }
+              },
+              {
+                "id": "camera_invert_y",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Invert Camera Y",
+                  "config_key": "pc-settings-enhanced.gameplay.camera_invert_y",
+                  "tooltip": "Invert vertical camera axis"
+                }
+              },
+              {
+                "id": "camera_collision",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Camera Collision",
+                  "config_key": "pc-settings-enhanced.gameplay.camera_collision",
+                  "tooltip": "Prevent camera from clipping through walls"
+                }
+              },
+              {
+                "id": "camera_shake",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Camera Shake",
+                  "config_key": "pc-settings-enhanced.gameplay.camera_shake",
+                  "tooltip": "Enable camera shake effects"
+                }
+              }
+            ]
+          },
+          {
+            "id": "misc_gameplay_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Miscellaneous"
+            },
+            "children": [
+              {
+                "id": "show_hints",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Show Hints",
+                  "config_key": "pc-settings-enhanced.gameplay.show_hints",
+                  "tooltip": "Show contextual gameplay hints"
+                }
+              },
+              {
+                "id": "show_objectives",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Show Objectives",
+                  "config_key": "pc-settings-enhanced.gameplay.show_objectives",
+                  "tooltip": "Display current objectives on screen"
+                }
+              },
+              {
+                "id": "skip_cinematic",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Allow Skip Cinematics",
+                  "config_key": "pc-settings-enhanced.gameplay.skip_cinematic",
+                  "tooltip": "Allow skipping cinematic sequences"
+                }
+              },
+              {
+                "id": "skip_dialogue",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Allow Skip Dialogue",
+                  "config_key": "pc-settings-enhanced.gameplay.skip_dialogue",
+                  "tooltip": "Allow skipping dialogue lines"
+                }
+              },
+              {
+                "id": "weapon_sway",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Weapon Sway",
+                  "config_key": "pc-settings-enhanced.gameplay.weapon_sway",
+                  "tooltip": "Enable weapon sway animation"
+                }
+              },
+              {
+                "id": "crosshair_enabled",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Crosshair",
+                  "config_key": "pc-settings-enhanced.gameplay.crosshair_enabled",
+                  "tooltip": "Show crosshair in first person"
+                }
+              },
+              {
+                "id": "crosshair_style",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Crosshair Style",
+                  "config_key": "pc-settings-enhanced.gameplay.crosshair_style",
+                  "options": [
+                    {"value": "default", "label": "Default"},
+                    {"value": "dot", "label": "Dot"},
+                    {"value": "circle", "label": "Circle"},
+                    {"value": "cross", "label": "Cross"},
+                    {"value": "dynamic", "label": "Dynamic (expands on movement)"}
+                  ],
+                  "tooltip": "Crosshair appearance style"
+                }
+              },
+              {
+                "id": "crosshair_color",
+                "widget_type": "ColorPicker",
+                "properties": {
+                  "label": "Crosshair Color",
+                  "config_key": "pc-settings-enhanced.gameplay.crosshair_color",
+                  "tooltip": "Crosshair color (hex format)"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "AddSection",
+      "id": "hud_advanced_section",
+      "parent": "main_menu",
+      "widget": {
+        "id": "hud_advanced_section",
+        "widget_type": "Section",
+        "properties": {
+          "label": "HUD & UI",
+          "tooltip": "Heads-up display and UI customization"
+        },
+        "children": [
+          {
+            "id": "hud_general_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "General"
+            },
+            "children": [
+              {
+                "id": "hud_scale",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "HUD Scale",
+                  "min": 0.5,
+                  "max": 2.0,
+                  "step": 0.05,
+                  "config_key": "pc-settings-enhanced.hud.hud_scale",
+                  "tooltip": "Overall HUD size multiplier"
+                }
+              },
+              {
+                "id": "hud_opacity",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "HUD Opacity",
+                  "min": 0.0,
+                  "max": 1.0,
+                  "step": 0.05,
+                  "config_key": "pc-settings-enhanced.hud.hud_opacity",
+                  "tooltip": "HUD transparency"
+                }
+              },
+              {
+                "id": "hud_color_scheme",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Color Scheme",
+                  "config_key": "pc-settings-enhanced.hud.hud_color_scheme",
+                  "options": [
+                    {"value": "original", "label": "Original"},
+                    {"value": "high_contrast", "label": "High Contrast"},
+                    {"value": "colorblind_protanopia", "label": "Colorblind: Protanopia"},
+                    {"value": "colorblind_deuteranopia", "label": "Colorblind: Deuteranopia"},
+                    {"value": "colorblind_tritanopia", "label": "Colorblind: Tritanopia"},
+                    {"value": "custom", "label": "Custom"}
+                  ],
+                  "tooltip": "HUD color scheme for accessibility"
+                }
+              }
+            ]
+          },
+          {
+            "id": "hud_elements_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "HUD Elements"
+            },
+            "children": [
+              {
+                "id": "show_health",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Health Bar",
+                  "config_key": "pc-settings-enhanced.hud.show_health",
+                  "tooltip": "Show player health bar"
+                }
+              },
+              {
+                "id": "show_will",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Will Meter",
+                  "config_key": "pc-settings-enhanced.hud.show_will",
+                  "tooltip": "Show will/magic meter"
+                }
+              },
+              {
+                "id": "show_ammo",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Ammo/Weapon Count",
+                  "config_key": "pc-settings-enhanced.hud.show_ammo",
+                  "tooltip": "Show current weapon ammo"
+                }
+              },
+              {
+                "id": "show_weapon_wheel",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Weapon Wheel",
+                  "config_key": "pc-settings-enhanced.hud.show_weapon_wheel",
+                  "tooltip": "Show weapon wheel on weapon switch"
+                }
+              },
+              {
+                "id": "show_minimap",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Minimap",
+                  "config_key": "pc-settings-enhanced.hud.show_minimap",
+                  "tooltip": "Show minimap (if available for current level)"
+                }
+              },
+              {
+                "id": "show_compass",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Compass",
+                  "config_key": "pc-settings-enhanced.hud.show_compass",
+                  "tooltip": "Show directional compass"
+                }
+              }
+            ]
+          },
+          {
+            "id": "debug_hud_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Debug Overlay"
+            },
+            "children": [
+              {
+                "id": "show_fps",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Show FPS Counter",
+                  "config_key": "pc-settings-enhanced.hud.show_fps",
+                  "tooltip": "Display frames per second counter"
+                }
+              },
+              {
+                "id": "show_frame_time",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Show Frame Time Graph",
+                  "config_key": "pc-settings-enhanced.hud.show_frame_time",
+                  "tooltip": "Display frame time history graph"
+                }
+              },
+              {
+                "id": "show_coordinates",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Show Coordinates",
+                  "config_key": "pc-settings-enhanced.hud.show_coordinates",
+                  "tooltip": "Display player world coordinates"
+                }
+              },
+              {
+                "id": "show_speed",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Show Speed",
+                  "config_key": "pc-settings-enhanced.hud.show_speed",
+                  "tooltip": "Display current movement speed"
+                }
+              }
+            ]
+          },
+          {
+            "id": "combat_hud_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Combat Feedback"
+            },
+            "children": [
+              {
+                "id": "damage_numbers",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Damage Numbers",
+                  "config_key": "pc-settings-enhanced.hud.damage_numbers",
+                  "tooltip": "Show damage numbers on hit"
+                }
+              },
+              {
+                "id": "combo_counter",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Combo Counter",
+                  "config_key": "pc-settings-enhanced.hud.combo_counter",
+                  "tooltip": "Show combo/hit counter during combat"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "AddSection",
+      "id": "accessibility_section",
+      "parent": "main_menu",
+      "widget": {
+        "id": "accessibility_section",
+        "widget_type": "Section",
+        "properties": {
+          "label": "Accessibility",
+          "tooltip": "Accessibility options for inclusive gameplay"
+        },
+        "children": [
+          {
+            "id": "subtitles_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Subtitles & Captions"
+            },
+            "children": [
+              {
+                "id": "subtitles_enabled",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Enable Subtitles",
+                  "config_key": "pc-settings-enhanced.accessibility.subtitles_enabled",
+                  "tooltip": "Show subtitles for dialogue"
+                }
+              },
+              {
+                "id": "subtitle_size",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Subtitle Size",
+                  "config_key": "pc-settings-enhanced.accessibility.subtitle_size",
+                  "options": [
+                    {"value": "small", "label": "Small"},
+                    {"value": "medium", "label": "Medium"},
+                    {"value": "large", "label": "Large"},
+                    {"value": "extra_large", "label": "Extra Large"}
+                  ],
+                  "tooltip": "Subtitle text size"
+                }
+              },
+              {
+                "id": "subtitle_background",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Subtitle Background",
+                  "config_key": "pc-settings-enhanced.accessibility.subtitle_background",
+                  "tooltip": "Show semi-transparent background behind subtitles"
+                }
+              },
+              {
+                "id": "subtitle_speaker_names",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Speaker Names",
+                  "config_key": "pc-settings-enhanced.accessibility.subtitle_speaker_names",
+                  "tooltip": "Show character names in subtitles"
+                }
+              },
+              {
+                "id": "closed_captions",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Closed Captions",
+                  "config_key": "pc-settings-enhanced.accessibility.closed_captions",
+                  "tooltip": "Show sound effect descriptions [footsteps], [explosion], etc."
+                }
+              }
+            ]
+          },
+          {
+            "id": "visual_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Visual"
+            },
+            "children": [
+              {
+                "id": "high_contrast_mode",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "High Contrast Mode",
+                  "config_key": "pc-settings-enhanced.accessibility.high_contrast_mode",
+                  "tooltip": "Increase contrast for better visibility"
+                }
+              },
+              {
+                "id": "reduce_motion",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Reduce Motion",
+                  "config_key": "pc-settings-enhanced.accessibility.reduce_motion",
+                  "tooltip": "Reduce camera shake, motion blur, and screen effects"
+                }
+              },
+              {
+                "id": "reduce_flashing",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Reduce Flashing",
+                  "config_key": "pc-settings-enhanced.accessibility.reduce_flashing",
+                  "tooltip": "Reduce strobe/flashing effects (photosensitivity)"
+                }
+              }
+            ]
+          },
+          {
+            "id": "gameplay_assist_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Gameplay Assistance"
+            },
+            "children": [
+              {
+                "id": "hold_to_continue",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Hold to Continue",
+                  "config_key": "pc-settings-enhanced.accessibility.hold_to_continue",
+                  "tooltip": "Require holding button instead of tapping for continue prompts"
+                }
+              },
+              {
+                "id": "auto_climb",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Auto-Climb",
+                  "config_key": "pc-settings-enhanced.accessibility.auto_climb",
+                  "tooltip": "Automatically climb ledges without holding button"
+                }
+              },
+              {
+                "id": "auto_swim",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Auto-Swim",
+                  "config_key": "pc-settings-enhanced.accessibility.auto_swim",
+                  "tooltip": "Automatically swim forward without holding button"
+                }
+              },
+              {
+                "id": "simplified_combat",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Simplified Combat",
+                  "config_key": "pc-settings-enhanced.accessibility.simplified_combat",
+                  "tooltip": "Simplify combat input requirements"
+                }
+              },
+              {
+                "id": "invincibility_mode",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Invincibility Mode",
+                  "config_key": "pc-settings-enhanced.accessibility.invincibility_mode",
+                  "tooltip": "Player cannot take damage (accessibility)"
+                }
+              },
+              {
+                "id": "infinite_will",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Infinite Will",
+                  "config_key": "pc-settings-enhanced.accessibility.infinite_will",
+                  "tooltip": "Will meter never depletes (accessibility)"
+                }
+              },
+              {
+                "id": "no_fail_quick_time",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "No-Fail Quick Time Events",
+                  "config_key": "pc-settings-enhanced.accessibility.no_fail_quick_time",
+                  "tooltip": "Cannot fail quick-time event sequences"
+                }
+              }
+            ]
+          },
+          {
+            "id": "audio_accessibility_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Audio Assistance"
+            },
+            "children": [
+              {
+                "id": "text_to_speech",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Text-to-Speech",
+                  "config_key": "pc-settings-enhanced.accessibility.text_to_speech",
+                  "tooltip": "Read menu text aloud (requires TTS engine)"
+                }
+              },
+              {
+                "id": "menu_navigation_sound",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Menu Navigation Sounds",
+                  "config_key": "pc-settings-enhanced.accessibility.menu_navigation_sound",
+                  "tooltip": "Play sound when navigating menus"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "AddSection",
+      "id": "advanced_section",
+      "parent": "main_menu",
+      "widget": {
+        "id": "advanced_section",
+        "widget_type": "Section",
+        "properties": {
+          "label": "Advanced",
+          "tooltip": "Advanced technical settings"
+        },
+        "children": [
+          {
+            "id": "developer_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Developer Tools"
+            },
+            "children": [
+              {
+                "id": "developer_console",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Developer Console",
+                  "config_key": "pc-settings-enhanced.advanced.developer_console",
+                  "tooltip": "Enable developer console with `~` key"
+                }
+              },
+              {
+                "id": "debug_overlay",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Debug Overlay",
+                  "config_key": "pc-settings-enhanced.advanced.debug_overlay",
+                  "tooltip": "Show debug information overlay"
+                }
+              },
+              {
+                "id": "log_level",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Log Level",
+                  "config_key": "pc-settings-enhanced.advanced.log_level",
+                  "options": [
+                    {"value": "trace", "label": "Trace (Verbose)"},
+                    {"value": "debug", "label": "Debug"},
+                    {"value": "info", "label": "Info"},
+                    {"value": "warn", "label": "Warning"},
+                    {"value": "error", "label": "Error Only"}
+                  ],
+                  "tooltip": "Logging verbosity level"
+                }
+              },
+              {
+                "id": "enable_profiling",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Performance Profiling",
+                  "config_key": "pc-settings-enhanced.advanced.enable_profiling",
+                  "tooltip": "Enable performance profiling (F11 overlay)"
+                }
+              }
+            ]
+          },
+          {
+            "id": "performance_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Performance"
+            },
+            "children": [
+              {
+                "id": "shader_cache",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Shader Cache",
+                  "config_key": "pc-settings-enhanced.advanced.shader_cache",
+                  "tooltip": "Cache compiled shaders for faster startup"
+                }
+              },
+              {
+                "id": "thread_priority",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Thread Priority",
+                  "config_key": "pc-settings-enhanced.advanced.thread_priority",
+                  "options": [
+                    {"value": "normal", "label": "Normal"},
+                    {"value": "high", "label": "High"},
+                    {"value": "realtime", "label": "Realtime (Not Recommended)"}
+                  ],
+                  "tooltip": "Game thread scheduling priority"
+                }
+              },
+              {
+                "id": "memory_limit",
+                "widget_type": "Slider",
+                "properties": {
+                  "label": "Memory Limit (MB)",
+                  "min": 1024,
+                  "max": 32768,
+                  "step": 512,
+                  "config_key": "pc-settings-enhanced.advanced.memory_limit",
+                  "tooltip": "Maximum memory usage limit"
+                }
+              },
+              {
+                "id": "asset_streaming",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Asset Streaming",
+                  "config_key": "pc-settings-enhanced.advanced.asset_streaming",
+                  "tooltip": "Stream assets on demand instead of loading all at once"
+                }
+              },
+              {
+                "id": "preload_assets",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Preload All Assets",
+                  "config_key": "pc-settings-enhanced.advanced.preload_assets",
+                  "tooltip": "Load all level assets at startup (uses more RAM)"
+                }
+              }
+            ]
+          },
+          {
+            "id": "behavior_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Window Behavior"
+            },
+            "children": [
+              {
+                "id": "skip_intro_logos",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Skip Intro Logos",
+                  "config_key": "pc-settings-enhanced.advanced.skip_intro_logos",
+                  "tooltip": "Skip company/logo screens on startup"
+                }
+              },
+              {
+                "id": "auto_pause_on_focus_loss",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Auto-Pause on Focus Loss",
+                  "config_key": "pc-settings-enhanced.advanced.auto_pause_on_focus_loss",
+                  "tooltip": "Automatically pause when window loses focus"
+                }
+              },
+              {
+                "id": "borderless_focus_behavior",
+                "widget_type": "Dropdown",
+                "properties": {
+                  "label": "Borderless Focus Behavior",
+                  "config_key": "pc-settings-enhanced.advanced.borderless_focus_behavior",
+                  "options": [
+                    {"value": "pause", "label": "Pause Game"},
+                    {"value": "continue", "label": "Continue Running"},
+                    {"value": "mute_only", "label": "Mute Audio Only"}
+                  ],
+                  "tooltip": "Behavior when borderless window loses focus"
+                }
+              }
+            ]
+          },
+          {
+            "id": "integration_group",
+            "widget_type": "Group",
+            "properties": {
+              "label": "Platform Integration"
+            },
+            "children": [
+              {
+                "id": "steam_overlay",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Steam Overlay",
+                  "config_key": "pc-settings-enhanced.advanced.steam_overlay",
+                  "tooltip": "Enable Steam Overlay support"
+                }
+              },
+              {
+                "id": "discord_rpc",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Discord Rich Presence",
+                  "config_key": "pc-settings-enhanced.advanced.discord_rpc",
+                  "tooltip": "Show game status in Discord"
+                }
+              },
+              {
+                "id": "telemetry",
+                "widget_type": "Checkbox",
+                "properties": {
+                  "label": "Usage Telemetry",
+                  "config_key": "pc-settings-enhanced.advanced.telemetry",
+                  "tooltip": "Send anonymous usage statistics"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

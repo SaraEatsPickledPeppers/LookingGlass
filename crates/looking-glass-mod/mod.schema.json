@@ -164,6 +164,36 @@
       "type": "array",
       "items": { "type": "string" },
       "description": "Mod tags for categorization"
+    },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["filesystem_read", "filesystem_write", "network_access", "process_spawn", "native_code_execution", "ui_modification", "config_modification", "input_read", "input_inject", "runtime_access", "asset_override"]
+          },
+          "description": "Required permissions (mod will not function without these)"
+        },
+        "optional": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["filesystem_read", "filesystem_write", "network_access", "process_spawn", "native_code_execution", "ui_modification", "config_modification", "input_read", "input_inject", "runtime_access", "asset_override"]
+          },
+          "description": "Optional permissions (mod can function without these)"
+        },
+        "not_needed": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["filesystem_read", "filesystem_write", "network_access", "process_spawn", "native_code_execution", "ui_modification", "config_modification", "input_read", "input_inject", "runtime_access", "asset_override"]
+          },
+          "description": "Permissions this mod explicitly does not need"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

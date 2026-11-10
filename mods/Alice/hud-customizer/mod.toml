@@ -4,7 +4,7 @@ version = "1.0.0"
 manifest_version = 2
 author = "Looking Glass Team"
 description = "Customize HUD elements: toggle/move health, mana, weapon, ammo, show FPS, coordinates, and more"
-game_target = "Alice"
+game_target = "alice"
 dependencies = []
 load_order = { before = [], after = [] }
 entry_points = {

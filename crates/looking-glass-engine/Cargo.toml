@@ -33,10 +33,19 @@ x11rb = { workspace = true }
 wayland-client = { workspace = true }
 wayland-protocols = { workspace = true }
 gilrs = { workspace = true }
+tokio = { version = "1.0", features = ["sync", "macros", "rt-multi-thread", "fs"] }
+notify = { version = "6.0" }
+futures = { workspace = true }
 
 # Local crates
 looking-glass-mod = { path = "../looking-glass-mod" }
 looking-glass-config = { path = "../looking-glass-config" }
+
+[features]
+default = ["gamepad", "x11", "wayland"]
+gamepad = []
+x11 = []
+wayland = []
 
 [profile.dev]
 opt-level = 1

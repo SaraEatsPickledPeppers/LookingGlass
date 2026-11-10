@@ -22,8 +22,11 @@ toml = { version = "0.8", features = ["parse", "display"] }
 jsonschema = { workspace = true }
 chrono = { version = "0.4", features = ["serde"] }
 log = "0.4"
+tracing = "0.1"
 futures = "0.3"
 async-trait = "0.1"
+libloading = "0.8"
+mlua = { version = "0.9", features = ["vendored", "async", "lua54", "send"] }
 
 [dev-dependencies]
 pretty_assertions = "1.4"

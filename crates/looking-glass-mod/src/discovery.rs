@@ -1,4 +1,4 @@
-use crate::manifest::{GameTarget, InstalledMod, ModManifest};
+use crate::manifest::{InstalledMod, ModManifest, Permission, PermissionSet, Permissions};
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
 use jsonschema::validator_for;
@@ -7,7 +7,6 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use tar::Archive;
 use tempfile::tempdir;
 use walkdir::WalkDir;
@@ -96,6 +95,9 @@ impl ModDiscovery {
         // Validate load_order references
         self.validate_load_order(&manifest)?;
 
+        // Validate permissions
+        self.validate_permissions(&manifest)?;
+
         // Compute checksum
         let checksum = manifest.compute_checksum(extract_dir)?;
 
@@ -121,6 +123,10 @@ impl ModDiscovery {
         fs::create_dir_all(&self.mods_dir())?;
         fs::rename(extract_dir, &target_dir)?;
 
+        // Create permission set - by default, grant optional permissions and required permissions
+        // In a real implementation, this would prompt the user for consent
+        let permission_set = Self::create_permission_set(&manifest)?;
+
         let installed_mod = InstalledMod {
             manifest,
             path: target_dir.clone(),
@@ -128,9 +134,54 @@ impl ModDiscovery {
             config: None,
             installed_at: chrono::Utc::now(),
             checksum,
+            permissions: permission_set,
         };
 
         Ok(installed_mod)
+    }
+
+    /// Validate permissions in manifest
+    fn validate_permissions(&self, manifest: &ModManifest) -> Result<()> {
+        // Validate the permissions struct
+        manifest.permissions.validate()?;
+
+        // Check for potentially dangerous permissions and warn
+        let dangerous_permissions = [
+            Permission::ProcessSpawn,
+            Permission::NativeCodeExecution,
+            Permission::NetworkAccess,
+        ];
+
+        for perm in &dangerous_permissions {
+            if manifest.permissions.all_requested().contains(perm) {
+                tracing::warn!("Mod '{}' requests potentially dangerous permission: {}", manifest.id, perm);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Create a permission set for the installed mod
+    /// In a real implementation, this would prompt the user for consent
+    fn create_permission_set(manifest: &ModManifest) -> Result<PermissionSet> {
+        let mut permission_set = PermissionSet::default();
+
+        // Grant all required permissions by default
+        for perm in &manifest.permissions.required {
+            permission_set.grant(perm.clone());
+        }
+
+        // Grant all optional permissions by default (in a real implementation, this would be user-configurable)
+        for perm in &manifest.permissions.optional {
+            permission_set.grant(perm.clone());
+        }
+
+        // Explicitly deny not_needed permissions
+        for perm in &manifest.permissions.not_needed {
+            permission_set.deny(perm.clone());
+        }
+
+        Ok(permission_set)
     }
 
     fn validate_assets(&self, manifest: &ModManifest, extract_dir: &Path) -> Result<()> {
@@ -285,19 +336,26 @@ impl ModDiscovery {
         Ok(())
     }
 
+    /// Validate dependencies for a single manifest against all installed mods
     pub fn validate_dependencies(&self, manifest: &ModManifest) -> Result<()> {
         let installed_mods = self.discover()?;
-        let installed_map: HashMap<_, _> = installed_mods
+        self.validate_dependencies_against(manifest, &installed_mods)
+    }
+
+    /// Validate dependencies for a single manifest against a specific set of mods
+    /// This is used during loading to validate against the set of mods being loaded
+    pub fn validate_dependencies_against(
+        &self,
+        manifest: &ModManifest,
+        available_mods: &[InstalledMod],
+    ) -> Result<()> {
+        let available_map: HashMap<_, _> = available_mods
             .iter()
             .map(|m| (m.manifest.id.clone(), m))
             .collect();
 
         for dep in &manifest.dependencies {
-            if dep.optional {
-                continue;
-            }
-
-            if let Some(installed) = installed_map.get(&dep.id) {
+            if let Some(installed) = available_map.get(&dep.id) {
                 let installed_version = semver::Version::parse(&installed.manifest.version)?;
                 if !dep.version.matches(&installed_version) {
                     return Err(anyhow::anyhow!(
@@ -307,6 +365,9 @@ impl ModDiscovery {
                         dep.version
                     ));
                 }
+            } else if dep.optional {
+                // Optional dependency not found - warn but don't fail
+                log::warn!("Optional dependency '{}' not found for mod '{}'", dep.id, manifest.id);
             } else {
                 return Err(anyhow::anyhow!(
                     "Required dependency {} not found",
@@ -316,6 +377,59 @@ impl ModDiscovery {
         }
 
         Ok(())
+    }
+
+    /// Validate dependencies for a complete set of mods that will be loaded together
+    /// Checks that all required dependencies are satisfied within the set
+    /// Returns warnings for optional dependencies that are missing
+    pub fn validate_mod_set(&self, mods: &[InstalledMod]) -> Result<Vec<String>> {
+        let mut warnings = Vec::new();
+
+        // Build a map of all mods being loaded
+        let mod_map: HashMap<_, _> = mods
+            .iter()
+            .map(|m| (m.manifest.id.clone(), m))
+            .collect();
+
+        // Validate each mod's dependencies against the set
+        for installed_mod in mods {
+            for dep in &installed_mod.manifest.dependencies {
+                if let Some(dep_mod) = mod_map.get(&dep.id) {
+                    let installed_version = semver::Version::parse(&dep_mod.manifest.version)?;
+                    if !dep.version.matches(&installed_version) {
+                        return Err(anyhow::anyhow!(
+                            "Mod '{}' requires dependency '{}' version {} but found version {}",
+                            installed_mod.manifest.id,
+                            dep.id,
+                            dep.version,
+                            dep_mod.manifest.version
+                        ));
+                    }
+                } else if dep.optional {
+                    warnings.push(format!(
+                        "Mod '{}' has optional dependency '{}' which is not loaded",
+                        installed_mod.manifest.id, dep.id
+                    ));
+                } else {
+                    return Err(anyhow::anyhow!(
+                        "Mod '{}' requires dependency '{}' which is not loaded",
+                        installed_mod.manifest.id, dep.id
+                    ));
+                }
+            }
+        }
+
+        // Also validate game version constraints
+        for installed_mod in mods {
+            if let Err(e) = installed_mod.manifest.satisfies_game_version(&self.game_id) {
+                warnings.push(format!(
+                    "Mod '{}' game version check failed: {}",
+                    installed_mod.manifest.id, e
+                ));
+            }
+        }
+
+        Ok(warnings)
     }
 
     fn extract_archive(&self, archive_path: &Path, dest: &Path) -> Result<()> {
@@ -434,6 +548,36 @@ impl ModDiscovery {
         installed.enabled = false;
         self.save_installed_mod(&installed)?;
         Ok(())
+    }
+
+    /// Get the permission set for a mod
+    pub fn get_mod_permissions(&self, mod_id: &str) -> Result<PermissionSet> {
+        let installed = self.get_mod_info(mod_id)?;
+        Ok(installed.permissions)
+    }
+
+    /// Grant a permission to a mod
+    pub fn grant_permission(&self, mod_id: &str, permission: Permission) -> Result<()> {
+        let mod_dir = self.mods_dir().join(mod_id);
+        let mut installed = InstalledMod::load(&mod_dir)?;
+        installed.permissions.grant(permission);
+        self.save_installed_mod(&installed)?;
+        Ok(())
+    }
+
+    /// Deny a permission to a mod
+    pub fn deny_permission(&self, mod_id: &str, permission: Permission) -> Result<()> {
+        let mod_dir = self.mods_dir().join(mod_id);
+        let mut installed = InstalledMod::load(&mod_dir)?;
+        installed.permissions.deny(permission);
+        self.save_installed_mod(&installed)?;
+        Ok(())
+    }
+
+    /// Check if a mod has a specific permission granted
+    pub fn check_permission(&self, mod_id: &str, permission: &Permission) -> Result<bool> {
+        let installed = self.get_mod_info(mod_id)?;
+        Ok(installed.permissions.is_granted(permission))
     }
 
     fn save_installed_mod(&self, installed: &InstalledMod) -> Result<()> {

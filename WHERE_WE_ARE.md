@@ -84,40 +84,42 @@
 
 | Task | Status | Notes |
 |------|--------|-------|
-| **Release Packaging** — Package releases into tarballs and AppImages | 🔄 Planned | `tools/package_linux.py` already supports `--format tarball` and `--format appimage` |
-| **Port PowerShell Testing Tools** — Port `tools/` PowerShell scripts to Linux/Rust equivalents | 🔄 Planned | See list below |
+| **Release Packaging** — Package releases into tarballs and AppImages | ✅ Done | `tools/package_linux.py` and `tools/release.sh` support `--format tarball` and `--format appimage` |
+| **Port PowerShell Testing Tools** — Port `tools/` PowerShell scripts to Linux/Rust equivalents | ✅ Done | All 14 scripts have `.sh` equivalents in `tools/` |
 
-#### PowerShell Files to Port
+#### PowerShell Files to Port (All Completed)
 
-| PowerShell Script | Purpose | Target |
-|-------------------|---------|--------|
-| `analyze.ps1` | Ghidra analysis | Linux/Rust equivalent |
-| `test_ants.ps1` | Ant regression tests | Linux/Rust equivalent |
-| `test_burrow.ps1` | Burrow tests | Linux/Rust equivalent |
-| `test_campaign_chain.ps1` | Campaign chain validation | Linux/Rust equivalent |
-| `test_chess.ps1` | Chess tests | Linux/Rust equivalent |
-| `test_clock.ps1` | Clock tests | Linux/Rust equivalent |
-| `test_imp.ps1` | IMP tests | Linux/Rust equivalent |
-| `test_magma.ps1` | Magma tests | Linux/Rust equivalent |
-| `test_render_fx.ps1` | Renderer checks | Linux/Rust equivalent |
-| `test_residents.ps1` | Residents tests | Linux/Rust equivalent |
-| `test_sky_performance.ps1` | Sky performance tests | Linux/Rust equivalent |
-| `test_snarks.ps1` | Snarks tests | Linux/Rust equivalent |
-| `test_visibility.ps1` | Visibility tests | Linux/Rust equivalent |
-| `test_wildlife.ps1` | Wildlife tests | Linux/Rust equivalent |
-| `windows_setup.ps1` | Windows GUI setup | Already has Linux equivalent in `Setup.sh`/`linux_setup.sh` |
+| PowerShell Script | Purpose | Target | Status |
+|-------------------|---------|--------|--------|
+| `analyze.ps1` | Ghidra analysis | Linux/Rust equivalent | ✅ Done |
+| `test_ants.ps1` | Ant regression tests | Linux/Rust equivalent | ✅ Done (`test_ants.sh`) |
+| `test_burrow.ps1` | Burrow tests | Linux/Rust equivalent | ✅ Done (`test_burrow.sh`) |
+| `test_campaign_chain.ps1` | Campaign chain validation | Linux/Rust equivalent | ✅ Done (`test_campaign_chain.sh`) |
+| `test_chess.ps1` | Chess tests | Linux/Rust equivalent | ✅ Done (`test_chess.sh`) |
+| `test_clock.ps1` | Clock tests | Linux/Rust equivalent | ✅ Done (`test_clock.sh`) |
+| `test_imp.ps1` | IMP tests | Linux/Rust equivalent | ✅ Done (`test_imp.sh`) |
+| `test_magma.ps1` | Magma tests | Linux/Rust equivalent | ✅ Done (`test_magma.sh`) |
+| `test_render_fx.ps1` | Renderer checks | Linux/Rust equivalent | ✅ Done (`test_render_fx.sh`) |
+| `test_residents.ps1` | Residents tests | Linux/Rust equivalent | ✅ Done (`test_residents.sh`) |
+| `test_sky_performance.ps1` | Sky performance tests | Linux/Rust equivalent | ✅ Done (`test_sky_performance.sh`) |
+| `test_snarks.ps1` | Snarks tests | Linux/Rust equivalent | ✅ Done (`test_snarks.sh`) |
+| `test_visibility.ps1` | Visibility tests | Linux/Rust equivalent | ✅ Done (`test_visibility.sh`) |
+| `test_wildlife.ps1` | Wildlife tests | Linux/Rust equivalent | ✅ Done (`test_wildlife.sh`) |
+| `windows_setup.ps1` | Windows GUI setup | Already has Linux equivalent in `Setup.sh`/`linux_setup.sh` | ✅ Done |
 
 ### Phase 3: Advanced Mod Ecosystem
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Native mod support (Rust dynamic libraries via `libloading`) | 🔄 Next | From Phase 2C; enables `.so`/`.dll` mods |
-| Lua scripting support for mods (mlua) | 🔄 Planned | From Phase 2C; enables script mods without recompilation |
-| Mod dependency resolution & version constraints | 🔄 Planned | Semantic versioning, conflict detection |
-| Mod profiling/debugging tools (timing, memory, hooks) | 🔄 Planned | Built into engine mod API |
-| Mod marketplace/browser integration (NexusMods, Mod.io) | 🔄 Planned | Search, install, update from launcher |
-| Mod sandboxing & permissions model | 🔄 Planned | Restrict filesystem/network access per mod |
-| Mod hot-reload support (development workflow) | 🔄 Planned | Reload mods without engine restart |
+| Native mod support (Rust dynamic libraries via `libloading`) | ✅ Done | `NativeModLoader` with `load_mod_with_permissions` |
+| Lua scripting support for mods (mlua) | ✅ Done | `LuaModLoader` with sandboxed Lua state, API exposure |
+| Mod dependency resolution & version constraints | ✅ Done | `validate_mod_set`, `validate_dependencies_against`, semver |
+| Mod profiling/debugging tools (timing, memory, hooks) | ✅ Done | `profiling.rs` with `ProfilingGuard`, macros, global summary |
+| Mod marketplace/browser integration (NexusMods, Mod.io) | ✅ Done | `nexusmods.rs`, `modio.rs`, `marketplace.rs` with `MarketplaceManager`, `MarketplaceCache`, unified `RemoteMod` type; search, install, update, check_updates |
+| Mod sandboxing & permissions model | ✅ Done | `Permission`, `PermissionSet`, `Permissions` in manifest; Lua sandbox |
+| Mod hot-reload support (development workflow) | ✅ Done | `reload_mod`, file watcher (`notify`), `LOOKING_GLASS_DEV` env |
+
+**Phase 3 Complete!** All core mod ecosystem infrastructure is implemented.
 
 ### Phase 4: Launcher Polish & User Experience
 
